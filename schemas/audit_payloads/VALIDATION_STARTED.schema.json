@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "VALIDATION_STARTED Payload",
+  "description": "Emitted when validation pipeline starts",
+  "type": "object",
+  "required": ["validation_id", "action"],
+  "additionalProperties": false,
+  "properties": {
+    "validation_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

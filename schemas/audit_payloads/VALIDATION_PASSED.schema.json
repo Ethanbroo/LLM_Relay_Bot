@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "VALIDATION_PASSED Payload",
+  "description": "Emitted when validation succeeds",
+  "type": "object",
+  "required": ["validation_id", "schema_hash", "rbac_rule_id"],
+  "additionalProperties": false,
+  "properties": {
+    "validation_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "schema_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "rbac_rule_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

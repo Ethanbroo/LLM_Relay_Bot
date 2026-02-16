@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.schema/metrics_record.json",
+  "title": "MetricsRecord",
+  "description": "Phase 7 metrics record schema - strict and deterministic",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "ts",
+    "time_policy",
+    "seq",
+    "metric_id",
+    "value_type",
+    "value",
+    "source",
+    "correlation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "type": "string",
+      "const": "relay.metrics_record"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUID v7 run identifier"
+    },
+    "ts": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339 timestamp when time_policy=recorded"
+        },
+        {
+          "type": "null",
+          "description": "Null when time_policy=frozen"
+        }
+      ]
+    },
+    "time_policy": {
+      "type": "string",
+      "enum": ["frozen", "recorded"]
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic sequence number (no gaps)"
+    },
+    "metric_id": {
+      "type": "string",
+      "enum": [
+        "proc.rss_bytes",
+        "proc.cpu_percent",
+        "proc.open_fds",
+        "proc.uptime_ms",
+        "loop.tick_lag_ms",
+        "queue.depth",
+        "queue.oldest_age_ms",
+        "exec.attempts_inflight",
+        "exec.failures_per_min",
+        "exec.rollback_failures_per_min",
+        "log.backpressure_active",
+        "log.ingest_buffer_depth",
+        "log.last_event_seq",
+        "log.verify_failures_per_min",
+        "locks.held_count",
+        "locks.waiting_count",
+        "deadlock.detected_per_min",
+        "approval.pending_count",
+        "conn.calls_per_min",
+        "conn.failures_per_min",
+        "conn.idempotency_hits_per_min",
+        "conn.oversize_rejections_per_min",
+        "llm.parse_failures_per_min",
+        "llm.consensus_fallbacks_per_min",
+        "llm.latency_p95_ms"
+      ]
+    },
+    "value_type": {
+      "type": "string",
+      "enum": ["int", "float", "bool"]
+    },
+    "value": {
+      "description": "Value must match value_type"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["collector", "rules_engine", "recovery_controller"]
+    },
+    "correlation": {
+      "type": "object",
+      "required": ["trace_id", "task_id", "event_seq"],
+      "additionalProperties": false,
+      "properties": {
+        "trace_id": {
+          "type": "string"
+        },
+        "task_id": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "null"}
+          ]
+        },
+        "event_seq": {
+          "oneOf": [
+            {"type": "integer", "minimum": 0},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

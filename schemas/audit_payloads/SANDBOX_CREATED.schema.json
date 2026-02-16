@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "SANDBOX_CREATED Payload",
+  "description": "Emitted when sandbox environment created",
+  "type": "object",
+  "required": ["sandbox_id", "task_id"],
+  "additionalProperties": false,
+  "properties": {
+    "sandbox_id": {
+      "type": "string",
+      "pattern": "^sandbox_[a-f0-9]{64}$"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "workspace_path": {
+      "type": "string",
+      "maxLength": 1024
+    }
+  }
+}

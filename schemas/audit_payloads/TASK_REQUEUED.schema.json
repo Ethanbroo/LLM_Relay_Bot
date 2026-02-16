@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "TASK_REQUEUED Payload",
+  "description": "Emitted when task re-added to queue for retry",
+  "type": "object",
+  "required": ["task_id", "attempt", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 256
+    }
+  }
+}

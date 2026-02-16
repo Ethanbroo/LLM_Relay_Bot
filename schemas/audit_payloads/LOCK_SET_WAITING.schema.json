@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LOCK_SET_WAITING payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lock_set_id": {
+      "type": "string",
+      "description": "SHA-256 hex of sorted lock IDs"
+    },
+    "lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of lock IDs"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number"
+    },
+    "enqueue_seq": {
+      "type": "integer",
+      "description": "Enqueue sequence number"
+    },
+    "blocked_on_lock": {
+      "type": "string",
+      "description": "First unavailable lock ID"
+    }
+  },
+  "required": ["lock_set_id", "lock_ids", "task_id", "attempt", "enqueue_seq", "blocked_on_lock"]
+}

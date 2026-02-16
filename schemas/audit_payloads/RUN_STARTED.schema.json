@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "RUN_STARTED Payload",
+  "description": "Emitted when Supervisor starts a new run",
+  "type": "object",
+  "required": ["run_id", "config_hash", "time_policy", "module_versions"],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "time_policy": {
+      "type": "string",
+      "enum": ["frozen", "recorded"]
+    },
+    "module_versions": {
+      "type": "object",
+      "description": "Versions of critical modules",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "python_version": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    }
+  }
+}

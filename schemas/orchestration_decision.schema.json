@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-relay.local/schemas/orchestration_decision.schema.json",
+  "title": "OrchestrationDecision",
+  "description": "Phase 6: Orchestration decision (data only)",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "decision",
+    "models_consulted",
+    "similarity_matrix"
+  ],
+  "properties": {
+    "schema_id": {
+      "type": "string",
+      "const": "relay.orchestration_decision"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "UUID v7"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["consensus", "escalated"]
+    },
+    "selected_proposal_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "selected_proposal_text": {
+      "type": ["string", "null"],
+      "maxLength": 1000
+    },
+    "models_consulted": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["chatgpt", "claude", "gemini", "deepseek"]
+      },
+      "minItems": 1,
+      "maxItems": 4
+    },
+    "similarity_matrix": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "consensus_score": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "escalation_reason": {
+      "type": ["string", "null"],
+      "enum": [null, "no_consensus", "all_proposals_invalid", "all_similarities_below_threshold"]
+    },
+    "escalation_decision": {
+      "type": ["string", "null"],
+      "enum": [null, "ESCALATE_ABORT", "ESCALATE_REQUEST_HUMAN", "ESCALATE_REPROMPT_LATER"]
+    }
+  },
+  "additionalProperties": false
+}

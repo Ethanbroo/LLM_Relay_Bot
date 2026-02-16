@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.schema/incident_record.json",
+  "title": "IncidentRecord",
+  "description": "Phase 7 incident record for post-mortem analysis",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "incident_id",
+    "rule_id",
+    "severity",
+    "opened_at",
+    "closed_at",
+    "state",
+    "summary",
+    "evidence",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "type": "string",
+      "const": "relay.incident_record"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUID v7 run identifier"
+    },
+    "incident_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hash: run_id + rule_id + first_trigger_ts + seq"
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["INFO", "WARN", "CRITICAL", "FATAL"]
+    },
+    "opened_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339 timestamp"
+        },
+        {
+          "type": "null",
+          "description": "Null when time_policy=frozen"
+        }
+      ]
+    },
+    "closed_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": ["OPEN", "CLOSED"]
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Brief incident summary"
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["metrics_window_ref", "audit_event_seq_range", "config_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "metrics_window_ref": {
+          "type": "string",
+          "description": "Filename of metrics window JSONL"
+        },
+        "audit_event_seq_range": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "config_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hash of config at incident time"
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["enforced", "timestamp"],
+      "properties": {
+        "enforced": {
+          "type": "boolean"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

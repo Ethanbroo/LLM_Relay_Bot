@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "LOG_CORRUPTION_DETECTED Payload",
+  "description": "Emitted when audit log corruption detected (truncation)",
+  "type": "object",
+  "required": ["segment_filename", "corruption_type"],
+  "additionalProperties": false,
+  "properties": {
+    "segment_filename": {
+      "type": "string",
+      "pattern": "^audit\\.\\d{6}\\.jsonl$"
+    },
+    "corruption_type": {
+      "type": "string",
+      "enum": ["truncation", "invalid_json", "invalid_schema"]
+    },
+    "last_valid_event_seq": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

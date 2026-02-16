@@ -1,0 +1,164 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.example.com/schemas/relay.audit_event.schema.json",
+  "title": "Canonical Audit Event",
+  "description": "Tamper-evident, signed audit event with hash chain. Every persisted record must follow this exact structure.",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "event_seq",
+    "event_id",
+    "event_type",
+    "timestamp",
+    "actor",
+    "correlation",
+    "payload",
+    "payload_hash",
+    "prev_event_hash",
+    "event_hash",
+    "signature",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "type": "string",
+      "const": "relay.audit_event",
+      "description": "Fixed schema identifier"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Fixed schema version"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "UUID v4/v7 - unique per system run (Supervisor lifetime)",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "event_seq": {
+      "type": "integer",
+      "description": "Strictly monotonic per run, starts at 1, increments by 1",
+      "minimum": 1
+    },
+    "event_id": {
+      "type": "string",
+      "description": "Deterministic SHA-256 of (run_id, event_seq, event_type, actor, correlation, payload_hash)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Closed enum of 26 event types (Phase 3 minimum)",
+      "enum": [
+        "RUN_STARTED",
+        "CONFIG_HASH_VERIFIED",
+        "CONFIG_MISMATCH",
+        "PROCESS_STARTED",
+        "PROCESS_RESTARTED",
+        "PROCESS_HALTED",
+        "VALIDATION_STARTED",
+        "VALIDATION_PASSED",
+        "VALIDATION_FAILED",
+        "RBAC_DENIED",
+        "PATH_REJECTED",
+        "TASK_ENQUEUED",
+        "TASK_STARTED",
+        "SNAPSHOT_CREATED",
+        "SANDBOX_CREATED",
+        "HANDLER_STARTED",
+        "HANDLER_FINISHED",
+        "SANDBOX_DESTROYED",
+        "ROLLBACK_STARTED",
+        "ROLLBACK_FINISHED",
+        "TASK_FINISHED",
+        "TASK_REQUEUED",
+        "ENGINE_HALTED",
+        "LOG_CORRUPTION_DETECTED",
+        "LOG_TAMPER_DETECTED",
+        "LOG_BACKPRESSURE",
+        "PRODUCER_PROTOCOL_VIOLATION",
+        "SECRET_REDACTED"
+      ]
+    },
+    "timestamp": {
+      "type": ["string", "null"],
+      "description": "RFC3339 timestamp (follows Phase 0 time policy: frozen/recorded). Null only for bootstrapping events.",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "string",
+      "description": "Module/component emitting event (e.g., 'validator', 'executor', 'log_daemon')",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "correlation": {
+      "type": "object",
+      "description": "Correlation identifiers for tracing validation → execution → outcome chains",
+      "required": ["session_id", "message_id", "task_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": ["string", "null"],
+          "description": "UUID v4/v7 - groups all attempts for a task (from Phase 2)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "message_id": {
+          "type": ["string", "null"],
+          "description": "UUID v4/v7 - from original envelope (from Phase 1)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "task_id": {
+          "type": ["string", "null"],
+          "description": "Deterministic SHA-256 task identifier (from Phase 2)",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-specific data. Schema at schemas/audit_payloads/<event_type>.schema.json. Must be redacted before persistence."
+    },
+    "payload_hash": {
+      "type": "string",
+      "description": "SHA-256 of canonical JSON of payload (after redaction)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "prev_event_hash": {
+      "type": "string",
+      "description": "Hash of previous event (hash chain). For event_seq=1, this is '0'*64 (genesis value)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "event_hash": {
+      "type": "string",
+      "description": "SHA-256 of canonical JSON of event body (excludes signature and event_hash itself)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "description": "Ed25519 signature of event_hash bytes (base64 encoded)",
+      "pattern": "^[A-Za-z0-9+/]{86}==$"
+    },
+    "redaction": {
+      "type": "object",
+      "description": "Redaction metadata for secret handling",
+      "required": ["was_redacted", "redacted_paths"],
+      "additionalProperties": false,
+      "properties": {
+        "was_redacted": {
+          "type": "boolean",
+          "description": "True if any secrets were redacted from payload"
+        },
+        "redacted_paths": {
+          "type": "array",
+          "description": "JSON pointer paths of redacted fields (e.g., ['/payload/authorization'])",
+          "items": {
+            "type": "string",
+            "pattern": "^/.*"
+          }
+        }
+      }
+    }
+  }
+}

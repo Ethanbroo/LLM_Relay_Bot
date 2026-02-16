@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "CONFIG_MISMATCH Payload",
+  "description": "Emitted when config hash doesn't match expected value",
+  "type": "object",
+  "required": ["expected_hash", "actual_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "expected_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "actual_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

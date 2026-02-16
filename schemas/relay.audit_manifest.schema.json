@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.example.com/schemas/relay.audit_manifest.schema.json",
+  "title": "Audit Manifest",
+  "description": "Manifest for audit log segments. Updated atomically after each segment rotation.",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "config_hash",
+    "created_at",
+    "time_policy",
+    "public_key_fingerprint",
+    "segments",
+    "event_count_total",
+    "first_event_hash",
+    "last_event_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "type": "string",
+      "const": "relay.audit_manifest",
+      "description": "Fixed schema identifier"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Fixed schema version"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "UUID v4/v7 - unique per system run",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "config_hash": {
+      "type": "string",
+      "description": "SHA-256 of canonical core.yaml (Phase 0 invariant)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "created_at": {
+      "type": ["string", "null"],
+      "description": "RFC3339 timestamp when manifest created (null if frozen time policy)",
+      "format": "date-time"
+    },
+    "time_policy": {
+      "type": "string",
+      "enum": ["frozen", "recorded"],
+      "description": "Time policy from Phase 0 (frozen or recorded)"
+    },
+    "public_key_fingerprint": {
+      "type": "string",
+      "description": "SHA-256 of public key bytes (key identity)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "segments": {
+      "type": "array",
+      "description": "List of segment files in order",
+      "items": {
+        "type": "object",
+        "required": [
+          "filename",
+          "first_event_seq",
+          "last_event_seq",
+          "first_event_hash",
+          "last_event_hash",
+          "byte_length"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Segment filename (e.g., 'audit.000001.jsonl')",
+            "pattern": "^audit\\.\\d{6}\\.jsonl$"
+          },
+          "first_event_seq": {
+            "type": "integer",
+            "description": "First event_seq in this segment",
+            "minimum": 1
+          },
+          "last_event_seq": {
+            "type": "integer",
+            "description": "Last event_seq in this segment",
+            "minimum": 1
+          },
+          "first_event_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of first event in segment",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "last_event_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of last event in segment",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "byte_length": {
+            "type": "integer",
+            "description": "Total bytes in segment file",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "event_count_total": {
+      "type": "integer",
+      "description": "Total events across all segments",
+      "minimum": 0
+    },
+    "first_event_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of very first event (across all segments)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "last_event_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of most recent event (across all segments)",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

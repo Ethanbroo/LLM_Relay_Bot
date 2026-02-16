@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/envelope.schema.json",
+  "title": "Canonical Message Envelope",
+  "description": "Top-level envelope for all messages in the LLM Relay system. Enforces strict structure with no additional properties.",
+  "type": "object",
+  "required": [
+    "envelope_version",
+    "message_id",
+    "timestamp",
+    "sender",
+    "recipient",
+    "action",
+    "action_version",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "envelope_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.0$",
+      "description": "Envelope schema version (semantic versioning)"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v7 (time-ordered, monotonic) for deterministic ordering"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (recorded at ingress, propagated everywhere)"
+    },
+    "sender": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
+      "description": "Principal ID of sender (alphanumeric, underscores, hyphens, dots only)"
+    },
+    "recipient": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
+      "description": "Principal ID of recipient"
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+$",
+      "description": "Action identifier in format: family.action (e.g., fs.read, system.health_ping)"
+    },
+    "action_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Action schema version (semantic versioning)"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Action-specific payload (validated against action schema)"
+    }
+  }
+}

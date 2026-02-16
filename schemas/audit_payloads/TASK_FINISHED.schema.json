@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "TASK_FINISHED Payload",
+  "description": "Emitted when task execution completes",
+  "type": "object",
+  "required": ["task_id", "attempt", "success"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "error_code": {
+      "type": "string",
+      "maxLength": 64
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/actions/system.health_ping/1.0.0.schema.json",
+  "title": "System Health Ping Action",
+  "description": "Simple health check with minimal payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "echo": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Optional string to echo back in response"
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.schema/llm/claude_output.json",
+  "title": "ClaudeOutput",
+  "description": "Phase 8 output contract for Claude LLM - two possible shapes",
+  "oneOf": [
+    {
+      "title": "ValidProposal",
+      "description": "Shape A: Valid proposal conforming to requested schema",
+      "type": "object",
+      "required": ["status", "proposal", "metadata"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "success"
+        },
+        "proposal": {
+          "type": "object",
+          "description": "Proposal object conforming to output_schema_json"
+        },
+        "metadata": {
+          "type": "object",
+          "required": ["request_id", "response_hash"],
+          "additionalProperties": false,
+          "properties": {
+            "request_id": {
+              "type": "string"
+            },
+            "response_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "SHA-256 hash of proposal"
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "ExplicitFailure",
+      "description": "Shape B: Structured failure when cannot comply",
+      "type": "object",
+      "required": ["status", "reason_code", "missing_fields", "conflicting_constraints"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "cannot_comply"
+        },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "missing_required_data",
+            "conflicting_constraints",
+            "schema_too_complex",
+            "task_ambiguous"
+          ]
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflicting_constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

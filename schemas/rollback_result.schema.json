@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-relay.local/schemas/rollback_result.schema.json",
+  "title": "RollbackResult",
+  "description": "Phase 5: Result of rollback operation. Must be verifiable.",
+  "type": "object",
+  "required": [
+    "rollback_status",
+    "verification_method"
+  ],
+  "properties": {
+    "rollback_status": {
+      "type": "string",
+      "description": "Rollback execution status",
+      "enum": ["success", "failed", "not_applicable"]
+    },
+    "verification_method": {
+      "type": "string",
+      "description": "Method used to verify rollback",
+      "enum": [
+        "file_hash",
+        "directory_listing",
+        "external_verification",
+        "not_applicable"
+      ]
+    },
+    "verification_artifact_hash": {
+      "type": "string",
+      "description": "Hash of verification artifact (if applicable)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about rollback",
+      "maxLength": 300
+    }
+  },
+  "additionalProperties": false
+}

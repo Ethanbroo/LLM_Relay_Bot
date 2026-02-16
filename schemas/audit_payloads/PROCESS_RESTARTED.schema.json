@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "PROCESS_RESTARTED Payload",
+  "description": "Emitted when a process component restarts",
+  "type": "object",
+  "required": ["process_name", "old_pid", "new_pid", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "process_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "old_pid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "new_pid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 256
+    }
+  }
+}

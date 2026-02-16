@@ -1,0 +1,13 @@
+{
+  "envelope_version": "1.0.0",
+  "message_id": "45678901-23ab-7cde-8901-23456789abcd",
+  "timestamp": "2026-02-07T12:04:00Z",
+  "sender": "validator",
+  "recipient": "executor",
+  "action": "fs.read",
+  "action_version": "1.0.0",
+  "payload": {
+    "path": "../../../etc/passwd"
+  },
+  "comment": "This envelope will be REJECTED due to path traversal attempt"
+}

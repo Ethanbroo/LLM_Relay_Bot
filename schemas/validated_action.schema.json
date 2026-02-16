@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/validated_action.schema.json",
+  "title": "Validated Action",
+  "description": "Output from validation pipeline - a fully validated, sanitized, and authorized action ready for execution",
+  "type": "object",
+  "required": ["validation_id", "original_envelope", "validated_at", "schema_hash", "rbac_rule_id", "sanitized_payload"],
+  "additionalProperties": false,
+  "properties": {
+    "validation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v7 for this validation event"
+    },
+    "original_envelope": {
+      "type": "object",
+      "description": "Original envelope that was validated (preserved for audit)"
+    },
+    "validated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when validation completed"
+    },
+    "schema_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of the action schema used for validation"
+    },
+    "rbac_rule_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Stable identifier of the RBAC rule that authorized this action"
+    },
+    "sanitized_payload": {
+      "type": "object",
+      "description": "Sanitized payload ready for execution"
+    }
+  }
+}

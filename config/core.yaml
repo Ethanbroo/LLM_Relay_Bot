@@ -1,0 +1,87 @@
+# Core configuration for LLM Relay system
+# All values must be deterministic and reproducible
+
+system:
+  python_version: "3.12"  # Exact Python version enforcement
+  deterministic_seed: "llm-relay-v1-seed-20260207"  # Fixed seed for deterministic behavior
+
+time_policy:
+  mode: "recorded"  # Capture timestamp at ingress, propagate everywhere
+  # Alternative: "frozen" for even stricter determinism in test mode
+
+ipc:
+  max_message_size: 1048576  # 1 MB maximum message size
+  max_rate: 100  # Maximum messages per second
+  format: "jsonl"  # JSON Lines format for message streaming
+
+sandbox:
+  network_enabled: false  # No network access by default
+  workspace_root: "/workspace"  # Virtual workspace root (must be enforced)
+  max_processes: 10  # Maximum concurrent processes
+
+validation:
+  strict_mode: true  # Fail-closed on any ambiguity
+  allow_unknown_fields: false  # Reject unknown fields at all layers
+  schema_version_policy: "explicit_only"  # No auto-version resolution
+
+audit:
+  format: "jsonl"  # Structured audit events in JSON Lines
+  sink: "logdaemon"  # Phase 3 LogDaemon with Ed25519 signatures
+  log_directory: "logs"  # Directory for audit segments
+  ed25519_private_key_path: "keys/audit_private.pem"
+  ed25519_public_key_path: "keys/audit_public.pem"
+  max_segment_bytes: 10485760  # 10MB per segment
+  fsync_every_n_events: 100  # Fsync after 100 events
+  ingress_buffer_max_events: 1000  # Backpressure threshold
+  signature_required: true  # Phase 3: Ed25519 signatures enabled
+
+coordination:
+  # Phase 4: Coordination & Safety
+  lock_ttl_events: 1000  # Lock TTL in event_seq units (not wall time)
+  deadlock_detection_enabled: true  # Enable deadlock detection
+
+  # Approval settings
+  approval_enabled: true  # Enable approval workflow
+  approval_public_key_path: "keys/approval_public.pem"  # Ed25519 public key for verification
+  default_approval_ttl_events: 10000  # Default TTL for approval tokens
+
+connectors:
+  # Phase 5: Connectors (Controlled Power)
+  max_payload_bytes: 1048576  # 1 MB maximum payload size
+  max_nesting_depth: 32  # Maximum JSON nesting depth
+  workspace_enforcement: true  # Enforce workspace boundaries
+  secrets_env_prefix: "LLM_RELAY_SECRET_"  # Environment variable prefix for secrets
+  rollback_required: true  # Mandatory rollback implementation
+  idempotency_enforcement: true  # Enforce idempotency checks
+
+orchestration:
+  # Phase 6: Multi-LLM Orchestration
+  enabled: true  # Enable orchestration
+  max_models_per_round: 4  # Maximum models to consult per round
+  consensus_threshold: 0.80  # Minimum similarity for consensus (0.0-1.0)
+  similarity_rounding: 3  # Decimal places for similarity rounding
+  escalation_model: "chatgpt"  # Model to use for escalation
+  embedding_model: "all-mpnet-base-v2"  # SBERT model for similarity scoring
+
+monitoring:
+  # Phase 7: Monitoring & Recovery
+  enabled: true  # Enable monitoring
+  tick_ms: 1000  # Tick interval in milliseconds (1 second)
+  metrics_dir: "run/<run_id>/metrics"  # Metrics directory (workspace-relative)
+  metrics_max_segment_bytes: 10000000  # 10 MB maximum per segment
+  metrics_flush_policy: "fsync_each_line"  # Flush policy (Phase 7 hard default)
+  rules_path: "config/threshold_rules.json"  # Path to threshold rules file
+  max_restarts_per_target: 3  # Maximum restarts per target per run
+  restart_cooldown_ms: 60000  # Cooldown between restarts (60 seconds)
+  incident_dir: "run/<run_id>/incidents"  # Incidents directory (workspace-relative)
+  incident_include_window_sec: 300  # Include last 5 minutes of metrics
+  incident_max_bytes: 2000000  # 2 MB maximum per incident
+
+claude:
+  # Phase 8: Claude LLM Integration
+  enabled: true  # Enable Claude client
+  stub_mode: true  # Use stub responses (system works without real API)
+  prompts_dir: "prompts/claude"  # Directory containing prompt templates
+  temperature: 0.0  # Fixed temperature (deterministic)
+  top_p: 1.0  # Fixed top_p (deterministic)
+  max_tokens: 4096  # Maximum tokens per response

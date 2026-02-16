@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "CONFIG_HASH_VERIFIED Payload",
+  "type": "object",
+  "required": ["config_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

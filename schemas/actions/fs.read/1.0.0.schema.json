@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/actions/fs.read/1.0.0.schema.json",
+  "title": "Filesystem Read Action",
+  "description": "Read file contents from workspace with strict bounds and safety constraints",
+  "type": "object",
+  "required": ["path"],
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\x00]+$",
+      "description": "Relative path from workspace root (no absolute paths, no .., no null bytes)"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10485760,
+      "default": 0,
+      "description": "Byte offset to start reading (max 10MB)"
+    },
+    "length": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1048576,
+      "default": 1048576,
+      "description": "Maximum bytes to read (max 1MB per read)"
+    },
+    "encoding": {
+      "type": "string",
+      "enum": ["utf-8", "ascii", "binary"],
+      "default": "utf-8",
+      "description": "File encoding (binary returns base64)"
+    }
+  }
+}

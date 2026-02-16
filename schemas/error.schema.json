@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/error.schema.json",
+  "title": "Validation Error",
+  "description": "Structured error output from validation pipeline",
+  "type": "object",
+  "required": ["error_id", "error_code", "stage", "message", "occurred_at"],
+  "additionalProperties": false,
+  "properties": {
+    "error_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v7 for this error event"
+    },
+    "error_code": {
+      "type": "string",
+      "enum": [
+        "ENVELOPE_INVALID",
+        "SCHEMA_NOT_FOUND",
+        "SCHEMA_HASH_MISMATCH",
+        "JSON_SCHEMA_FAILED",
+        "PYDANTIC_FAILED",
+        "RBAC_DENIED",
+        "SANITIZATION_FAILED",
+        "UNKNOWN_ERROR"
+      ],
+      "description": "Stable error code for deterministic error handling"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "envelope_validation",
+        "schema_selection",
+        "json_schema_validation",
+        "pydantic_validation",
+        "rbac_check",
+        "sanitization",
+        "audit_log",
+        "output_emit"
+      ],
+      "description": "Pipeline stage where error occurred"
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Human-readable error message"
+    },
+    "details": {
+      "type": "object",
+      "description": "Optional structured details about the error"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when error occurred"
+    },
+    "original_envelope": {
+      "type": "object",
+      "description": "Original envelope that failed validation (if parseable)"
+    }
+  }
+}

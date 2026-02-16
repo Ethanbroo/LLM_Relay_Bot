@@ -1,0 +1,16 @@
+{
+  "envelope_version": "1.0.0",
+  "message_id": "12345678-90ab-7cde-8901-23456789abcd",
+  "timestamp": "2026-02-07T12:01:00Z",
+  "sender": "validator",
+  "recipient": "executor",
+  "action": "fs.list_dir",
+  "action_version": "1.0.0",
+  "payload": {
+    "path": "data",
+    "max_entries": 100,
+    "sort_order": "name_asc",
+    "include_hidden": false,
+    "recursive": false
+  }
+}

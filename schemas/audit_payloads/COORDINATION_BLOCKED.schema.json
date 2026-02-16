@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "COORDINATION_BLOCKED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "coordination_id": {
+      "type": "string",
+      "description": "Coordination UUID"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier"
+    },
+    "lock_set_id": {
+      "type": "string",
+      "description": "Lock set ID"
+    },
+    "blocked_on_lock": {
+      "type": "string",
+      "description": "First unavailable lock ID"
+    }
+  },
+  "required": ["coordination_id", "task_id", "action", "lock_set_id", "blocked_on_lock"]
+}

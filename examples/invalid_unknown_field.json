@@ -1,0 +1,14 @@
+{
+  "envelope_version": "1.0.0",
+  "message_id": "34567890-12ab-7cde-8901-23456789abcd",
+  "timestamp": "2026-02-07T12:03:00Z",
+  "sender": "validator",
+  "recipient": "executor",
+  "action": "fs.read",
+  "action_version": "1.0.0",
+  "payload": {
+    "path": "test.txt",
+    "unknown_field": "this should be rejected"
+  },
+  "comment": "This envelope will be REJECTED due to unknown field in payload"
+}

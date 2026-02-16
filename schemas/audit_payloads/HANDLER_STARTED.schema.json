@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "HANDLER_STARTED Payload",
+  "description": "Emitted when execution handler begins",
+  "type": "object",
+  "required": ["task_id", "handler_name"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "handler_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

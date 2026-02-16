@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/audit_event.schema.json",
+  "title": "Audit Event",
+  "description": "Structured audit event for validation pipeline operations",
+  "type": "object",
+  "required": ["event_id", "event_type", "timestamp", "stage", "result"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v7 for this audit event"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["validation_started", "validation_passed", "validation_failed"],
+      "description": "Type of audit event"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When event occurred"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "envelope_validation",
+        "schema_selection",
+        "json_schema_validation",
+        "pydantic_validation",
+        "rbac_check",
+        "sanitization",
+        "audit_log",
+        "output_emit"
+      ],
+      "description": "Pipeline stage"
+    },
+    "result": {
+      "type": "string",
+      "enum": ["pass", "fail"],
+      "description": "Stage result"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Message ID being validated (if available)"
+    },
+    "principal": {
+      "type": "string",
+      "description": "Principal performing the action (if available)"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action being validated (if available)"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code if result=fail"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if result=fail"
+    },
+    "details": {
+      "type": "object",
+      "description": "Additional structured details"
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature (null in Phase 1, required in Phase 3)"
+    }
+  }
+}

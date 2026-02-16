@@ -1,0 +1,62 @@
+[
+  {
+    "schema_id": "relay.threshold_rule",
+    "schema_version": "1.0.0",
+    "rule_id": "cpu_critical",
+    "enabled": true,
+    "metric_id": "proc.cpu_percent",
+    "operator": "GT",
+    "threshold": 90.0,
+    "window": {
+      "mode": "consecutive",
+      "n": 3
+    },
+    "severity": "CRITICAL",
+    "action": "THROTTLE_INGRESS",
+    "cooldown_ms": 30000,
+    "hysteresis": {
+      "clear_after_n": 5
+    },
+    "emit_incident": true
+  },
+  {
+    "schema_id": "relay.threshold_rule",
+    "schema_version": "1.0.0",
+    "rule_id": "memory_warning",
+    "enabled": true,
+    "metric_id": "proc.rss_bytes",
+    "operator": "GT",
+    "threshold": 1073741824,
+    "window": {
+      "mode": "consecutive",
+      "n": 5
+    },
+    "severity": "WARN",
+    "action": "NOOP",
+    "cooldown_ms": 60000,
+    "hysteresis": {
+      "clear_after_n": 10
+    },
+    "emit_incident": false
+  },
+  {
+    "schema_id": "relay.threshold_rule",
+    "schema_version": "1.0.0",
+    "rule_id": "queue_depth_critical",
+    "enabled": true,
+    "metric_id": "queue.depth",
+    "operator": "GT",
+    "threshold": 1000,
+    "window": {
+      "mode": "consecutive",
+      "n": 3
+    },
+    "severity": "CRITICAL",
+    "action": "PAUSE_NEW_TASKS",
+    "cooldown_ms": 30000,
+    "hysteresis": {
+      "clear_after_n": 5
+    },
+    "emit_incident": true
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "registry_version": "1.0.0",
+  "default_version_policy": "explicit_only",
+  "actions": {
+    "fs.read": {
+      "default": "1.0.0",
+      "allowed": ["1.0.0"],
+      "schema_path": "schemas/actions/fs.read/1.0.0.schema.json"
+    },
+    "fs.list_dir": {
+      "default": "1.0.0",
+      "allowed": ["1.0.0"],
+      "schema_path": "schemas/actions/fs.list_dir/1.0.0.schema.json"
+    },
+    "system.health_ping": {
+      "default": "1.0.0",
+      "allowed": ["1.0.0"],
+      "schema_path": "schemas/actions/system.health_ping/1.0.0.schema.json"
+    }
+  }
+}

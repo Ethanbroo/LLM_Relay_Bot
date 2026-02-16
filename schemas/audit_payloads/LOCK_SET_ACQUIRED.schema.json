@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LOCK_SET_ACQUIRED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lock_set_id": {
+      "type": "string",
+      "description": "SHA-256 hex of sorted lock IDs"
+    },
+    "lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of lock IDs"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number"
+    },
+    "acquired_event_seq": {
+      "type": "integer",
+      "description": "Event seq when acquired"
+    },
+    "expires_event_seq": {
+      "type": "integer",
+      "description": "Event seq when expires"
+    },
+    "lock_ttl_events": {
+      "type": "integer",
+      "description": "TTL in event_seq units"
+    }
+  },
+  "required": ["lock_set_id", "lock_ids", "task_id", "attempt", "acquired_event_seq", "expires_event_seq", "lock_ttl_events"]
+}

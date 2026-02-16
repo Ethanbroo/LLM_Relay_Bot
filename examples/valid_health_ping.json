@@ -1,0 +1,12 @@
+{
+  "envelope_version": "1.0.0",
+  "message_id": "23456789-01ab-7cde-8901-23456789abcd",
+  "timestamp": "2026-02-07T12:02:00Z",
+  "sender": "validator",
+  "recipient": "executor",
+  "action": "system.health_ping",
+  "action_version": "1.0.0",
+  "payload": {
+    "echo": "hello from validator"
+  }
+}

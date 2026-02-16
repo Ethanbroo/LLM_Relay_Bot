@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.local/schemas/actions/fs.list_dir/1.0.0.schema.json",
+  "title": "Filesystem List Directory Action",
+  "description": "List directory contents with bounded results and deterministic ordering",
+  "type": "object",
+  "required": ["path"],
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\x00]+$",
+      "description": "Relative directory path from workspace root"
+    },
+    "max_entries": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "default": 100,
+      "description": "Maximum number of entries to return"
+    },
+    "sort_order": {
+      "type": "string",
+      "enum": ["name_asc", "name_desc", "mtime_asc", "mtime_desc"],
+      "default": "name_asc",
+      "description": "Deterministic sort order for results"
+    },
+    "include_hidden": {
+      "type": "boolean",
+      "default": false,
+      "description": "Include hidden files (starting with .)"
+    },
+    "recursive": {
+      "type": "boolean",
+      "default": false,
+      "description": "List recursively (subdirectories)"
+    }
+  }
+}

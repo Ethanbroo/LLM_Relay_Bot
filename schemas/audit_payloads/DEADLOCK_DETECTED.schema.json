@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DEADLOCK_DETECTED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "detection_event_seq": {
+      "type": "integer",
+      "description": "Event seq when deadlock detected"
+    },
+    "cycle_length": {
+      "type": "integer",
+      "description": "Number of tasks in cycle"
+    },
+    "cycle_task_ids": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task_id": {"type": "string"},
+          "attempt": {"type": "integer"}
+        },
+        "required": ["task_id", "attempt"]
+      },
+      "description": "Tasks in deadlock cycle"
+    }
+  },
+  "required": ["detection_event_seq", "cycle_length", "cycle_task_ids"]
+}

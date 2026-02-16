@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APPROVAL_TOKEN_REGISTERED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "approval_id": {
+      "type": "string",
+      "description": "Approval token UUID"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier"
+    },
+    "approver_principal": {
+      "type": "string",
+      "description": "Approver principal ID"
+    },
+    "issued_event_seq": {
+      "type": "integer",
+      "description": "Event seq when issued"
+    },
+    "expires_event_seq": {
+      "type": "integer",
+      "description": "Event seq when expires"
+    },
+    "payload_hash": {
+      "type": "string",
+      "description": "SHA-256 hex of canonical payload"
+    }
+  },
+  "required": ["approval_id", "action", "approver_principal", "issued_event_seq", "expires_event_seq", "payload_hash"]
+}

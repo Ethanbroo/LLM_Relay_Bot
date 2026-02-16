@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "SNAPSHOT_CREATED Payload",
+  "description": "Emitted when snapshot created before execution",
+  "type": "object",
+  "required": ["snapshot_id", "task_id", "attempt"],
+  "additionalProperties": false,
+  "properties": {
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "byte_size": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

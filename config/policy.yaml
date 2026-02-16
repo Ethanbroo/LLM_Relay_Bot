@@ -1,0 +1,204 @@
+# RBAC policy configuration
+# Deny-by-default: only explicitly allowed actions are permitted
+
+version: "1.0.0"
+
+# Role definitions
+roles:
+  executor:
+    description: "Basic execution role with read-only filesystem access"
+    allow:
+      - action: "fs.read"
+        resource: "/workspace/**"
+        rule_id: "executor.fs.read.workspace"
+
+      - action: "fs.list_dir"
+        resource: "/workspace/**"
+        rule_id: "executor.fs.list_dir.workspace"
+
+      - action: "system.health_ping"
+        resource: "*"
+        rule_id: "executor.system.health_ping.any"
+
+  # Future roles can be added here (e.g., writer, admin)
+
+# Principal-to-role mappings
+principals:
+  validator:
+    roles: ["executor"]
+    description: "Validation pipeline component"
+
+  supervisor:
+    roles: ["executor"]
+    description: "Supervisor runtime"
+
+  # Future principals (LLMs, connectors) added in later phases
+
+# Global deny rules (processed before allow rules)
+deny:
+  - action: "fs.*"
+    resource: "/**/.git/**"
+    reason: "Git internals are never accessible"
+
+  - action: "fs.*"
+    resource: "/**/.env"
+    reason: "Environment files contain secrets"
+
+  - action: "fs.*"
+    resource: "**/config/*.yaml"
+    reason: "Config files are immutable at runtime"
+
+# Phase 4: Approval requirements
+# Actions that require human approval with Ed25519-signed tokens
+approval_required:
+  - action: "filesystem.write_file"
+    reason: "Filesystem writes require approval"
+
+  - action: "filesystem.delete_file"
+    reason: "File deletion requires approval"
+
+  - action: "document.update"
+    reason: "Document updates require approval"
+
+  # Phase 5: Connector actions requiring approval
+  - action: "fs.write_file"
+    reason: "File writes via connector require approval"
+
+  - action: "fs.delete_file"
+    reason: "File deletion via connector requires approval"
+
+  - action: "gdocs.create_document"
+    reason: "Document creation requires approval"
+
+  - action: "gdocs.update_document"
+    reason: "Document updates require approval"
+
+  - action: "gdocs.share_document"
+    reason: "Document sharing requires approval"
+
+  # WordPress write actions requiring approval
+  - action: "wordpress.create_post"
+    reason: "WordPress post creation requires approval"
+
+  - action: "wordpress.update_post"
+    reason: "WordPress post updates require approval"
+
+  - action: "wordpress.delete_post"
+    reason: "WordPress post deletion requires approval"
+
+  - action: "wordpress.create_page"
+    reason: "WordPress page creation requires approval"
+
+  - action: "wordpress.update_page"
+    reason: "WordPress page updates require approval"
+
+  # Add more actions requiring approval as needed
+
+# Phase 5: Connector action mappings
+# Maps actions to connectors (closed registry)
+connector_mappings:
+  # LocalFS connector actions
+  - action: "fs.write_file"
+    connector_type: "local_fs"
+    method: "execute"
+
+  - action: "fs.read_file"
+    connector_type: "local_fs"
+    method: "execute"
+
+  - action: "fs.delete_file"
+    connector_type: "local_fs"
+    method: "execute"
+
+  - action: "fs.create_directory"
+    connector_type: "local_fs"
+    method: "execute"
+
+  - action: "fs.list_directory"
+    connector_type: "local_fs"
+    method: "execute"
+
+  # Google Docs stub connector actions
+  - action: "gdocs.create_document"
+    connector_type: "google_docs_stub"
+    method: "execute"
+
+  - action: "gdocs.update_document"
+    connector_type: "google_docs_stub"
+    method: "execute"
+
+  - action: "gdocs.read_document"
+    connector_type: "google_docs_stub"
+    method: "execute"
+
+  - action: "gdocs.share_document"
+    connector_type: "google_docs_stub"
+    method: "execute"
+
+  # WordPress connector actions
+  - action: "wordpress.create_post"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.update_post"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.delete_post"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.get_post"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.list_posts"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.create_page"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wordpress.update_page"
+    connector_type: "wordpress"
+    method: "execute"
+
+  # Unsplash connector actions (read-only, no approval needed)
+  - action: "unsplash.search_photos"
+    connector_type: "unsplash"
+    method: "execute"
+
+  - action: "unsplash.get_photo"
+    connector_type: "unsplash"
+    method: "execute"
+
+  - action: "unsplash.get_random_photo"
+    connector_type: "unsplash"
+    method: "execute"
+
+  - action: "unsplash.download_photo"
+    connector_type: "unsplash"
+    method: "execute"
+
+  - action: "unsplash.track_download"
+    connector_type: "unsplash"
+    method: "execute"
+
+# Phase 7: Monitoring manual overrides (default deny)
+monitoring_manual_overrides:
+  - action: "monitoring.manual_override"
+    allowed: false
+    reason: "Manual overrides require explicit policy grant"
+
+  - action: "monitoring.ack_incident"
+    allowed: false
+    reason: "Incident acknowledgement requires explicit policy grant"
+
+  - action: "monitoring.force_halt"
+    allowed: false
+    reason: "Force halt requires explicit policy grant"
+
+  - action: "monitoring.force_restart_log_daemon"
+    allowed: false
+    reason: "Force restart of log daemon requires explicit policy grant"

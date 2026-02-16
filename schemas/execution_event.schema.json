@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.example.com/schemas/execution_event.schema.json",
+  "title": "ExecutionEvent",
+  "description": "Audit event emitted during task execution lifecycle. Enables deterministic replay and debugging.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp",
+    "run_id",
+    "task_id",
+    "attempt"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Deterministic event ID: SHA-256(run_id + event_type + timestamp + event_data)",
+      "pattern": "^event_[a-f0-9]{64}$"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Type of execution event",
+      "enum": [
+        "TASK_ENQUEUED",
+        "TASK_DEQUEUED",
+        "TASK_STARTED",
+        "SANDBOX_CREATING",
+        "SANDBOX_CREATED",
+        "SANDBOX_DESTROYED",
+        "SNAPSHOT_CREATING",
+        "SNAPSHOT_CREATED",
+        "SNAPSHOT_FAILED",
+        "HANDLER_STARTED",
+        "HANDLER_FINISHED",
+        "HANDLER_FAILED",
+        "HANDLER_TIMEOUT",
+        "ROLLBACK_STARTED",
+        "ROLLBACK_FINISHED",
+        "ROLLBACK_FAILED",
+        "TASK_FINISHED",
+        "TASK_REQUEUED",
+        "TASK_DEAD",
+        "ENGINE_STARTED",
+        "ENGINE_STOPPED",
+        "ENGINE_HALTED"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when event occurred (UTC, recorded time)",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "UUID v7 - execution attempt identifier",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Deterministic task identifier",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number (1-indexed)",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "action": {
+      "type": "string",
+      "description": "Action name (e.g., 'fs.read')",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "UUID v7 - session identifier grouping all attempts",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "message_id": {
+      "type": "string",
+      "description": "UUID v7 - original envelope message_id",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "event_data": {
+      "type": "object",
+      "description": "Event-specific structured data. Schema varies by event_type.",
+      "additionalProperties": true
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code for failure events (HANDLER_FAILED, SNAPSHOT_FAILED, ROLLBACK_FAILED, etc.)"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Human-readable error message for failure events"
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature of canonical event (Phase 3). Null in Phase 2.",
+      "pattern": "^[a-f0-9]{128}$"
+    }
+  }
+}

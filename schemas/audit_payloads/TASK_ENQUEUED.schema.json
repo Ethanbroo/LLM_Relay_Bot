@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "TASK_ENQUEUED Payload",
+  "description": "Emitted when task added to execution queue",
+  "type": "object",
+  "required": ["task_id", "enqueue_seq"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "enqueue_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "is_duplicate": {
+      "type": "boolean"
+    }
+  }
+}

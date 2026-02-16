@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://relay.schema/llm/claude_input.json",
+  "title": "ClaudeInput",
+  "description": "Phase 8 input contract for Claude LLM - closed and immutable",
+  "type": "object",
+  "required": [
+    "run_id",
+    "session_id",
+    "request_id",
+    "task_type",
+    "task_payload",
+    "constraints",
+    "output_schema_id",
+    "output_schema_json",
+    "context_window_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUID v7 run identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Unique request identifier"
+    },
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "text_generation",
+        "data_extraction",
+        "classification",
+        "summarization",
+        "validation"
+      ],
+      "description": "Task type (closed enum)"
+    },
+    "task_payload": {
+      "type": "object",
+      "description": "Opaque task payload (already validated upstream)"
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["hard_constraints", "soft_preferences"],
+      "properties": {
+        "hard_constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Hard constraints that MUST be satisfied"
+        },
+        "soft_preferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Soft preferences (non-binding)"
+        }
+      }
+    },
+    "output_schema_id": {
+      "type": "string",
+      "description": "Schema identifier for expected output"
+    },
+    "output_schema_json": {
+      "type": "object",
+      "description": "Authoritative JSON schema for output validation"
+    },
+    "context_window_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hash of context window content"
+    }
+  }
+}

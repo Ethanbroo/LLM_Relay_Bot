@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "ROLLBACK_STARTED Payload",
+  "description": "Emitted when rollback operation begins",
+  "type": "object",
+  "required": ["task_id", "snapshot_id", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 256
+    }
+  }
+}

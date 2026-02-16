@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DEADLOCK_VICTIM_SELECTED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "detection_event_seq": {
+      "type": "integer",
+      "description": "Event seq when deadlock detected"
+    },
+    "victim_task_id": {
+      "type": "string",
+      "description": "Victim task identifier"
+    },
+    "victim_attempt": {
+      "type": "integer",
+      "description": "Victim attempt number"
+    },
+    "victim_enqueue_seq": {
+      "type": "integer",
+      "description": "Victim enqueue sequence"
+    },
+    "cycle_length": {
+      "type": "integer",
+      "description": "Number of tasks in cycle"
+    },
+    "selection_reason": {
+      "type": "string",
+      "description": "Reason for victim selection"
+    }
+  },
+  "required": ["detection_event_seq", "victim_task_id", "victim_attempt", "victim_enqueue_seq", "cycle_length", "selection_reason"]
+}

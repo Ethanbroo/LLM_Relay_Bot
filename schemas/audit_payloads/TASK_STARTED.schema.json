@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "TASK_STARTED Payload",
+  "description": "Emitted when task execution begins",
+  "type": "object",
+  "required": ["task_id", "attempt"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

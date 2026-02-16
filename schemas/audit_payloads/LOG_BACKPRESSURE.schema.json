@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "LOG_BACKPRESSURE Payload",
+  "description": "Emitted when ingress buffer full",
+  "type": "object",
+  "required": ["producer", "buffer_size"],
+  "additionalProperties": false,
+  "properties": {
+    "producer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "buffer_size": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

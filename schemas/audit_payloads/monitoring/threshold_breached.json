@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "THRESHOLD_BREACHED payload",
+  "type": "object",
+  "required": ["rule_id", "metric_id", "observed_value", "threshold", "action", "correlation"],
+  "additionalProperties": false,
+  "properties": {
+    "rule_id": {"type": "string"},
+    "metric_id": {"type": "string"},
+    "observed_value": {},
+    "threshold": {},
+    "action": {"type": "string"},
+    "correlation": {
+      "type": "object",
+      "required": ["trace_id"],
+      "properties": {
+        "trace_id": {"type": "string"}
+      }
+    }
+  }
+}

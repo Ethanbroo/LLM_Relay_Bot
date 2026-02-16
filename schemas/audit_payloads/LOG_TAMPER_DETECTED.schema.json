@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "LOG_TAMPER_DETECTED Payload",
+  "description": "Emitted when hash chain or signature mismatch detected",
+  "type": "object",
+  "required": ["segment_filename", "tamper_type", "event_seq"],
+  "additionalProperties": false,
+  "properties": {
+    "segment_filename": {
+      "type": "string",
+      "pattern": "^audit\\.\\d{6}\\.jsonl$"
+    },
+    "tamper_type": {
+      "type": "string",
+      "enum": ["hash_chain_mismatch", "signature_invalid", "event_id_mismatch"]
+    },
+    "event_seq": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

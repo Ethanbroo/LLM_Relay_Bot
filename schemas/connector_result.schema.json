@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-relay.local/schemas/connector_result.schema.json",
+  "title": "ConnectorResult",
+  "description": "Phase 5: Result of connector execution. Must be deterministic.",
+  "type": "object",
+  "required": [
+    "status",
+    "connector_type",
+    "idempotency_key",
+    "result_hash"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Connector execution status",
+      "enum": ["success", "failure"]
+    },
+    "connector_type": {
+      "type": "string",
+      "description": "Connector type identifier",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key from request",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "external_transaction_id": {
+      "type": "string",
+      "description": "External system transaction ID (if applicable)",
+      "maxLength": 128
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Artifact name to artifact hash mapping",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "side_effect_summary": {
+      "type": "string",
+      "description": "Human-readable summary of side effects",
+      "maxLength": 500
+    },
+    "result_hash": {
+      "type": "string",
+      "description": "SHA-256 hex digest of result (excluding this field)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code if status is failure",
+      "maxLength": 64
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if status is failure",
+      "maxLength": 200
+    }
+  },
+  "additionalProperties": false
+}

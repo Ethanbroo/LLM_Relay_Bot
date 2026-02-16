@@ -1,0 +1,28 @@
+TASK INPUT:
+
+Run ID: {run_id}
+Session ID: {session_id}
+Request ID: {request_id}
+Task Type: {task_type}
+
+TASK PAYLOAD:
+{task_payload}
+
+CONSTRAINTS (HARD LAW - MUST NOT VIOLATE):
+{constraints}
+
+OUTPUT SCHEMA ID: {output_schema_id}
+
+OUTPUT SCHEMA (AUTHORITATIVE):
+{output_schema_json}
+
+CONTEXT WINDOW HASH: {context_window_hash}
+
+---
+
+Produce valid JSON output conforming exactly to the output schema.
+Include all required fields.
+Include no extra fields.
+Satisfy all enums, bounds, and format requirements.
+
+If you cannot comply, emit the structured failure format defined in the system prompt.

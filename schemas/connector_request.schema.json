@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-relay.local/schemas/connector_request.schema.json",
+  "title": "ConnectorRequest",
+  "description": "Phase 5: Input to connector execution. Must be derived from CoordinatedAction.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "task_id",
+    "attempt",
+    "action",
+    "action_version",
+    "payload_canonical",
+    "payload_hash",
+    "config_hash",
+    "principal",
+    "idempotency_key",
+    "coordination_proof"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Current run ID",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task ID",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number",
+      "minimum": 1
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier (e.g., fs.write_file)",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "action_version": {
+      "type": "string",
+      "description": "Action version",
+      "pattern": "^v[0-9]+$"
+    },
+    "payload_canonical": {
+      "type": "string",
+      "description": "Canonical JSON string of payload",
+      "maxLength": 1048576
+    },
+    "payload_hash": {
+      "type": "string",
+      "description": "SHA-256 hex digest of payload_canonical",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "config_hash": {
+      "type": "string",
+      "description": "Hash of current config",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "principal": {
+      "type": "string",
+      "description": "Role/subject executing action",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Deterministic idempotency key",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "coordination_proof": {
+      "type": "object",
+      "description": "Proof that action passed Phase 4 coordination",
+      "required": ["coordination_id"],
+      "properties": {
+        "coordination_id": {
+          "type": "string",
+          "description": "Coordination ID from Phase 4",
+          "minLength": 1
+        },
+        "lock_ids": {
+          "type": "array",
+          "description": "Acquired lock IDs",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approval_id": {
+          "type": "string",
+          "description": "Approval ID if required"
+        },
+        "coordination_event_seq": {
+          "type": "integer",
+          "description": "Coordination event sequence number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

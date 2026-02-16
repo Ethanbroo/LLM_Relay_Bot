@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LOCK_EXPIRED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lock_set_id": {
+      "type": "string",
+      "description": "SHA-256 hex of sorted lock IDs"
+    },
+    "expired_lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of expired lock IDs"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number"
+    },
+    "current_event_seq": {
+      "type": "integer",
+      "description": "Current event seq"
+    }
+  },
+  "required": ["lock_set_id", "expired_lock_ids", "task_id", "attempt", "current_event_seq"]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "RBAC_DENIED Payload",
+  "description": "Emitted when RBAC check denies access",
+  "type": "object",
+  "required": ["role", "action", "resource"],
+  "additionalProperties": false,
+  "properties": {
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "resource": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 256
+    }
+  }
+}

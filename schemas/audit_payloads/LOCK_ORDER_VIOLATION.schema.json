@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LOCK_ORDER_VIOLATION payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lock_set_id": {
+      "type": "string",
+      "description": "SHA-256 hex of sorted lock IDs"
+    },
+    "lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Unsorted lock IDs that caused violation"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message"
+    }
+  },
+  "required": ["lock_set_id", "lock_ids", "task_id", "attempt", "error_message"]
+}

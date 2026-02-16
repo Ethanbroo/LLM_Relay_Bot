@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "VALIDATION_FAILED Payload",
+  "description": "Emitted when validation fails",
+  "type": "object",
+  "required": ["validation_id", "error_code", "stage"],
+  "additionalProperties": false,
+  "properties": {
+    "validation_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "error_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "stage": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 512
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APPROVAL_VERIFIED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier"
+    },
+    "approval_id": {
+      "type": "string",
+      "description": "Approval token UUID"
+    },
+    "approver_principal": {
+      "type": "string",
+      "description": "Approver principal ID"
+    },
+    "issued_event_seq": {
+      "type": "integer",
+      "description": "Event seq when issued"
+    },
+    "expires_event_seq": {
+      "type": "integer",
+      "description": "Event seq when expires"
+    }
+  },
+  "required": ["task_id", "action", "approval_id", "approver_principal", "issued_event_seq", "expires_event_seq"]
+}

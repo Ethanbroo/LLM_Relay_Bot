@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "PRODUCER_PROTOCOL_VIOLATION Payload",
+  "description": "Emitted when producer ignores backpressure signal",
+  "type": "object",
+  "required": ["producer", "violation_type"],
+  "additionalProperties": false,
+  "properties": {
+    "producer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "violation_type": {
+      "type": "string",
+      "enum": ["ignored_backpressure", "invalid_envelope", "unknown_event_type"]
+    }
+  }
+}

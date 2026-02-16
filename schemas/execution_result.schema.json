@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-relay.example.com/schemas/execution_result.schema.json",
+  "title": "ExecutionResult",
+  "description": "Output from executor after attempting to execute a ValidatedAction. Deterministic representation of execution outcome.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "session_id",
+    "message_id",
+    "task_id",
+    "attempt",
+    "action",
+    "action_version",
+    "status",
+    "started_at",
+    "finished_at",
+    "retryable"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "UUID v7 - unique identifier for this execution attempt",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "UUID v7 - groups all attempts for this task across retries",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "message_id": {
+      "type": "string",
+      "description": "UUID v7 - from original envelope (immutable)",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Deterministic task identifier: SHA-256(message_id + action + action_version + canonical payload)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number (1-indexed). First attempt = 1, retry = 2, etc.",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "action": {
+      "type": "string",
+      "description": "Action name from ValidatedAction (e.g., 'fs.read')",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "action_version": {
+      "type": "string",
+      "description": "Action version from ValidatedAction (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "description": "Execution outcome: success (completed), failure (retryable error), dead (non-retryable or max attempts)",
+      "enum": ["success", "failure", "dead"]
+    },
+    "started_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when execution started (UTC, recorded time)",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when execution finished (UTC, recorded time)",
+      "format": "date-time"
+    },
+    "retryable": {
+      "type": "boolean",
+      "description": "If status=failure, can this be retried? If status=dead, this is always false."
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code if status != success. Null for success.",
+      "enum": [
+        "HANDLER_NOT_FOUND",
+        "SANDBOX_CREATION_FAILED",
+        "SANDBOX_DESTROYED_UNEXPECTEDLY",
+        "HANDLER_TIMEOUT",
+        "HANDLER_EXCEPTION",
+        "RESOURCE_EXHAUSTED",
+        "ROLLBACK_FAILED",
+        "MAX_RETRIES_EXCEEDED",
+        "ARTIFACT_VALIDATION_FAILED",
+        "SNAPSHOT_FAILED",
+        "PERMISSION_DENIED"
+      ]
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Human-readable error message if status != success. Null for success."
+    },
+    "error_details": {
+      "type": "object",
+      "description": "Structured error details (exception type, stack trace, etc.). Null for success.",
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Action-specific output artifacts. For fs.read: {content, bytes_read}. For fs.list_dir: {entries}. Null if status != success.",
+      "additionalProperties": true
+    },
+    "snapshot_id": {
+      "type": "string",
+      "description": "Snapshot identifier created before execution (for rollback). Null if snapshot not created.",
+      "pattern": "^snapshot_[a-f0-9]{64}$"
+    },
+    "rollback_id": {
+      "type": "string",
+      "description": "Rollback operation identifier if rollback was performed. Null if no rollback.",
+      "pattern": "^rollback_[a-f0-9]{64}$"
+    },
+    "sandbox_id": {
+      "type": "string",
+      "description": "Sandbox identifier for this execution attempt",
+      "pattern": "^sandbox_[a-f0-9]{64}$"
+    },
+    "handler_duration_ms": {
+      "type": "integer",
+      "description": "Time spent in handler execution (milliseconds). Null if handler never started.",
+      "minimum": 0
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "description": "Total time from task start to finish (milliseconds)",
+      "minimum": 0
+    },
+    "resource_usage": {
+      "type": "object",
+      "description": "Resource consumption metrics",
+      "properties": {
+        "peak_memory_bytes": {
+          "type": "integer",
+          "description": "Peak memory usage in bytes",
+          "minimum": 0
+        },
+        "cpu_time_ms": {
+          "type": "integer",
+          "description": "CPU time consumed (milliseconds)",
+          "minimum": 0
+        },
+        "disk_reads_bytes": {
+          "type": "integer",
+          "description": "Total bytes read from disk",
+          "minimum": 0
+        },
+        "disk_writes_bytes": {
+          "type": "integer",
+          "description": "Total bytes written to disk",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature of canonical ExecutionResult (Phase 3). Null in Phase 2.",
+      "pattern": "^[a-f0-9]{128}$"
+    }
+  }
+}

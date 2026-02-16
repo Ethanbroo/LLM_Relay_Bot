@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "COORDINATION_COMPLETED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "coordination_id": {
+      "type": "string",
+      "description": "Coordination UUID"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier"
+    },
+    "locks_required": {
+      "type": "boolean",
+      "description": "Whether locks were required"
+    },
+    "lock_set_id": {
+      "type": "string",
+      "description": "Lock set ID (if locks required)"
+    },
+    "lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Lock IDs (if locks required)"
+    },
+    "approval_verified": {
+      "type": "boolean",
+      "description": "Whether approval was verified"
+    },
+    "acquired_event_seq": {
+      "type": "integer",
+      "description": "Event seq when acquired (if locks required)"
+    },
+    "expires_event_seq": {
+      "type": "integer",
+      "description": "Event seq when expires (if locks required)"
+    }
+  },
+  "required": ["coordination_id", "task_id", "action", "approval_verified"]
+}

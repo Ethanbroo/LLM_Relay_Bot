@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "PROCESS_STARTED Payload",
+  "description": "Emitted when a process component starts",
+  "type": "object",
+  "required": ["process_name", "pid"],
+  "additionalProperties": false,
+  "properties": {
+    "process_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APPROVAL_REJECTED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "action": {
+      "type": "string",
+      "description": "Action identifier"
+    },
+    "approval_id": {
+      "type": "string",
+      "description": "Approval token UUID (if provided)"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Error code"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message"
+    }
+  },
+  "required": ["task_id", "action", "error_code", "error_message"]
+}

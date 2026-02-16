@@ -1,0 +1,18 @@
+Your previous output was rejected.
+
+Rejection reason: {rejection_reason}
+
+This is your SECOND and FINAL attempt.
+
+Re-read the task, constraints, and output schema.
+Produce valid JSON conforming exactly to the output schema.
+
+If you still cannot comply, emit the structured failure format:
+{{
+  "status": "cannot_comply",
+  "reason_code": "<one of: missing_required_data | conflicting_constraints | schema_too_complex | task_ambiguous>",
+  "missing_fields": ["field1", "field2"],
+  "conflicting_constraints": ["constraint description"]
+}}
+
+NO explanations. NO prose. ONLY valid JSON.

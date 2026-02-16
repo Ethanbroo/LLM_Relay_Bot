@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LOCK_SET_RELEASED payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lock_set_id": {
+      "type": "string",
+      "description": "SHA-256 hex of sorted lock IDs"
+    },
+    "lock_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of lock IDs"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "attempt": {
+      "type": "integer",
+      "description": "Attempt number"
+    },
+    "release_event_seq": {
+      "type": "integer",
+      "description": "Event seq when released"
+    }
+  },
+  "required": ["lock_set_id", "lock_ids", "task_id", "attempt", "release_event_seq"]
+}
