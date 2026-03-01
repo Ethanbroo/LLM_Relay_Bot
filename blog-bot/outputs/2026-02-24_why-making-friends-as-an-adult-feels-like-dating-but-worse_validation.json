@@ -1,0 +1,238 @@
+{
+  "title": "Why Making Friends as an Adult Feels Like Dating But Worse",
+  "model_used": "claude-sonnet-4-20250514",
+  "attempt_count": 7,
+  "success": false,
+  "validation": {
+    "overall_pass": false,
+    "fail_count": 2,
+    "warn_count": 0,
+    "checks": [
+      {
+        "name": "Word Count",
+        "status": "PASS",
+        "detail": "1487 words (target: 1500, range: 1425-1650)"
+      },
+      {
+        "name": "METADATA Block",
+        "status": "PASS",
+        "detail": "Found 2 anchor\u2192blog mapping(s)."
+      },
+      {
+        "name": "FC Mention",
+        "status": "FAIL",
+        "detail": "No mention of Friendly Connections found in article."
+      },
+      {
+        "name": "No URLs",
+        "status": "PASS",
+        "detail": "No URLs detected in article body."
+      },
+      {
+        "name": "Header Formatting",
+        "status": "FAIL",
+        "detail": "Found H1 (1) or H2 (0) headers \u2014 use H3 for sections."
+      },
+      {
+        "name": "Section Completeness",
+        "status": "PASS",
+        "detail": "Found 9 section headers (minimum: 7)."
+      },
+      {
+        "name": "Comma-to-Dash Ratio",
+        "status": "PASS",
+        "detail": "Commas: 66, Dashes: 6, Ratio: 11.0:1 (target: >= 3:1)."
+      },
+      {
+        "name": "No Structural Labels",
+        "status": "PASS",
+        "detail": "No structural labels found in headers."
+      }
+    ]
+  },
+  "all_attempts": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 1,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 2,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1487 words (target: 1500, range: 1425-1650)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "FAIL",
+            "detail": "No mention of Friendly Connections found in article."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "FAIL",
+            "detail": "Found H1 (1) or H2 (0) headers \u2014 use H3 for sections."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 9 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 66, Dashes: 6, Ratio: 11.0:1 (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9793
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 2,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 2,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "FAIL",
+            "detail": "OVER: 1668 words (maximum: 1650, target: 1500)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "FAIL",
+            "detail": "Found H1 (1) or H2 (0) headers \u2014 use H3 for sections."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 8 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 80, Dashes: 1, Ratio: 80.0:1 (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 10997
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 3,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 2,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "FAIL",
+            "detail": "UNDER: 1380 words (minimum: 1425, target: 1500)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "FAIL",
+            "detail": "Found H1 (1) or H2 (0) headers \u2014 use H3 for sections."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 8 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 61, Dashes: 10, Ratio: 6.1:1 (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9201
+    },
+    {
+      "model": "gpt-4o",
+      "attempt": 1,
+      "error": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
+    },
+    {
+      "model": "gpt-4o",
+      "attempt": 2,
+      "error": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
+    },
+    {
+      "model": "deepseek-chat",
+      "attempt": 1,
+      "error": "No DeepSeek API key (DEEPSEEK_API_KEY)."
+    },
+    {
+      "model": "deepseek-chat",
+      "attempt": 2,
+      "error": "No DeepSeek API key (DEEPSEEK_API_KEY)."
+    }
+  ],
+  "config": {
+    "topic": "The friendship recession is real and nobody is talking about it honestly",
+    "word_count": 1500,
+    "fc_angle": "Mention Friendly Connections when discussing how some people are turning to organized social services as a practical response to the friendship recession, framing it as part of a growing movement rather than a last resort.",
+    "override_dedup": false
+  },
+  "generated_at": "2026-02-24T03:43:22.484439"
+}

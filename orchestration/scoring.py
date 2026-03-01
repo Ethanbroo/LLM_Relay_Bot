@@ -6,6 +6,7 @@ Phase 6 Invariant: Scoring is deterministic and reproducible.
 import numpy as np
 from typing import List, Optional
 import hashlib
+from orchestration.response_parser import normalize_text
 
 
 class SimilarityScorer:
@@ -29,24 +30,21 @@ class SimilarityScorer:
         self._model = None  # Lazy loaded
 
     def _load_model(self):
-        """Lazy load SBERT model.
+        """Lazy load SBERT model (all-mpnet-base-v2).
 
-        TODO: Install sentence-transformers:
-        pip install sentence-transformers
-
-        Then uncomment:
-        ```python
-        from sentence_transformers import SentenceTransformer
-        self._model = SentenceTransformer('all-mpnet-base-v2')
-        self._model.eval()  # Evaluation mode (no dropout)
-        ```
+        Downloads the model automatically on first use (~420 MB, one-time).
+        Falls back to hash-based stub if sentence-transformers is not installed.
         """
         if self._model is not None:
             return
 
-        # STUB: Use deterministic hash-based similarity for testing
-        # TODO: Replace with real SBERT model loading (see above)
-        self._model = "stub"
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer("all-mpnet-base-v2")
+            self._model.eval()  # Evaluation mode (no dropout)
+        except ImportError:
+            # Fallback: hash-based stub (install sentence-transformers for real embeddings)
+            self._model = "stub"
 
     def compute_embedding(self, text: str) -> np.ndarray:
         """Compute embedding for text.
@@ -62,22 +60,19 @@ class SimilarityScorer:
         self._load_model()
 
         if self._model == "stub":
-            # STUB: Generate deterministic embedding from hash
-            # TODO: Replace with: return self._model.encode(text, show_progress_bar=False)
+            # Hash-based fallback (used when sentence-transformers is not installed)
+            text = normalize_text(text)
             text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
-            # Use first 384 bytes of hash to create 384-dim vector (matches all-mpnet-base-v2)
             embedding = np.array([int(text_hash[i:i+2], 16) for i in range(0, min(len(text_hash), 384*2), 2)])
-            # Pad if needed
             if len(embedding) < 384:
                 embedding = np.pad(embedding, (0, 384 - len(embedding)))
-            # Normalize
             norm = np.linalg.norm(embedding)
             if norm > 0:
                 embedding = embedding / norm
             return embedding.astype(np.float32)
 
-        # Real implementation (when uncommented):
-        # return self._model.encode(text, show_progress_bar=False)
+        # Real SBERT embedding
+        return self._model.encode(normalize_text(text), show_progress_bar=False)
 
     def compute_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """Compute cosine similarity between embeddings.

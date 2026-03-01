@@ -1,0 +1,214 @@
+# compose.yaml -- Section 1 production configuration (reconciled)
+#
+# 6 services: nginx, certbot, relay-bot, claude-code, redis, code-server
+# 2 networks: frontend (internet-facing), backend (internal, no internet)
+#
+# Start:   docker compose up -d --build
+# Stop:    docker compose down
+# Logs:    docker compose logs -f relay-bot
+# Status:  docker compose ps
+
+services:
+
+  # ─── Nginx reverse proxy (sole internet-facing service) ────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETGID, SETUID]
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /var/run:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=128m
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/:/etc/nginx/conf.d/:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    networks: [frontend, backend]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    depends_on:
+      relay-bot: { condition: service_healthy }
+
+  # ─── Certbot for TLS certificates ─────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks: [frontend]
+
+  # ─── Relay Bot (your telegram_bot/ codebase) ──────────────────
+  relay-bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.relay-bot
+    container_name: relay-bot
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    runtime: runsc                          # gVisor sandbox
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 50
+    dns: ["8.8.8.8", "1.1.1.1"]           # Required: gVisor can't reach Docker DNS
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+    volumes:
+      - shared-workspace:/app/workspace     # Shared with claude-code + code-server
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 1G }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    depends_on:
+      redis: { condition: service_healthy }
+
+  # ─── Claude Code (sandboxed CLI execution) ────────────────────
+  claude-code:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.claude-code
+    container_name: claude-code
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    runtime: runsc                          # gVisor sandbox — AI-generated code runs here
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 100
+    dns: ["8.8.8.8", "1.1.1.1"]           # Required: gVisor DNS workaround
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m    # Larger: Claude Code writes temp files
+    env_file: .env
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - shared-workspace:/workspace         # Same volume as relay-bot + code-server
+      - claude-home:/home/claude/.claude    # Persistent session data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "claude", "--version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 3G }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── Redis 7 Alpine ────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 50
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    command: >
+      redis-server
+      --save 60 1000
+      --save 300 100
+      --save 900 1
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --loglevel warning
+      --rename-command FLUSHALL ""
+      --rename-command FLUSHDB ""
+      --rename-command CONFIG ""
+      --rename-command DEBUG ""
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 384M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── code-server (VS Code in browser) ─────────────────────────
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - DEFAULT_WORKSPACE=/config/workspace
+    volumes:
+      - code-config:/config
+      - shared-workspace:/config/workspace   # Same volume as relay-bot + claude-code
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 1G }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  redis-data:            # Redis RDB + AOF persistence
+  code-config:           # code-server settings, extensions
+  shared-workspace:      # THE critical shared volume — relay-bot, claude-code, code-server all mount this
+  claude-home:           # Claude Code session data (~/.claude)
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true       # NO internet access for backend containers

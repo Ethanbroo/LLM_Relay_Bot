@@ -1,0 +1,342 @@
+2026-02-17 17:47:52,394 [INFO] blog_scheduler: Blog scheduler starting — will fire daily at 13:00 local time
+2026-02-17 17:47:52,399 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:56:49,509 [INFO] blog_scheduler: Blog scheduler starting — daily blog at 13:00, analytics poll at 13:30
+2026-02-17 17:56:51,229 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:56:51,229 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:56:51,232 [INFO] apscheduler.scheduler: Added job "Daily blog draft creation" to job store "default"
+2026-02-17 17:56:51,233 [INFO] apscheduler.scheduler: Added job "WordPress analytics poll + Q-learner update" to job store "default"
+2026-02-17 19:36:21,010 [INFO] blog_scheduler: Blog scheduler starting — daily blog at 13:00, analytics poll at 13:30
+2026-02-17 19:36:22,089 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 19:36:22,090 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 19:36:22,092 [INFO] apscheduler.scheduler: Added job "Daily blog draft creation" to job store "default"
+2026-02-17 19:36:22,092 [INFO] apscheduler.scheduler: Added job "WordPress analytics poll + Q-learner update" to job store "default"
+2026-02-17 19:36:22,092 [INFO] apscheduler.scheduler: Scheduler started
+2026-02-17 22:07:12,750 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (1 < 7)
+2026-02-20 19:36:11,984 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-20 19:36:26,097 [WARNING] workflows.blog_workflow: Media upload failed: WordPress API client error: 400 {"code":"rest_invalid_json","message":"Invalid JSON body passed.","data":{"status":400,"json_error_code":4,"json_error_message":"Syntax error"}}
+2026-02-21 00:15:12,510 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 00:15:23,508 [WARNING] workflows.blog_workflow: Media upload failed: WordPress API client error: 400 {"code":"rest_invalid_json","message":"Invalid JSON body passed.","data":{"status":400,"json_error_code":4,"json_error_message":"Syntax error"}}
+2026-02-21 00:17:20,591 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 00:19:18,449 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 14:54:00,963 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 14:55:20,766 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 14:55:20,802 [INFO] blog_now: Starting blog workflow: title='Morning Routines That Set You Up for Deeper Human Connections'
+2026-02-21 14:55:20,805 [INFO] workflows.blog_workflow: Blog workflow started: run_id=d39b6684 slug=morning-routines-that-set-you-up-for-deeper-human-connections keywords=['morning routine for connection', 'building better relationships', 'emotional availability', 'mindful mornings', 'connection practices']
+2026-02-21 14:55:26,543 [INFO] workflows.blog_workflow: Unsplash: found image (id=ESWmqUtGe3M), 801948 bytes base64
+2026-02-21 14:55:26,545 [INFO] workflows.blog_workflow: Uploading image to WordPress: morning-routines-that-set-you-up-for-deeper-human-connections-cover.jpg (image/jpeg)
+2026-02-21 14:55:57,298 [WARNING] workflows.blog_workflow: Media upload failed: HTTP request failed after 2 attempts: HTTPSConnectionPool(host='friendlyconnections.services', port=443): Read timed out. (read timeout=15)
+2026-02-21 14:55:57,301 [INFO] workflows.blog_workflow: Creating WordPress draft: title='Morning Routines That Set You Up for Deeper Human ' slug=morning-routines-that-set-you-up-for-deeper-human-connections
+2026-02-21 14:56:30,463 [INFO] workflows.blog_workflow: Draft created: post_id=12877 link=https://friendlyconnections.services/?p=12877
+2026-02-21 14:56:30,468 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12877 slug=morning-routines-that-set-you-up-for-deeper-human-connections featured_media_id=None
+2026-02-21 14:56:32,324 [INFO] blog_now: Workflow success: post_id=12877 slug=morning-routines-that-set-you-up-for-deeper-human-connections featured_media_id=None
+2026-02-21 14:57:39,788 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 14:57:39,820 [INFO] blog_now: Starting blog workflow: title='Quick Tips for Neighbor Introductions: Start Building Community Today'
+2026-02-21 14:57:39,821 [INFO] workflows.blog_workflow: Blog workflow started: run_id=bbacea6d slug=quick-tips-for-neighbor-introductions-start-building-community-today keywords=['neighbor introductions', 'meeting neighbors', 'building community', 'neighborhood connections', 'social tips']
+2026-02-21 14:57:44,058 [INFO] workflows.blog_workflow: Unsplash: found image (id=PgNE82MUHAY), 2233632 bytes base64
+2026-02-21 14:57:44,059 [INFO] workflows.blog_workflow: Uploading image to WordPress: quick-tips-for-neighbor-introductions-start-building-community-today-cover.jpg (image/jpeg)
+2026-02-21 14:58:05,879 [INFO] workflows.blog_workflow: Media uploaded: id=12878 url=https://friendlyconnections.services/wp-content/uploads/2026/02/quick-tips-for-neighbor-introductions-start-building-community-today-cover-scaled.jpg
+2026-02-21 14:58:05,882 [INFO] workflows.blog_workflow: Creating WordPress draft: title='Quick Tips for Neighbor Introductions: Start Build' slug=quick-tips-for-neighbor-introductions-start-building-community-today
+2026-02-21 14:58:32,309 [INFO] workflows.blog_workflow: Draft created: post_id=12879 link=https://friendlyconnections.services/?p=12879
+2026-02-21 14:58:32,312 [INFO] workflows.blog_workflow: Setting featured media: post_id=12879 media_id=12878
+2026-02-21 14:58:35,204 [INFO] workflows.blog_workflow: Featured media set successfully
+2026-02-21 14:58:35,206 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12879 slug=quick-tips-for-neighbor-introductions-start-building-community-today featured_media_id=12878
+2026-02-21 14:58:37,859 [INFO] blog_now: Workflow success: post_id=12879 slug=quick-tips-for-neighbor-introductions-start-building-community-today featured_media_id=12878
+2026-02-21 15:11:20,444 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 15:11:21,830 [INFO] blog_now: Starting blog workflow: title="The Hidden Cost of Workplace Loneliness: What It's Really Costing You and Your Company"
+2026-02-21 15:11:21,833 [INFO] workflows.blog_workflow: Blog workflow started: run_id=0ef3b024 slug=the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your keywords=['workplace loneliness', 'employee connection', 'workplace isolation', 'organizational culture', 'remote work challenges']
+2026-02-21 15:11:24,460 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 15:11:24,463 [INFO] workflows.visual_intent: Visual intent: tone=warning keywords=['isolated person office window', 'alone in crowded space', 'distant coworkers separation', 'workplace fatigue contemplation', 'disconnected team members']
+2026-02-21 15:11:24,466 [INFO] workflows.blog_workflow: Visual intent: tone=warning search_phrases=['isolated person office window', 'alone in crowded space', 'distant coworkers separation']
+2026-02-21 15:11:26,516 [INFO] workflows.blog_workflow: Unsplash: found image (id=Z0U5hXqo_yk), 1032072 bytes base64
+2026-02-21 15:11:26,518 [INFO] workflows.blog_workflow: Uploading image to WordPress: the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your-cover.jpg (image/jpeg)
+2026-02-21 15:11:44,623 [INFO] workflows.blog_workflow: Media uploaded: id=12881 url=https://friendlyconnections.services/wp-content/uploads/2026/02/the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your-cover-scaled.jpg
+2026-02-21 15:11:44,627 [INFO] workflows.blog_workflow: Creating WordPress draft: title="The Hidden Cost of Workplace Loneliness: What It's" slug=the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your
+2026-02-21 15:12:14,542 [INFO] workflows.blog_workflow: Draft created: post_id=12882 link=https://friendlyconnections.services/?p=12882
+2026-02-21 15:12:14,544 [INFO] workflows.blog_workflow: Setting featured media: post_id=12882 media_id=12881
+2026-02-21 15:12:18,990 [INFO] workflows.blog_workflow: Featured media set successfully
+2026-02-21 15:12:18,993 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12882 slug=the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your featured_media_id=12881
+2026-02-21 15:12:21,434 [INFO] blog_now: Workflow success: post_id=12882 slug=the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your featured_media_id=12881
+2026-02-21 15:19:57,400 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 15:20:01,719 [INFO] blog_now: Starting blog workflow: title='Building a Support Network from Scratch: A Practical Guide to Creating Your Circle'
+2026-02-21 15:20:01,721 [INFO] workflows.blog_workflow: Blog workflow started: run_id=26472047 slug=building-a-support-network-from-scratch-a-practical-guide-to-creating-your keywords=['building support network', 'making friends from scratch', 'creating social connections', 'finding community', 'building meaningful relationships']
+2026-02-21 15:20:04,762 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 15:20:04,768 [INFO] workflows.visual_intent: Visual intent: tone=aspiration keywords=['person looking forward hopeful', 'new beginning quiet moment', 'gentle human connection', 'stepping forward alone path', 'warm light through window solitude']
+2026-02-21 15:20:04,768 [INFO] workflows.blog_workflow: Visual intent: tone=aspiration search_phrases=['person looking forward hopeful', 'new beginning quiet moment', 'gentle human connection']
+2026-02-21 15:20:16,973 [WARNING] workflows.blog_workflow: Unsplash search failed: Image size 7709351 exceeds max 6291456
+2026-02-21 15:20:16,976 [INFO] workflows.blog_workflow: Skipping image upload (no image data from Unsplash)
+2026-02-21 15:20:16,978 [INFO] workflows.blog_workflow: Creating WordPress draft: title='Building a Support Network from Scratch: A Practic' slug=building-a-support-network-from-scratch-a-practical-guide-to-creating-your
+2026-02-21 15:20:42,537 [INFO] workflows.blog_workflow: Draft created: post_id=12884 link=https://friendlyconnections.services/?p=12884
+2026-02-21 15:20:42,540 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12884 slug=building-a-support-network-from-scratch-a-practical-guide-to-creating-your featured_media_id=None
+2026-02-21 15:20:44,868 [INFO] blog_now: Workflow success: post_id=12884 slug=building-a-support-network-from-scratch-a-practical-guide-to-creating-your featured_media_id=None
+2026-02-21 16:19:02,877 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:36:11,635 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:36:18,238 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:36:18,245 [INFO] workflows.blog_evaluator: Evaluator: title=8.0 engagement=9.0 audience=8.0 pass=True
+2026-02-21 16:36:18,246 [INFO] blog_now: Starting blog workflow: title="The Shared Interest Myth: Why Your Hobbies Haven't Fixed Your Loneliness"
+2026-02-21 16:36:18,249 [INFO] workflows.blog_workflow: Blog workflow started: run_id=065758a1 slug=the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness keywords=['overcoming loneliness', 'shared interests', 'genuine connection']
+2026-02-21 16:36:20,919 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:36:20,921 [INFO] workflows.visual_intent: Visual intent: tone=struggle keywords=['person sitting alone window', 'empty chair waiting', 'solitary figure crowd', 'tired person contemplating', 'isolated urban loneliness']
+2026-02-21 16:36:20,922 [INFO] workflows.blog_workflow: Visual intent: tone=struggle search_phrases=['person sitting alone window', 'empty chair waiting', 'solitary figure crowd']
+2026-02-21 16:36:29,275 [INFO] workflows.blog_workflow: Unsplash: found image (id=x-cEGE4dw8Q), 8279160 bytes base64
+2026-02-21 16:36:29,275 [INFO] workflows.blog_workflow: Uploading image to WordPress: the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness-cover.jpg (image/jpeg)
+2026-02-21 16:36:52,221 [INFO] workflows.blog_workflow: Media uploaded: id=12885 url=https://friendlyconnections.services/wp-content/uploads/2026/02/the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness-cover-scaled.jpg
+2026-02-21 16:36:52,223 [INFO] workflows.blog_workflow: Creating WordPress draft: title="The Shared Interest Myth: Why Your Hobbies Haven't" slug=the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness
+2026-02-21 16:37:16,762 [INFO] workflows.blog_workflow: Draft created: post_id=12886 link=https://friendlyconnections.services/?p=12886
+2026-02-21 16:37:16,763 [INFO] workflows.blog_workflow: Setting featured media: post_id=12886 media_id=12885
+2026-02-21 16:37:20,103 [INFO] workflows.blog_workflow: Featured media set successfully
+2026-02-21 16:37:20,104 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12886 slug=the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness featured_media_id=12885
+2026-02-21 16:37:22,295 [INFO] blog_now: Workflow success: post_id=12886 slug=the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness featured_media_id=12885
+2026-02-21 16:53:27,730 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:53:35,497 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:53:35,499 [INFO] workflows.blog_evaluator: Evaluator: title=8.0 engagement=9.0 audience=9.0 image=0.0 pass=True
+2026-02-21 16:53:35,500 [INFO] blog_now: Starting blog workflow: title="Why Your Therapist Can't Replace What Your Neighbor Could"
+2026-02-21 16:53:35,501 [INFO] workflows.blog_workflow: Blog workflow started: run_id=ba75acf8 slug=why-your-therapist-can-t-replace-what-your-neighbor-could keywords=['community mental health', 'social connection', 'loneliness and isolation']
+2026-02-21 16:53:37,978 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 16:53:37,978 [INFO] workflows.visual_intent: Visual intent: tone=belonging keywords=['neighbors talking on porch', 'casual community connection', 'genuine conversation doorstep', 'informal human support', 'quiet neighborhood gathering']
+2026-02-21 16:53:37,978 [INFO] workflows.blog_workflow: Visual intent: tone=belonging search_phrases=['neighbors talking on porch', 'casual community connection', 'genuine conversation doorstep']
+2026-02-21 16:53:44,105 [INFO] workflows.blog_workflow: Unsplash: found image (id=0rd-uBuds-g), 1641488 bytes base64
+2026-02-21 16:53:44,106 [INFO] workflows.blog_workflow: Uploading image to WordPress: why-your-therapist-can-t-replace-what-your-neighbor-could-cover.jpg (image/jpeg)
+2026-02-21 16:54:00,149 [INFO] workflows.blog_workflow: Media uploaded: id=12892 url=https://friendlyconnections.services/wp-content/uploads/2026/02/why-your-therapist-can-t-replace-what-your-neighbor-could-cover-scaled.jpg
+2026-02-21 16:54:00,151 [INFO] workflows.blog_workflow: Creating WordPress draft: title="Why Your Therapist Can't Replace What Your Neighbo" slug=why-your-therapist-can-t-replace-what-your-neighbor-could
+2026-02-21 16:54:20,004 [INFO] workflows.blog_workflow: Draft created: post_id=12893 link=https://friendlyconnections.services/?p=12893
+2026-02-21 16:54:20,005 [INFO] workflows.blog_workflow: Setting featured media: post_id=12893 media_id=12892
+2026-02-21 16:54:23,448 [INFO] workflows.blog_workflow: Featured media set successfully
+2026-02-21 16:54:23,448 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12893 slug=why-your-therapist-can-t-replace-what-your-neighbor-could featured_media_id=12892
+2026-02-21 16:54:26,083 [INFO] blog_now: Workflow success: post_id=12893 slug=why-your-therapist-can-t-replace-what-your-neighbor-could featured_media_id=12892
+2026-02-21 17:14:40,419 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:14:49,727 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:14:49,734 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=8.0 cred=4.0 engage=8.0 audience=8.0 image=0.0 platitudes=1 claims=2 pass=False
+2026-02-21 17:14:52,272 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:14:52,274 [INFO] workflows.visual_intent: Visual intent: tone=struggle keywords=['person sitting alone window', 'empty chair quiet room', 'solitary figure urban isolation', 'phone in hand contemplative', 'lone person coffee shop']
+2026-02-21 17:14:52,274 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Building a support network from scratch' tone=struggle
+2026-02-21 17:15:54,550 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:16:04,570 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:16:04,582 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=4.0 cred=3.0 engage=6.0 audience=5.0 image=0.0 platitudes=2 claims=5 pass=False
+2026-02-21 17:16:07,638 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:16:07,639 [INFO] workflows.visual_intent: Visual intent: tone=warning keywords=['person sitting alone window', 'empty chair solitude', 'isolated figure distance', 'hands reaching separation', 'quiet loneliness contemplation']
+2026-02-21 17:16:07,640 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='How social connections improve physical health' tone=warning
+2026-02-21 17:26:48,619 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:26:50,523 [ERROR] blog_now: Content generation failed: Expecting ',' delimiter: line 5 column 2751 (char 2985)
+2026-02-21 17:28:08,699 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:28:17,567 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:28:17,574 [INFO] workflows.blog_evaluator: Evaluator: title=5.0 spec=4.0 cred=3.0 engage=6.0 audience=5.0 image=0.0 platitudes=3 claims=4 pass=False
+2026-02-21 17:28:20,056 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-21 17:28:20,060 [INFO] workflows.visual_intent: Visual intent: tone=reflection keywords=['person sitting alone contemplative window', 'person quiet introspection empty room', 'lone person thoughtful urban solitude', 'person looking distance reflective mood', 'solitary person gentle melancholy']
+2026-02-21 17:28:20,060 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Why belonging matters for long-term happiness' tone=reflection
+2026-02-22 12:02:30,498 [INFO] blog_scheduler: Blog scheduler starting — daily blog at 12:00, analytics poll every 3h
+2026-02-22 12:02:30,961 [INFO] blog_scheduler: Blog scheduler starting — daily blog at 12:00, analytics poll every 3h
+2026-02-22 12:02:32,128 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:02:32,129 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:02:32,131 [INFO] apscheduler.scheduler: Added job "Daily blog draft creation" to job store "default"
+2026-02-22 12:02:32,131 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:02:32,131 [INFO] apscheduler.scheduler: Added job "Multi-horizon analytics poll (every 3h)" to job store "default"
+2026-02-22 12:02:32,131 [INFO] apscheduler.scheduler: Scheduler started
+2026-02-22 12:02:32,132 [INFO] blog_scheduler: Scheduler running in background. Daily blog fires at 12:00.
+2026-02-22 12:02:32,132 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:02:32,134 [INFO] apscheduler.scheduler: Added job "Daily blog draft creation" to job store "default"
+2026-02-22 12:02:32,134 [INFO] apscheduler.scheduler: Added job "Multi-horizon analytics poll (every 3h)" to job store "default"
+2026-02-22 12:02:32,134 [INFO] apscheduler.scheduler: Scheduler started
+2026-02-22 12:02:32,134 [INFO] blog_scheduler: Scheduler running in background. Daily blog fires at 12:00.
+2026-02-22 15:02:32,370 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-22 18:02:32 EST)" (scheduled at 2026-02-22 15:02:32.129449-05:00)
+2026-02-22 15:02:32,386 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-22 15:03:58,186 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12866 — views=0 comments=0
+2026-02-22 15:04:02,953 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12866 — views=0 comments=0
+2026-02-22 15:04:07,502 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12867 — views=0 comments=0
+2026-02-22 15:04:11,845 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12867 — views=0 comments=0
+2026-02-22 15:04:16,162 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12869 — views=0 comments=0
+2026-02-22 15:04:21,198 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12869 — views=0 comments=0
+2026-02-22 15:04:25,771 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12873 — views=0 comments=0
+2026-02-22 15:04:31,030 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12873 — views=0 comments=0
+2026-02-22 15:04:35,970 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12877 — views=0 comments=0
+2026-02-22 15:04:40,887 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12877 — views=0 comments=0
+2026-02-22 15:04:45,572 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12879 — views=0 comments=0
+2026-02-22 15:04:49,964 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12879 — views=0 comments=0
+2026-02-22 15:04:54,374 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12882 — views=0 comments=0
+2026-02-22 15:04:59,321 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12884 — views=0 comments=0
+2026-02-22 15:05:07,709 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12886 — views=0 comments=0
+2026-02-22 15:05:12,853 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12893 — views=0 comments=0
+2026-02-22 15:05:14,926 [INFO] blog_scheduler: Bandit: recorded 16 horizon snapshot(s)
+2026-02-22 15:05:14,930 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (3 < 7)
+2026-02-22 15:05:14,930 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-22 15:05:14,931 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-22 18:02:32 EST)" executed successfully
+2026-02-22 18:02:32,367 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-22 21:02:32 EST)" (scheduled at 2026-02-22 18:02:32.129449-05:00)
+2026-02-22 18:02:32,387 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-22 18:03:56,483 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12882 — views=0 comments=0
+2026-02-22 18:04:01,180 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12884 — views=0 comments=0
+2026-02-22 18:04:05,918 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12886 — views=0 comments=0
+2026-02-22 18:04:10,234 [INFO] learning.q_learner: Bandit: Recorded 24h snapshot for post 12893 — views=0 comments=0
+2026-02-22 18:04:10,244 [INFO] blog_scheduler: Bandit: recorded 4 horizon snapshot(s)
+2026-02-22 18:04:10,245 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (3 < 7)
+2026-02-22 18:04:10,245 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-22 18:04:10,246 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-22 21:02:32 EST)" executed successfully
+2026-02-22 20:08:24,404 [INFO] blog_scheduler: Blog scheduler starting — daily blog at 12:00, analytics poll every 3h
+2026-02-22 20:08:24,416 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 20:08:24,417 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 20:08:24,420 [INFO] apscheduler.scheduler: Added job "Daily blog draft creation" to job store "default"
+2026-02-22 20:08:24,420 [INFO] apscheduler.scheduler: Added job "Multi-horizon analytics poll (every 3h)" to job store "default"
+2026-02-22 20:08:24,420 [INFO] apscheduler.scheduler: Scheduler started
+2026-02-22 20:08:24,421 [INFO] blog_scheduler: Scheduler running in background. Daily blog fires at 12:00.
+2026-02-22 21:02:32,344 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 00:02:32 EST)" (scheduled at 2026-02-22 21:02:32.129449-05:00)
+2026-02-22 21:02:32,361 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-22 21:03:56,297 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-22 21:03:56,300 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (3 < 7)
+2026-02-22 21:03:56,300 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-22 21:03:56,300 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 00:02:32 EST)" executed successfully
+2026-02-23 05:27:57,588 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 08:08:24 EST)" was missed by 0:19:33.167496
+2026-02-23 08:40:57,668 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 09:02:32 EST)" was missed by 2:38:25.536068
+2026-02-23 09:02:32,205 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 12:02:32 EST)" (scheduled at 2026-02-23 09:02:32.129449-05:00)
+2026-02-23 09:02:32,220 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 09:04:01,017 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 09:04:01,022 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (3 < 7)
+2026-02-23 09:04:01,022 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 09:04:01,023 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 12:02:32 EST)" executed successfully
+2026-02-23 10:27:17,056 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 11:08:24 EST)" was missed by 2:18:52.637883
+2026-02-23 11:08:24,491 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 14:08:24 EST)" (scheduled at 2026-02-23 11:08:24.417512-05:00)
+2026-02-23 11:08:24,502 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 11:09:53,588 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 11:09:53,596 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (3 < 7)
+2026-02-23 11:09:53,596 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 11:09:53,597 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 14:08:24 EST)" executed successfully
+2026-02-23 12:00:00,126 [INFO] apscheduler.executors.default: Running job "Daily blog draft creation (trigger: cron[hour='12', minute='0'], next run at: 2026-02-24 12:00:00 EST)" (scheduled at 2026-02-23 12:00:00-05:00)
+2026-02-23 12:00:00,135 [INFO] blog_scheduler: === Daily blog job starting ===
+2026-02-23 12:00:00,278 [INFO] apscheduler.executors.default: Running job "Daily blog draft creation (trigger: cron[hour='12', minute='0'], next run at: 2026-02-24 12:00:00 EST)" (scheduled at 2026-02-23 12:00:00-05:00)
+2026-02-23 12:00:00,285 [INFO] blog_scheduler: === Daily blog job starting ===
+2026-02-23 12:00:02,782 [INFO] blog_scheduler: Topic: The power of community support in mental wellness
+2026-02-23 12:00:02,784 [INFO] blog_scheduler: Topic: The science of genuine human connection
+2026-02-23 12:00:46,060 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:00:46,092 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:00:46,133 [ERROR] blog_scheduler: Content generation failed: Expecting ',' delimiter: line 5 column 1685 (char 1930)
+2026-02-23 12:00:46,133 [INFO] apscheduler.executors.default: Job "Daily blog draft creation (trigger: cron[hour='12', minute='0'], next run at: 2026-02-24 12:00:00 EST)" executed successfully
+2026-02-23 12:00:46,135 [INFO] blog_scheduler: Claude generated title: Why Your Mental Health Struggles Feel Heavier When You're Alone
+2026-02-23 12:00:54,714 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:00:54,720 [INFO] workflows.blog_evaluator: Evaluator: title=5.0 spec=6.0 cred=3.0 engage=7.0 audience=6.0 image=0.0 platitudes=2 claims=4 pass=False
+2026-02-23 12:00:54,721 [WARNING] blog_scheduler: Quality gate REJECTED: title=5.0 spec=6.0 cred=3.0 engage=7.0 audience=6.0 platitudes=2 claims=4 — REJECT: Credibility failure. The 29% mortality statistic is cited without mechanism, source, or explanation of HOW isolation causes mortality. 'This isn't weakness. It's biology' promises biological explanation but delivers none. The draft conflates social isolation with lack of community support without defining either or explaining the biological mechanisms. Article cuts off before delivering on 'What Community Support Actually Does,' suggesting incomplete thinking. Contains unsubstantiated leap from 'exhausting solo model' to mortality statistics without connecting tissue.
+2026-02-23 12:00:57,926 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:00:57,929 [INFO] workflows.visual_intent: Visual intent: tone=struggle keywords=['person sitting alone window', 'person isolated crowd', 'person tired overwhelmed bed', 'lone person empty room', 'person contemplative darkness']
+2026-02-23 12:00:57,930 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='The power of community support in mental wellness' tone=struggle
+2026-02-23 12:00:57,934 [INFO] blog_scheduler: === Daily blog job complete (rejected) ===
+2026-02-23 12:00:57,935 [INFO] apscheduler.executors.default: Job "Daily blog draft creation (trigger: cron[hour='12', minute='0'], next run at: 2026-02-24 12:00:00 EST)" executed successfully
+2026-02-23 12:02:32,142 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 15:02:32 EST)" (scheduled at 2026-02-23 12:02:32.129449-05:00)
+2026-02-23 12:02:32,144 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 12:03:58,614 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 12:03:58,616 [INFO] learning.prompt_manager: PromptManager: not enough reward history yet (4 < 7)
+2026-02-23 12:03:58,616 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 12:03:58,616 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 15:02:32 EST)" executed successfully
+2026-02-23 12:11:24,693 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:11:24,725 [ERROR] blog_now: Content generation failed: Expecting ',' delimiter: line 5 column 2623 (char 2901)
+2026-02-23 12:12:10,092 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:12:19,811 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:12:19,835 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=6.0 cred=3.0 engage=7.0 audience=8.0 image=0.0 platitudes=2 claims=3 pass=False
+2026-02-23 12:12:22,364 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:12:22,367 [INFO] workflows.visual_intent: Visual intent: tone=struggle keywords=['person sitting alone contemplative', 'person looking out window loneliness', 'people distant separated isolation', 'lone person urban solitude', 'person quiet longing connection']
+2026-02-23 12:12:22,367 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='How to build meaningful friendships as an adult' tone=struggle
+2026-02-23 12:13:04,811 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:13:15,201 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:13:15,203 [INFO] workflows.blog_evaluator: Evaluator: title=4.0 spec=3.0 cred=2.0 engage=5.0 audience=6.0 image=0.0 platitudes=5 claims=4 pass=False
+2026-02-23 12:13:17,525 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:13:17,527 [INFO] workflows.visual_intent: Visual intent: tone=belonging keywords=['people quiet connection coffee', 'person gentle gesture helping', 'small group people authentic conversation', 'two people comfortable silence together', 'person receiving support comfort']
+2026-02-23 12:13:17,528 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Small acts of kindness that strengthen communities' tone=belonging
+2026-02-23 12:13:53,573 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:14:02,597 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:14:02,600 [INFO] workflows.blog_evaluator: Evaluator: title=5.0 spec=4.0 cred=3.0 engage=6.0 audience=5.0 image=0.0 platitudes=4 claims=4 pass=False
+2026-02-23 12:14:05,636 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:14:05,638 [INFO] workflows.visual_intent: Visual intent: tone=belonging keywords=['person sitting alone contemplative window', 'people quiet authentic connection', 'person longing looking distance', 'small group people genuine conversation', 'person finding comfort shared activity']
+2026-02-23 12:14:05,638 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Overcoming loneliness through shared interests' tone=belonging
+2026-02-23 12:15:24,104 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:15:31,790 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:15:31,793 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=5.0 cred=4.0 engage=6.0 audience=5.0 image=0.0 platitudes=2 claims=5 pass=False
+2026-02-23 12:15:34,265 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 12:15:34,268 [INFO] workflows.visual_intent: Visual intent: tone=warning keywords=['person sitting alone isolated', 'lone person window contemplative', 'person tired stress fatigue', 'solitary person empty space', 'person withdrawn disconnected']
+2026-02-23 12:15:34,268 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='How social connections improve physical health' tone=warning
+2026-02-23 16:14:30,139 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:14:40,201 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:14:40,212 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=8.0 cred=4.0 engage=7.0 audience=8.0 image=0.0 platitudes=1 claims=3 pass=False
+2026-02-23 16:14:43,119 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:14:43,121 [INFO] workflows.visual_intent: Visual intent: tone=reflection keywords=['person sitting alone contemplative', 'lone person window introspective', 'person isolated quiet thought', 'solitary person urban loneliness', 'person anonymous crowd alone']
+2026-02-23 16:14:43,121 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Why belonging matters for long-term happiness' tone=reflection
+2026-02-23 16:16:02,472 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:16:10,331 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:16:10,333 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=8.0 cred=4.0 engage=7.0 audience=8.0 image=0.0 platitudes=1 claims=3 pass=False
+2026-02-23 16:16:12,678 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:16:12,682 [INFO] workflows.visual_intent: Visual intent: tone=reflection keywords=['person sitting alone contemplative', 'lone person window introspective', 'person isolated quiet thought', 'solitary person urban loneliness', 'person anonymous crowd detached']
+2026-02-23 16:16:12,682 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Why belonging matters for long-term happiness' tone=reflection
+2026-02-23 16:18:00,098 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:18:08,053 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:18:08,064 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=8.0 cred=4.0 engage=8.0 audience=8.0 image=0.0 platitudes=0 claims=4 pass=False
+2026-02-23 16:18:10,733 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:18:10,735 [INFO] workflows.visual_intent: Visual intent: tone=reflection keywords=['person alone kitchen evening', 'lone person window contemplative', 'person sitting solitude introspective', 'person quiet isolation thoughtful', 'person empty room reflection']
+2026-02-23 16:18:10,736 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Why belonging matters for long-term happiness' tone=reflection
+2026-02-23 16:19:12,021 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:19:20,708 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:19:20,716 [INFO] workflows.blog_evaluator: Evaluator: title=7.0 spec=8.0 cred=2.0 engage=7.0 audience=8.0 image=0.0 platitudes=2 claims=5 pass=False
+2026-02-23 16:19:23,309 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:19:23,312 [INFO] workflows.visual_intent: Visual intent: tone=struggle keywords=['person sitting alone window', 'person isolated empty room', 'person contemplative loneliness', 'person overwhelmed quiet space', 'lone person introspective solitude']
+2026-02-23 16:19:23,312 [INFO] learning.q_learner: Bandit: applied rejection penalty for topic='Building a support network from scratch' tone=struggle
+2026-02-23 16:20:59,671 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:21:08,446 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:21:08,452 [WARNING] workflows.blog_evaluator: Evaluator failed: Expecting ',' delimiter: line 11 column 24 (char 773) — defaulting to pass
+2026-02-23 16:21:08,453 [INFO] blog_now: Starting blog workflow: title='The Woman Who Accidentally Built a Community in a Parking Lot'
+2026-02-23 16:21:08,453 [INFO] workflows.blog_workflow: Blog workflow started: run_id=8665f63c slug=the-woman-who-accidentally-built-a-community-in-a-parking-lot keywords=['making friends as adults', 'creating meaningful connections', 'building support network', 'sense of belonging', 'genuine human connection']
+2026-02-23 16:21:13,317 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 16:21:13,330 [INFO] workflows.visual_intent: Visual intent: tone=belonging keywords=['people casual outdoor gathering', 'small group people laughing conversation', 'people sitting circle community', 'diverse people informal meeting', 'neighbors people talking parking lot']
+2026-02-23 16:21:13,330 [INFO] workflows.blog_workflow: Visual intent: tone=belonging search_phrases=['people casual outdoor gathering', 'small group people laughing conversation', 'people sitting circle community']
+2026-02-23 16:21:15,881 [INFO] workflows.blog_workflow: Unsplash: found image (id=KOnqsvsxxgg), 1613916 bytes base64
+2026-02-23 16:21:15,881 [INFO] workflows.blog_workflow: Uploading image to WordPress: the-woman-who-accidentally-built-a-community-in-a-parking-lot-cover.jpg (image/jpeg)
+2026-02-23 16:21:33,360 [INFO] workflows.blog_workflow: Media uploaded: id=12897 url=https://friendlyconnections.services/wp-content/uploads/2026/02/the-woman-who-accidentally-built-a-community-in-a-parking-lot-cover-scaled.jpg
+2026-02-23 16:21:33,361 [INFO] workflows.blog_workflow: Creating WordPress draft: title='The Woman Who Accidentally Built a Community in a ' slug=the-woman-who-accidentally-built-a-community-in-a-parking-lot
+2026-02-23 16:22:03,844 [INFO] workflows.blog_workflow: Draft created: post_id=12898 link=https://friendlyconnections.services/?p=12898
+2026-02-23 16:22:03,845 [INFO] workflows.blog_workflow: Setting featured media: post_id=12898 media_id=12897
+2026-02-23 16:22:08,120 [INFO] workflows.blog_workflow: Featured media set successfully
+2026-02-23 16:22:08,121 [INFO] workflows.blog_workflow: Blog workflow complete: success=True post_id=12898 slug=the-woman-who-accidentally-built-a-community-in-a-parking-lot featured_media_id=12897
+2026-02-23 16:22:10,088 [INFO] blog_now: Workflow success: post_id=12898 slug=the-woman-who-accidentally-built-a-community-in-a-parking-lot featured_media_id=12897
+2026-02-23 16:31:57,149 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 17:08:24 EST)" was missed by 2:23:32.730055
+2026-02-23 17:08:24,540 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 20:08:24 EST)" (scheduled at 2026-02-23 17:08:24.417512-05:00)
+2026-02-23 17:08:24,559 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 17:09:55,724 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 17:10:00,195 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 17:10:00,226 [WARNING] learning.prompt_manager: PromptManager: candidate missing required JSON keys — discarding
+2026-02-23 17:10:00,227 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 17:10:00,228 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 20:08:24 EST)" executed successfully
+2026-02-23 17:26:04,944 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 18:02:32 EST)" was missed by 2:23:32.807524
+2026-02-23 18:02:32,214 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 21:02:32 EST)" (scheduled at 2026-02-23 18:02:32.129449-05:00)
+2026-02-23 18:02:32,228 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 18:03:58,502 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 18:04:03,452 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 18:04:03,486 [WARNING] learning.prompt_manager: PromptManager: candidate missing required JSON keys — discarding
+2026-02-23 18:04:03,488 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 18:04:03,492 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 21:02:32 EST)" executed successfully
+2026-02-23 20:08:24,658 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 23:08:24 EST)" (scheduled at 2026-02-23 20:08:24.417512-05:00)
+2026-02-23 20:08:24,676 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 20:09:53,167 [INFO] learning.q_learner: Bandit: Recorded 72h snapshot for post 12866 — views=0 comments=0
+2026-02-23 20:09:53,171 [INFO] learning.q_learner: Bandit: Final reward 0.5000 for post 12866 (topic='Why belonging matters for long-term happiness' tone=? title_style=?)
+2026-02-23 20:09:53,176 [INFO] blog_scheduler: Bandit: recorded 1 horizon snapshot(s)
+2026-02-23 20:09:57,559 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 20:09:57,579 [WARNING] learning.prompt_manager: PromptManager: candidate missing required JSON keys — discarding
+2026-02-23 20:09:57,580 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 20:09:57,580 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-23 23:08:24 EST)" executed successfully
+2026-02-23 21:02:32,400 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 00:02:32 EST)" (scheduled at 2026-02-23 21:02:32.129449-05:00)
+2026-02-23 21:02:32,416 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-23 21:03:58,566 [INFO] blog_scheduler: Bandit: recorded 0 horizon snapshot(s)
+2026-02-23 21:04:03,411 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-23 21:04:03,439 [WARNING] learning.prompt_manager: PromptManager: candidate missing required JSON keys — discarding
+2026-02-23 21:04:03,440 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-23 21:04:03,441 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 00:02:32 EST)" executed successfully
+2026-02-24 01:08:38,533 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 02:08:24 EST)" was missed by 2:00:14.113646
+2026-02-24 08:31:41,703 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 09:02:32 EST)" was missed by 2:29:09.571746
+2026-02-24 08:37:20,025 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 11:08:24 EST)" was missed by 0:28:55.604717
+2026-02-24 09:02:32,185 [INFO] apscheduler.executors.default: Running job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 12:02:32 EST)" (scheduled at 2026-02-24 09:02:32.129449-05:00)
+2026-02-24 09:02:32,198 [INFO] blog_scheduler: === Analytics poll starting ===
+2026-02-24 09:03:21,893 [INFO] learning.q_learner: Bandit: Recorded 72h snapshot for post 12867 — views=0 comments=0
+2026-02-24 09:03:21,902 [INFO] learning.q_learner: Bandit: Final reward 0.5000 for post 12867 (topic='The science of building lasting friendships' tone=? title_style=?)
+2026-02-24 09:03:24,829 [INFO] learning.q_learner: Bandit: Recorded 72h snapshot for post 12869 — views=0 comments=0
+2026-02-24 09:03:24,830 [INFO] learning.q_learner: Bandit: Final reward 0.5000 for post 12869 (topic='How to overcome social anxiety in community settings' tone=? title_style=?)
+2026-02-24 09:03:27,563 [INFO] learning.q_learner: Bandit: Recorded 72h snapshot for post 12873 — views=0 comments=0
+2026-02-24 09:03:27,564 [INFO] learning.q_learner: Bandit: Final reward 0.5000 for post 12873 (topic='Small acts of kindness that strengthen communities' tone=? title_style=?)
+2026-02-24 09:03:30,132 [INFO] learning.q_learner: Bandit: Recorded 6h snapshot for post 12898 — views=0 comments=0
+2026-02-24 09:03:30,139 [INFO] blog_scheduler: Bandit: recorded 4 horizon snapshot(s)
+2026-02-24 09:03:37,202 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-24 09:03:37,218 [WARNING] learning.prompt_manager: PromptManager: candidate missing required JSON keys — discarding
+2026-02-24 09:03:37,218 [INFO] blog_scheduler: === Analytics poll complete ===
+2026-02-24 09:03:37,219 [INFO] apscheduler.executors.default: Job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 12:02:32 EST)" executed successfully
+2026-02-24 18:39:03,947 [WARNING] apscheduler.executors.default: Run time of job "Multi-horizon analytics poll (every 3h) (trigger: interval[3:00:00], next run at: 2026-02-24 20:08:24 EST)" was missed by 1:30:39.527861
+2026-02-24 18:39:03,978 [WARNING] apscheduler.executors.default: Run time of job "Daily blog draft creation (trigger: cron[hour='12', minute='0'], next run at: 2026-02-25 12:00:00 EST)" was missed by 6:39:03.978247

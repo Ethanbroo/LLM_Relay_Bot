@@ -1,0 +1,22 @@
+2026-02-27 11:55:30,611 [INFO] blog-scheduler-v2: Starting Blog Bot scheduler — daily at 12:00
+2026-02-27 11:55:30,612 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-27 11:55:30,613 [INFO] apscheduler.scheduler: Added job "run_daily_blog_job" to job store "default"
+2026-02-27 11:55:30,613 [INFO] apscheduler.scheduler: Scheduler started
+2026-02-27 11:55:30,613 [INFO] blog-scheduler-v2: Scheduler started. Next blog at: 2026-02-27 12:00:00-05:00
+
+============================================================
+  Blog Bot Scheduler v2
+  Daily blog at 12:00 PM
+  Next run: 2026-02-27 12:00:00-05:00
+============================================================
+
+Commands:
+  now              — Generate a blog immediately
+  now <topic>      — Generate with custom topic
+  status           — Show scheduler status
+  topics           — List available topics
+  quit / exit      — Stop scheduler and exit
+
+> 
+Shutting down scheduler...
+2026-02-27 11:55:30,613 [INFO] apscheduler.scheduler: Scheduler has been shut down

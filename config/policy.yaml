@@ -20,6 +20,52 @@ roles:
         resource: "*"
         rule_id: "executor.system.health_ping.any"
 
+  video_creator:
+    description: "Video creation role — can generate, render, and export videos"
+    allow:
+      - action: "video.create"
+        resource: "*"
+        rule_id: "video_creator.video.create"
+
+      - action: "video.render"
+        resource: "*"
+        rule_id: "video_creator.video.render"
+
+      - action: "video.storyboard"
+        resource: "*"
+        rule_id: "video_creator.video.storyboard"
+
+      - action: "video.cloud_render"
+        resource: "*"
+        rule_id: "video_creator.video.cloud_render"
+
+      - action: "video.cloud_upload"
+        resource: "*"
+        rule_id: "video_creator.video.cloud_upload"
+
+  blog_workflow:
+    description: "Blog automation role — can post drafts and search images"
+    allow:
+      - action: "wp.post.create_draft"
+        resource: "*"
+        rule_id: "blog_workflow.wp.post.create_draft"
+
+      - action: "wp.media.upload"
+        resource: "*"
+        rule_id: "blog_workflow.wp.media.upload"
+
+      - action: "wp.post.set_featured_media"
+        resource: "*"
+        rule_id: "blog_workflow.wp.post.set_featured_media"
+
+      - action: "unsplash.search_photos"
+        resource: "*"
+        rule_id: "blog_workflow.unsplash.search_photos"
+
+      - action: "email.notify"
+        resource: "*"
+        rule_id: "blog_workflow.email.notify"
+
   # Future roles can be added here (e.g., writer, admin)
 
 # Principal-to-role mappings
@@ -29,7 +75,7 @@ principals:
     description: "Validation pipeline component"
 
   supervisor:
-    roles: ["executor"]
+    roles: ["executor", "video_creator"]
     description: "Supervisor runtime"
 
   # Future principals (LLMs, connectors) added in later phases
@@ -91,6 +137,10 @@ approval_required:
 
   - action: "wordpress.update_page"
     reason: "WordPress page updates require approval"
+
+  # Video pipeline actions requiring approval
+  - action: "video.publish"
+    reason: "Video publishing requires approval"
 
   # Add more actions requiring approval as needed
 
@@ -162,6 +212,24 @@ connector_mappings:
 
   - action: "wordpress.update_page"
     connector_type: "wordpress"
+    method: "execute"
+
+  # WordPress blog workflow actions (draft only, no publish)
+  - action: "wp.post.create_draft"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wp.media.upload"
+    connector_type: "wordpress"
+    method: "execute"
+
+  - action: "wp.post.set_featured_media"
+    connector_type: "wordpress"
+    method: "execute"
+
+  # Email notification connector
+  - action: "email.notify"
+    connector_type: "email"
     method: "execute"
 
   # Unsplash connector actions (read-only, no approval needed)

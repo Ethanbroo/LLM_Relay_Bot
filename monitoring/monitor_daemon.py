@@ -221,10 +221,16 @@ class MonitorDaemon:
             # Create summary
             summary = f"Rule {rule.rule_id} triggered: {rule.metric_id.value} {rule.operator.value} {rule.threshold}"
 
-            # Get audit event seq range
-            # TODO: Get actual range from LogDaemon
-            audit_event_seq_min = 0
-            audit_event_seq_max = 0
+            # Get audit event seq range from LogDaemon if available
+            log_daemon = getattr(getattr(self.collector, "phase3_adapter", None), "log_daemon", None)
+            if log_daemon is not None:
+                last_seq = getattr(log_daemon, "last_event_seq", 0) or 0
+                window_events = self.incident_include_window_sec  # approx 1 event/sec
+                audit_event_seq_min = max(0, last_seq - window_events)
+                audit_event_seq_max = last_seq
+            else:
+                audit_event_seq_min = 0
+                audit_event_seq_max = 0
 
             # Write incident
             incident = self.incident_writer.write_incident(

@@ -130,6 +130,61 @@ VALID_EVENT_TYPES = {
     "LLM_RESPONSE_RECEIVED",
     "LLM_OUTPUT_REJECTED",
     "LLM_OUTPUT_ACCEPTED",
+    # Video pipeline events
+    "VIDEO_PIPELINE_STARTED",
+    "VIDEO_PIPELINE_COMPLETED",
+    "VIDEO_PIPELINE_FAILED",
+    "VIDEO_STORYBOARD_REQUESTED",
+    "VIDEO_STORYBOARD_CREATED",
+    "VIDEO_TIMELINE_CREATED",
+    "VIDEO_CLIP_GENERATION_STARTED",
+    "VIDEO_CLIP_GENERATION_COMPLETED",
+    "VIDEO_CLIP_GENERATION_FAILED",
+    "VIDEO_CLIP_QUALITY_FAILED",
+    "VIDEO_AUDIO_MIXED",
+    "VIDEO_ENCODE_STARTED",
+    "VIDEO_ENCODE_COMPLETED",
+    "VIDEO_ENCODE_FAILED",
+    # Cloud rendering events
+    "CLOUD_RENDER_JOB_STARTED",
+    "CLOUD_RENDER_JOB_CHUNKED",
+    "CLOUD_RENDER_CHUNK_STARTED",
+    "CLOUD_RENDER_CHUNK_COMPLETED",
+    "CLOUD_RENDER_CHUNK_FAILED",
+    "CLOUD_RENDER_CHUNK_RETRYING",
+    "CLOUD_RENDER_ASSETS_UPLOADED",
+    "CLOUD_RENDER_CONCAT_STARTED",
+    "CLOUD_RENDER_CONCAT_COMPLETED",
+    "CLOUD_RENDER_JOB_COMPLETED",
+    "CLOUD_RENDER_JOB_FAILED",
+    "CLOUD_RENDER_CLEANUP",
+    # Visual effects events
+    "VIDEO_EFFECTS_APPLIED",
+    "VIDEO_EFFECT_FAILED",
+    # Template events
+    "VIDEO_TEMPLATE_SELECTED",
+    "VIDEO_TEMPLATE_VALIDATED",
+    "VIDEO_TEMPLATE_TIMELINE_BUILT",
+    # Preview events
+    "VIDEO_PREVIEW_STARTED",
+    "VIDEO_PREVIEW_STOPPED",
+    "VIDEO_PREVIEW_CLIENT_CONNECTED",
+    "VIDEO_PREVIEW_CLIENT_DISCONNECTED",
+    # Plugin events
+    "PLUGIN_LOADED",
+    "PLUGIN_LOAD_REJECTED",
+    "PLUGIN_LOAD_ERROR",
+    "PLUGIN_SECURITY_VIOLATION",
+    "PLUGIN_SCAN_COMPLETED",
+    # Determinism verification events
+    "RENDER_DETERMINISM_VERIFIED",
+    "RENDER_DETERMINISM_FAILED",
+    # Multi-platform output events
+    "MULTI_PLATFORM_RENDER_STARTED",
+    "MULTI_PLATFORM_RENDERED",
+    "MULTI_PLATFORM_FAILED",
+    "MULTI_PLATFORM_SKIP",
+    "MULTI_PLATFORM_RENDER_COMPLETED",
 }
 
 # Critical event types that require immediate fsync
@@ -143,6 +198,10 @@ CRITICAL_EVENT_TYPES = {
     "CONNECTOR_EXECUTE_FAILED",  # Phase 5: Connector execution failures are critical
     "CONNECTOR_ROLLBACK_FAILED",  # Phase 5: Rollback failures are critical
     "LLM_OUTPUT_REJECTED",  # Phase 8: LLM output rejections are critical
+    "VIDEO_ENCODE_FAILED",  # Video: Encoding failures are critical (lost compute)
+    "VIDEO_PIPELINE_FAILED",  # Video: Pipeline failures are critical
+    "CLOUD_RENDER_JOB_FAILED",  # Cloud: Distributed render job failure (lost cloud compute)
+    "RENDER_DETERMINISM_FAILED",  # Determinism: Non-deterministic rendering is an integrity violation
 }
 
 # Genesis value for prev_event_hash (first event)
@@ -209,16 +268,64 @@ class LogDaemon:
         # Create log directory if needed
         self.log_directory.mkdir(parents=True, exist_ok=True)
 
-        # Initialize chain state
-        self.event_seq = 0
-        self.prev_event_hash = GENESIS_HASH  # Genesis value for first event
+        # Initialize per-run chain state
+        self.event_seq = 0  # Per-run counter (resets to 0 each run)
         self.events_since_fsync = 0
+
+        # Initialize GLOBAL chain state by reading last event from existing file
+        self.prev_event_hash = self._load_last_event_hash()
 
         # Thread safety
         self._lock = threading.Lock()
 
         # Open segment file in append mode
         self._segment_file = open(self.segment_path, 'a', encoding='utf-8')
+
+    def _load_last_event_hash(self) -> str:
+        """
+        Load the last event hash from existing audit log file.
+
+        This ensures the GLOBAL hash chain continues across runs.
+        Each run may start with event_seq=1, but prev_event_hash
+        must equal the last event's hash from the previous run.
+
+        Returns:
+            Last event's event_hash if file exists and has content,
+            otherwise GENESIS_HASH for brand-new chain.
+        """
+        if not self.segment_path.exists():
+            return GENESIS_HASH
+
+        try:
+            # Read file to find last non-empty line
+            with open(self.segment_path, 'r', encoding='utf-8') as f:
+                last_line = None
+                for line in f:
+                    line = line.strip()
+                    if line:  # Skip empty lines
+                        last_line = line
+
+                if last_line is None:
+                    # File exists but is empty
+                    return GENESIS_HASH
+
+                # Parse last event and extract its event_hash
+                try:
+                    last_event = json.loads(last_line)
+                    last_hash = last_event.get("event_hash")
+                    if last_hash:
+                        return last_hash
+                    else:
+                        # Malformed event, fall back to GENESIS
+                        return GENESIS_HASH
+                except json.JSONDecodeError:
+                    # Corrupted last line, fall back to GENESIS
+                    # (recovery.py should handle this scenario)
+                    return GENESIS_HASH
+
+        except Exception:
+            # File access error, fall back to GENESIS
+            return GENESIS_HASH
 
     def ingest_event(
         self,

@@ -173,7 +173,8 @@ class TestPhase8Integration:
         claude_config = supervisor_instance.config.get("claude", {})
         if claude_config.get("enabled", False):
             assert supervisor_instance.claude_client is not None
-            assert supervisor_instance.claude_client.stub_mode is True
+            expected_stub_mode = claude_config.get("stub_mode", True)
+            assert supervisor_instance.claude_client.stub_mode == expected_stub_mode
         else:
             assert supervisor_instance.claude_client is None
 

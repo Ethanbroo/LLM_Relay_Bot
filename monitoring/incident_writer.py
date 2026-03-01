@@ -5,10 +5,30 @@ Phase 7 Invariant: Incidents are deterministic, bounded, and redacted.
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime, timezone
 from dataclasses import dataclass
+
+# Patterns that indicate secrets — fail-closed if found in incident data
+_SECRET_PATTERNS = [
+    re.compile(r'(?i)(api[_-]?key|apikey)\s*[:=]\s*\S+'),
+    re.compile(r'(?i)(secret|password|passwd|token|credential)\s*[:=]\s*\S+'),
+    re.compile(r'(?i)bearer\s+[A-Za-z0-9\-._~+/]+=*'),
+    re.compile(r'sk-[A-Za-z0-9]{20,}'),           # OpenAI style
+    re.compile(r'AIza[A-Za-z0-9\-_]{30,}'),        # Google API key style
+    re.compile(r'eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+'),  # JWT
+]
+
+
+def _scan_for_secrets(text: str) -> Optional[str]:
+    """Return the name of the first secret pattern found, or None."""
+    for pattern in _SECRET_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            return pattern.pattern
+    return None
 
 
 @dataclass
@@ -198,8 +218,15 @@ class IncidentWriter:
                 line = json.dumps(metric_record, sort_keys=True) + '\n'
                 f.write(line)
 
-        # TODO: Apply redaction enforcement (Phase 3 integration)
-        # This would scan for secrets patterns and fail if found
+        # Redaction enforcement: scan incident JSON for secret patterns
+        found_pattern = _scan_for_secrets(incident_json)
+        if found_pattern:
+            # Remove the partially written files before raising
+            incident_path.unlink(missing_ok=True)
+            metrics_window_path.unlink(missing_ok=True)
+            raise ValueError(
+                f"Incident redaction blocked: secret pattern detected ({found_pattern})"
+            )
 
         return incident
 

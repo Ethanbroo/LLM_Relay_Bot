@@ -1,12 +1,24 @@
 """Model registry and base classes for Phase 6.
 
 Phase 6 Invariant: Closed world - only explicitly allowed models.
+
+Layer 0 flags:
+- REAL_LLM_MODE: True → real API calls; False (default) → deterministic stubs
+- CHAOS_MODE: True → inject random delays/errors for resilience testing.
+  Only active when REAL_LLM_MODE is also True to prevent accidental chaos
+  in stub-only CI runs.
 """
 
+import os
 import hashlib
 from typing import Optional, Dict, List
 from abc import ABC, abstractmethod
 from orchestration.errors import ModelNotAllowedError
+
+# Layer 0: execution mode flags — read once at import time, never mutated at runtime
+REAL_LLM_MODE: bool = os.getenv("REAL_LLM_MODE", "false").lower() == "true"
+# CHAOS_MODE requires REAL_LLM_MODE so it cannot fire in normal test runs
+CHAOS_MODE: bool = REAL_LLM_MODE and os.getenv("CHAOS_MODE", "false").lower() == "true"
 
 
 # Closed set of allowed models (Phase 6 Invariant #1)
@@ -134,20 +146,6 @@ class ChatGPTModel(BaseLLMModel):
     def generate_proposal(self, prompt: str, task_hash: str) -> str:
         """Generate proposal using ChatGPT.
 
-        STUB IMPLEMENTATION - Remove when adding real API.
-
-        TODO: Replace with:
-        ```python
-        import openai
-        openai.api_key = self.api_key
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0  # Deterministic
-        )
-        return response.choices[0].message.content
-        ```
-
         Args:
             prompt: Full prompt
             task_hash: Task hash
@@ -155,8 +153,17 @@ class ChatGPTModel(BaseLLMModel):
         Returns:
             Response text in required format
         """
-        # STUB: Return deterministic response
-        return self._stub_response(prompt, task_hash)
+        if not REAL_LLM_MODE or not self.api_key:
+            return self._stub_response(prompt, task_hash)
+
+        import openai
+        client = openai.OpenAI(api_key=self.api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+        )
+        return response.choices[0].message.content
 
 
 class ClaudeModel(BaseLLMModel):
@@ -176,20 +183,6 @@ class ClaudeModel(BaseLLMModel):
     def generate_proposal(self, prompt: str, task_hash: str) -> str:
         """Generate proposal using Claude.
 
-        STUB IMPLEMENTATION - Remove when adding real API.
-
-        TODO: Replace with:
-        ```python
-        import anthropic
-        client = anthropic.Client(api_key=self.api_key)
-        response = client.messages.create(
-            model="claude-3-opus-20240229",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0  # Deterministic
-        )
-        return response.content[0].text
-        ```
-
         Args:
             prompt: Full prompt
             task_hash: Task hash
@@ -197,8 +190,17 @@ class ClaudeModel(BaseLLMModel):
         Returns:
             Response text in required format
         """
-        # STUB: Return deterministic response
-        return self._stub_response(prompt, task_hash)
+        if not REAL_LLM_MODE or not self.api_key:
+            return self._stub_response(prompt, task_hash)
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=self.api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text
 
 
 class GeminiModel(BaseLLMModel):
@@ -218,22 +220,6 @@ class GeminiModel(BaseLLMModel):
     def generate_proposal(self, prompt: str, task_hash: str) -> str:
         """Generate proposal using Gemini.
 
-        STUB IMPLEMENTATION - Remove when adding real API.
-
-        TODO: Replace with:
-        ```python
-        import google.generativeai as genai
-        genai.configure(api_key=self.api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.0  # Deterministic
-            )
-        )
-        return response.text
-        ```
-
         Args:
             prompt: Full prompt
             task_hash: Task hash
@@ -241,8 +227,17 @@ class GeminiModel(BaseLLMModel):
         Returns:
             Response text in required format
         """
-        # STUB: Return deterministic response
-        return self._stub_response(prompt, task_hash)
+        if not REAL_LLM_MODE or not self.api_key:
+            return self._stub_response(prompt, task_hash)
+
+        import google.generativeai as genai
+        genai.configure(api_key=self.api_key)
+        model = genai.GenerativeModel("gemini-1.5-pro")
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(temperature=0.0),
+        )
+        return response.text
 
 
 class DeepSeekModel(BaseLLMModel):
@@ -262,9 +257,7 @@ class DeepSeekModel(BaseLLMModel):
     def generate_proposal(self, prompt: str, task_hash: str) -> str:
         """Generate proposal using DeepSeek.
 
-        STUB IMPLEMENTATION - Remove when adding real API.
-
-        TODO: Replace with real DeepSeek API integration when available.
+        DeepSeek uses an OpenAI-compatible API endpoint.
 
         Args:
             prompt: Full prompt
@@ -273,8 +266,20 @@ class DeepSeekModel(BaseLLMModel):
         Returns:
             Response text in required format
         """
-        # STUB: Return deterministic response
-        return self._stub_response(prompt, task_hash)
+        if not REAL_LLM_MODE or not self.api_key:
+            return self._stub_response(prompt, task_hash)
+
+        import openai
+        client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.deepseek.com/v1",
+        )
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+        )
+        return response.choices[0].message.content
 
 
 class ModelRegistry:

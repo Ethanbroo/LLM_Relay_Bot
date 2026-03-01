@@ -1,0 +1,41 @@
+{
+  "character_id": "test_ava",
+  "display_name": "Ava",
+  "identity_anchor": {
+    "face_description": "oval face, high cheekbones",
+    "body_description": "athletic build, 5'7",
+    "hair_description": "shoulder-length wavy brunette",
+    "skin_description": "warm olive complexion",
+    "distinctive_marks": [
+      "small mole above lip"
+    ]
+  },
+  "style_dna": {
+    "photography_style": "editorial lifestyle",
+    "color_palette": "warm earth tones, golden highlights",
+    "composition_tendency": "rule of thirds, negative space",
+    "lighting_preference": "golden hour, soft natural light",
+    "wardrobe_style": "minimalist athleisure, neutral colors",
+    "environment_range": [
+      "urban rooftop",
+      "coffee shop",
+      "beach boardwalk",
+      "city streets"
+    ]
+  },
+  "lora_model_path": null,
+  "lora_model_hash": null,
+  "lora_trigger_word": "",
+  "lora_base_model": "black-forest-labs/FLUX.1-dev",
+  "lora_provider": "fal.ai",
+  "lora_version_string": null,
+  "heygen_avatar_id": null,
+  "heygen_training_video_path": null,
+  "voice_id": null,
+  "face_embedding_path": null,
+  "embedding_model": "buffalo_l",
+  "created_at": "",
+  "version": 1,
+  "disclosure_label_required": true,
+  "character_hash": "30dd954d00a43dab7c23c5562603827c44244c39abaa8d74091bad1eec66c43e"
+}

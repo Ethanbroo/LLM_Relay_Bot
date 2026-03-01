@@ -245,20 +245,18 @@ class ClaudeClient:
                 # Use stub response
                 response_dict = self._stub_response(request, is_retry)
             else:
-                # TODO: Real Anthropic API call
-                # import anthropic
-                # client = anthropic.Anthropic(api_key=self.api_key)
-                # message = client.messages.create(
-                #     model="claude-3-5-sonnet-20241022",
-                #     max_tokens=self.MAX_TOKENS,
-                #     temperature=self.TEMPERATURE,
-                #     top_p=self.TOP_P,
-                #     system=self.system_prompt,
-                #     messages=[{"role": "user", "content": prompt}]
-                # )
-                # response_text = message.content[0].text
-                # response_dict = json.loads(response_text)
-                raise ClaudeClientError("Real API mode not implemented - use stub_mode=True")
+                import anthropic as _anthropic
+                _client = _anthropic.Anthropic(api_key=self.api_key)
+                _message = _client.messages.create(
+                    model="claude-sonnet-4-5-20250929",
+                    max_tokens=self.MAX_TOKENS,
+                    temperature=self.TEMPERATURE,
+                    top_p=self.TOP_P,
+                    system=self.system_prompt,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = _message.content[0].text
+                response_dict = json.loads(response_text)
 
             # Parse response
             response = ClaudeResponse.from_dict(response_dict)

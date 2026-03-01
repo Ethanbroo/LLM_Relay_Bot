@@ -4,13 +4,14 @@ CLOSED WORLD: Only implements unsplash.search_photos with deterministic scoring.
 """
 
 import json
+import hashlib
 import requests
 import base64
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 from connectors.base import BaseConnector, ConnectorRequest, ConnectorContext
-from connectors.results import ConnectorResult, RollbackResult, ConnectorStatus, ExecutionArtifact
+from connectors.results import ConnectorResult, RollbackResult, ConnectorStatus, RollbackStatus, VerificationMethod, ExecutionArtifact, ArtifactType
 from connectors.errors import ConnectorError, SecretUnavailableError
 from connectors.blog_errors import BlogError, BlogErrorCode
 from connectors.blog_utils import tokenize
@@ -25,6 +26,20 @@ RETRYABLE_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Tim
 SEARCH_PER_PAGE = 30
 MIN_SCORE = 6
 MAX_DOWNLOAD_SIZE = 6 * 1024 * 1024  # 6MB
+
+# Negative context: images containing these often contradict articles about
+# loneliness, burnout, disconnection. We penalize them in scoring.
+# Aligned with workflows.visual_intent philosophy.
+NEGATIVE_CONTEXT_TERMS: frozenset[str] = frozenset({
+    "alcohol", "wine", "beer", "cocktail", "drink", "drinks",
+    "nightlife", "party", "celebration", "celebrating", "cheers",
+    "rooftop", "bar", "club", "luxury", "expensive", "yacht",
+    "corporate", "conference", "boardroom", "presentation",
+    "happy hour", "networking", "business lunch",
+    "staged", "posed", "professional photo",
+    "romantic", "couple", "dating", "crowd", "festival", "concert",
+})
+NEGATIVE_PENALTY = 15  # Strong penalty — prefer other images
 
 
 @dataclass
@@ -84,7 +99,10 @@ class UnsplashConnector(BaseConnector):
         try:
             # Resolve secrets
             access_key = ctx.secrets_provider.resolve_string("secret:unsplash_access_key")
-            application_id = ctx.secrets_provider.resolve_string("secret:unsplash_application_id")
+            try:
+                application_id = ctx.secrets_provider.resolve_string("secret:unsplash_application_id")
+            except Exception:
+                application_id = access_key
 
             self._config = UnsplashConfig(
                 access_key=access_key,
@@ -153,8 +171,9 @@ class UnsplashConnector(BaseConnector):
         """
         # Read-only operation, no rollback needed
         return RollbackResult(
-            success=True,
-            message="No rollback needed for read-only Unsplash search"
+            rollback_status=RollbackStatus.NOT_APPLICABLE,
+            verification_method=VerificationMethod.NOT_APPLICABLE,
+            notes="No rollback needed for read-only Unsplash search"
         )
 
     def disconnect(self) -> None:
@@ -185,11 +204,15 @@ class UnsplashConnector(BaseConnector):
         Returns:
             ConnectorResult with best image or ERR_IMAGE_LOW_CONFIDENCE
         """
-        # Extract fields
+        # Extract fields (visual_intent_keywords = narrative-aligned; keywords = topic-based)
         title_tokens = payload.get("title_tokens", [])
         keywords = payload.get("keywords", [])
+        visual_intent_keywords = payload.get("visual_intent_keywords", [])
 
-        if not title_tokens and not keywords:
+        # Prefer visual intent when provided (emotional coherence over topic match)
+        search_keywords = visual_intent_keywords if visual_intent_keywords else keywords
+
+        if not title_tokens and not search_keywords:
             error = BlogError(
                 code=BlogErrorCode.ERR_VALIDATION,
                 message="Missing required fields: title_tokens and/or keywords",
@@ -197,93 +220,106 @@ class UnsplashConnector(BaseConnector):
             )
             return self._error_result(error)
 
-        # Build search query from keywords
-        query = " ".join(keywords[:5]) if keywords else " ".join(title_tokens[:5])
+        # Build ordered list of search queries (visual intent first when available)
+        queries = self._build_fallback_queries(title_tokens, search_keywords, visual_intent_keywords)
 
-        # Search Unsplash API
         url = "https://api.unsplash.com/search/photos"
-        params = {
-            "query": query,
-            "per_page": SEARCH_PER_PAGE,
-            "orientation": "landscape"  # Prefer landscape for blog featured images
-        }
 
         try:
-            response = self._http_get(url, params)
-            if isinstance(response, BlogError):
-                return self._error_result(response)
+            best_image: Optional[ScoredImage] = None
+            best_query_used = ""
+            best_scored_list: List[ScoredImage] = []
 
-            results = response.get("results", [])
-            if len(results) == 0:
+            for attempt_query in queries:
+                params = {
+                    "query": attempt_query,
+                    "per_page": SEARCH_PER_PAGE,
+                    "orientation": "landscape",
+                }
+                response = self._http_get(url, params)
+                if isinstance(response, BlogError):
+                    continue
+
+                results = response.get("results", [])
+                if not results:
+                    continue
+
+                scored_images = []
+                for result in results:
+                    scored_image = self._score_image(
+                        result, title_tokens, search_keywords
+                    )
+                    if scored_image:
+                        scored_images.append(scored_image)
+
+                if not scored_images:
+                    continue
+
+                scored_images.sort(key=lambda x: (-x.score, -x.likes, x.image_id))
+                candidate = scored_images[0]
+
+                if candidate.score >= MIN_SCORE:
+                    best_image = candidate
+                    best_query_used = attempt_query
+                    best_scored_list = scored_images
+                    break
+
+                if best_image is None or candidate.score > best_image.score:
+                    best_image = candidate
+                    best_query_used = attempt_query
+                    best_scored_list = scored_images
+
+            if best_image is None:
                 error = BlogError(
                     code=BlogErrorCode.ERR_IMAGE_LOW_CONFIDENCE,
-                    message="No images found for query",
+                    message="No scoreable images found across all search queries",
                     retryable=False
                 )
                 return self._error_result(error)
 
-            # Score all images deterministically
-            scored_images = []
-            for result in results:
-                scored_image = self._score_image(result, title_tokens, keywords)
-                if scored_image:
-                    scored_images.append(scored_image)
+            # Download: try images in order until one fits < 6MB (Image must be under 6MB)
+            image_data_b64 = None
+            mime_type = None
+            file_size = 0
+            chosen_image = best_image
+            for img in best_scored_list:
+                download_result = self._download_image(img)
+                if isinstance(download_result, BlogError):
+                    continue  # try next (e.g. size exceeded)
+                image_data_b64, mime_type, file_size = download_result
+                chosen_image = img
+                break
 
-            if len(scored_images) == 0:
+            if image_data_b64 is None:
                 error = BlogError(
-                    code=BlogErrorCode.ERR_IMAGE_LOW_CONFIDENCE,
-                    message="No scoreable images in results",
+                    code=BlogErrorCode.ERR_VALIDATION,
+                    message="No image under 6MB found among candidates",
                     retryable=False
                 )
                 return self._error_result(error)
 
-            # Sort by score DESC, likes DESC, image_id ASC (deterministic tie-breaker)
-            scored_images.sort(key=lambda x: (-x.score, -x.likes, x.image_id))
-
-            # Take best image
-            best_image = scored_images[0]
-
-            # Check minimum score
-            if best_image.score < MIN_SCORE:
-                error = BlogError(
-                    code=BlogErrorCode.ERR_IMAGE_LOW_CONFIDENCE,
-                    message=f"Best image score {best_image.score} below minimum {MIN_SCORE}",
-                    retryable=False
-                )
-                return self._error_result(error)
-
-            # Download image
-            download_result = self._download_image(best_image)
-            if isinstance(download_result, BlogError):
-                return self._error_result(download_result)
-
-            image_data_b64, mime_type, file_size = download_result
-
+            artifact_data = json.dumps({
+                "image_id": chosen_image.image_id,
+                "score": chosen_image.score,
+                "likes": chosen_image.likes,
+                "url": chosen_image.url_regular,
+                "description": chosen_image.description,
+                "alt_description": chosen_image.alt_description,
+                "file_size": file_size,
+                "query_used": best_query_used,
+            })
+            artifact_hash = hashlib.sha256(artifact_data.encode()).hexdigest()
             return ConnectorResult(
                 status=ConnectorStatus.SUCCESS,
-                message=f"Found image {best_image.image_id} with score {best_image.score}",
-                artifacts=[
-                    ExecutionArtifact(
-                        artifact_type="unsplash_search_result",
-                        content_type="application/json",
-                        data=json.dumps({
-                            "image_id": best_image.image_id,
-                            "score": best_image.score,
-                            "likes": best_image.likes,
-                            "url": best_image.url_regular,
-                            "description": best_image.description,
-                            "alt_description": best_image.alt_description,
-                            "image_data": image_data_b64,
-                            "mime_type": mime_type,
-                            "file_size": file_size
-                        })
-                    )
-                ],
-                external_effects={
-                    "image_id": best_image.image_id,
-                    "score": best_image.score,
-                    "download_tracked": True
-                }
+                connector_type="unsplash",
+                idempotency_key=req.idempotency_key,
+                external_transaction_id=chosen_image.image_id,
+                artifacts={"unsplash_search_result": artifact_hash},
+                side_effect_summary=f"Found image {chosen_image.image_id} with score {chosen_image.score} (query: {best_query_used!r})",
+                output_metadata={
+                    "image_data_b64": image_data_b64,
+                    "mime_type": mime_type,
+                },
             )
 
         except Exception as e:
@@ -294,18 +330,54 @@ class UnsplashConnector(BaseConnector):
             )
             return self._error_result(error)
 
+    def _build_fallback_queries(
+        self,
+        title_tokens: List[str],
+        keywords: List[str],
+        visual_intent_keywords: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Build a list of search queries from specific to broad.
+
+        When visual_intent_keywords is provided (narrative-aligned), use those
+        first. Otherwise use topic keywords. Fallback to generic connection terms.
+        """
+        queries = []
+        if visual_intent_keywords:
+            # Visual intent mode: emotional/narrative coherence first
+            for phrase in visual_intent_keywords[:5]:
+                if phrase and isinstance(phrase, str):
+                    queries.append(phrase.strip())
+        # Add keyword-based queries (topic relevance)
+        if keywords:
+            queries.append(" ".join(keywords[:3]) if len(keywords) >= 3 else keywords[0])
+        if title_tokens:
+            queries.append(" ".join(title_tokens[:4]))
+        if keywords:
+            queries.append(keywords[0])
+        # Generic visual fallback (MUST include person/people to avoid abstract objects)
+        queries.extend([
+            "person contemplative quiet",
+            "people community connection informal",
+            "person genuine human moment",
+            "lone person window",
+            "people small group conversation",
+        ])
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for q in queries:
+            q = (q or "").strip()
+            if q and q not in seen:
+                seen.add(q)
+                unique.append(q)
+        return unique
+
     def _score_image(self, result: Dict[str, Any], title_tokens: List[str], keywords: List[str]) -> Optional[ScoredImage]:
         """Score single image deterministically.
 
-        Score = 2×title_token_overlap + 1×keyword_overlap
-
-        Args:
-            result: Unsplash API result object
-            title_tokens: Tokenized post title
-            keywords: Top keywords
-
-        Returns:
-            ScoredImage or None if image cannot be scored
+        Score = 2×title_token_overlap + 1×keyword_overlap - NEGATIVE_PENALTY if risk cues.
+        Risk cues (party, alcohol, corporate, etc.) contradict articles about
+        loneliness/burnout — we strongly penalize them.
         """
         image_id = result.get("id", "")
         if not image_id:
@@ -314,10 +386,19 @@ class UnsplashConnector(BaseConnector):
         # Extract image text fields
         description = result.get("description") or ""
         alt_description = result.get("alt_description") or ""
-        combined_text = f"{description} {alt_description}"
+        combined_text = f"{description} {alt_description}".lower()
 
-        # Tokenize image text
-        image_tokens = set(tokenize(combined_text))
+        # Negative context filter: penalize images with risk cues
+        combined_tokens = set(tokenize(combined_text))
+        risk_overlap = combined_tokens & NEGATIVE_CONTEXT_TERMS
+        if risk_overlap:
+            # Strong penalty — prefer images without party/alcohol/corporate cues
+            penalty = NEGATIVE_PENALTY
+        else:
+            penalty = 0
+
+        # Tokenize for overlap (original text for matching)
+        image_tokens = set(tokenize(f"{description} {alt_description}"))
 
         # Calculate overlaps
         title_token_set = set(title_tokens)
@@ -326,8 +407,8 @@ class UnsplashConnector(BaseConnector):
         title_overlap = len(title_token_set & image_tokens)
         keyword_overlap = len(keyword_set & image_tokens)
 
-        # Calculate score
-        score = 2 * title_overlap + 1 * keyword_overlap
+        # Calculate score (positive overlap minus penalty)
+        score = max(0, 2 * title_overlap + 1 * keyword_overlap - penalty)
 
         # Extract metadata
         likes = result.get("likes", 0)
@@ -553,15 +634,14 @@ class UnsplashConnector(BaseConnector):
         Returns:
             ConnectorResult with FAILED status
         """
+        error_data = json.dumps(error.to_dict())
+        error_hash = hashlib.sha256(error_data.encode()).hexdigest()
         return ConnectorResult(
-            status=ConnectorStatus.FAILED,
-            message=error.message,
-            artifacts=[
-                ExecutionArtifact(
-                    artifact_type="blog_error",
-                    content_type="application/json",
-                    data=json.dumps(error.to_dict())
-                )
-            ],
-            external_effects={"error_code": error.code.value, "retryable": error.retryable}
+            status=ConnectorStatus.FAILURE,
+            connector_type="unsplash",
+            idempotency_key="",
+            artifacts={"blog_error": error_hash},
+            side_effect_summary=error.message[:500],
+            error_code=error.code.value,
+            error_message=error.message[:200],
         )

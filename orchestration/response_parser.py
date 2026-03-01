@@ -6,8 +6,13 @@ Phase 6 Invariant: Strict parsing - malformed responses are discarded, not retri
 import re
 import hashlib
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from orchestration.errors import LLMResponseInvalidError
+
+# Closed set of valid intent types.  Any value not in this set is silently
+# replaced with the safe default "analysis" to prevent hallucinated types from
+# leaking into downstream gate logic.
+VALID_INTENT_TYPES: frozenset = frozenset({"analysis", "action"})
 
 
 @dataclass(frozen=True)
@@ -15,12 +20,34 @@ class LLMProposal:
     """Parsed LLM proposal.
 
     Phase 6 Invariant: All proposals are strictly typed and immutable.
+
+    Intent metadata fields (Layer 0):
+    - intent_type: "analysis" (read-only) or "action" (state-changing).
+      Validated against VALID_INTENT_TYPES; defaults to "analysis" when
+      absent or unrecognised to prevent hallucinated types from leaking
+      into gate logic.
+    - is_state_changing: True only when intent_type == "action".
+    - purpose: Free-text human-readable label for audit log context.
+
+    All three fields use field(default=...) so existing constructors that
+    omit them continue to work without modification.
     """
     model: str
     proposal_text: str
     rationale_text: str
     confidence: float
     proposal_hash: str
+    # Intent metadata — defaults guarantee backward compatibility
+    intent_type: str = field(default="analysis")
+    is_state_changing: bool = field(default=False)
+    purpose: str = field(default="")
+
+    def __post_init__(self) -> None:
+        # Validate intent_type against closed set; silently reset to safe default
+        # if an unexpected value (e.g. LLM hallucination) slips through.
+        if object.__getattribute__(self, "intent_type") not in VALID_INTENT_TYPES:
+            object.__setattr__(self, "intent_type", "analysis")
+            object.__setattr__(self, "is_state_changing", False)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -30,6 +57,9 @@ class LLMProposal:
             "rationale_text": self.rationale_text,
             "confidence": self.confidence,
             "proposal_hash": self.proposal_hash,
+            "intent_type": self.intent_type,
+            "is_state_changing": self.is_state_changing,
+            "purpose": self.purpose,
         }
 
 
@@ -53,8 +83,10 @@ class ResponseParser:
         rationale_text = self._extract_section(response_text, "RATIONALE")
         confidence_text = self._extract_section(response_text, "CONFIDENCE")
 
-        # 🔹 Normalize BEFORE validation + hashing
-        proposal_text = normalize_proposal(proposal_text)
+        # Normalize at input boundary — once and only once — before any
+        # validation, hashing, or embedding.
+        proposal_text = normalize_text(proposal_text)
+        rationale_text = normalize_text(rationale_text)
 
         if len(proposal_text) > self.MAX_PROPOSAL_LENGTH:
             raise LLMResponseInvalidError(
@@ -122,14 +154,20 @@ class ResponseParser:
         return hashlib.sha256(proposal_text.encode("utf-8")).hexdigest()
 
 
-def normalize_proposal(proposal_text: str) -> str:
-    """Normalize proposal text before comparison.
+def normalize_text(text: str) -> str:
+    """Normalize text before comparison, hashing, or embedding.
 
     Phase 6 Invariant:
-    - Unicode NFC normalization
+    - Unicode NFC normalization (not NFKC — preserves code identifiers)
     - Trim trailing whitespace only
     - No semantic rewriting
+    - Apply once at the input boundary; never re-normalize already-normalized text
     """
-    normalized = unicodedata.normalize("NFC", proposal_text)
+    normalized = unicodedata.normalize("NFC", text)
     return normalized.rstrip()
+
+
+# Backward-compatible alias — existing callers that import normalize_proposal
+# continue to work without modification.
+normalize_proposal = normalize_text
 

@@ -1,0 +1,1019 @@
+{
+  "posteriors": {
+    "How to build meaningful friendships as an adult": [
+      1.0,
+      1.0
+    ],
+    "The power of community support in mental wellness": [
+      1.0,
+      1.0
+    ],
+    "Simple ways to reconnect with your neighbors": [
+      1.0,
+      1.0
+    ],
+    "Why belonging matters for long-term happiness": [
+      1.0,
+      1.0
+    ],
+    "Overcoming loneliness through shared interests": [
+      1.0,
+      1.0
+    ],
+    "How social connections improve physical health": [
+      1.0,
+      1.0
+    ],
+    "Building a support network from scratch": [
+      1.0,
+      1.0
+    ],
+    "The science of genuine human connection": [
+      1.0,
+      1.0
+    ],
+    "Creating inclusive spaces in your community": [
+      1.0,
+      1.0
+    ],
+    "Small acts of kindness that strengthen communities": [
+      1.0,
+      1.0
+    ],
+    "The science of building lasting friendships": [
+      1.0,
+      1.0
+    ],
+    "How to overcome social anxiety in community settings": [
+      1.0,
+      1.0
+    ],
+    "Morning routines for better connections": [
+      1.0,
+      1.0
+    ],
+    "Quick tips for neighbor introductions": [
+      1.0,
+      1.0
+    ],
+    "The hidden cost of workplace loneliness": [
+      1.0,
+      1.0
+    ],
+    "Building a support network from scratch|aspiration": [
+      1.230000499999,
+      1.729999500001
+    ],
+    "Overcoming loneliness through shared interests|struggle": [
+      1.230000499999,
+      1.729999500001
+    ],
+    "The power of community support in mental wellness|belonging": [
+      1.230000499999,
+      1.729999500001
+    ],
+    "Building a support network from scratch|struggle": [
+      0.9603999999999999,
+      2.9404
+    ],
+    "How social connections improve physical health|warning": [
+      0.9603999999999999,
+      2.9404
+    ],
+    "Why belonging matters for long-term happiness|reflection": [
+      0.9223681599999999,
+      4.80396016
+    ],
+    "The power of community support in mental wellness|struggle": [
+      0.98,
+      1.98
+    ],
+    "How to build meaningful friendships as an adult|struggle": [
+      0.98,
+      1.98
+    ],
+    "Small acts of kindness that strengthen communities|belonging": [
+      0.98,
+      1.98
+    ],
+    "Overcoming loneliness through shared interests|belonging": [
+      0.98,
+      1.98
+    ],
+    "Creating inclusive spaces in your community|belonging": [
+      1.230000499999,
+      1.729999500001
+    ],
+    "Why belonging matters for long-term happiness|unknown": [
+      1.48,
+      1.48
+    ],
+    "The science of building lasting friendships|unknown": [
+      1.48,
+      1.48
+    ],
+    "How to overcome social anxiety in community settings|unknown": [
+      1.48,
+      1.48
+    ],
+    "Small acts of kindness that strengthen communities|unknown": [
+      1.48,
+      1.48
+    ],
+    "Morning routines for better connections|unknown": [
+      1.48,
+      1.48
+    ],
+    "Quick tips for neighbor introductions|unknown": [
+      1.48,
+      1.48
+    ],
+    "The hidden cost of workplace loneliness|unknown": [
+      1.48,
+      1.48
+    ]
+  },
+  "posts_ledger": {
+    "99001": {
+      "topic": "How to build meaningful friendships as an adult",
+      "slug": "test-slug",
+      "keywords": [
+        "community"
+      ],
+      "tags": [
+        "wellness"
+      ],
+      "created_at": "2026-02-18T03:07:12.746172",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99100": {
+      "topic": "How to build meaningful friendships as an adult",
+      "slug": "slug-0",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.746838",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99101": {
+      "topic": "The power of community support in mental wellness",
+      "slug": "slug-1",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.747083",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99102": {
+      "topic": "Simple ways to reconnect with your neighbors",
+      "slug": "slug-2",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.747281",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99103": {
+      "topic": "Why belonging matters for long-term happiness",
+      "slug": "slug-3",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.747486",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99104": {
+      "topic": "Overcoming loneliness through shared interests",
+      "slug": "slug-4",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.747729",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99105": {
+      "topic": "How social connections improve physical health",
+      "slug": "slug-5",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.748074",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99106": {
+      "topic": "Building a support network from scratch",
+      "slug": "slug-6",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.748499",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99107": {
+      "topic": "The science of genuine human connection",
+      "slug": "slug-7",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.748833",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99108": {
+      "topic": "Creating inclusive spaces in your community",
+      "slug": "slug-8",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.749137",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "99109": {
+      "topic": "Small acts of kindness that strengthen communities",
+      "slug": "slug-9",
+      "keywords": [],
+      "tags": [],
+      "created_at": "2026-02-18T03:07:12.749438",
+      "horizons": {
+        "6h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "24h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        },
+        "72h": {
+          "views": null,
+          "comments": null,
+          "polled_at": null
+        }
+      },
+      "final_reward": null
+    },
+    "12866": {
+      "topic": "Why belonging matters for long-term happiness",
+      "slug": "why-belonging-matters-for-long-term-happiness",
+      "keywords": [
+        "belonging and happiness",
+        "importance of community",
+        "social connection",
+        "human connection",
+        "loneliness epidemic",
+        "meaningful relationships"
+      ],
+      "tags": [
+        "belonging",
+        "happiness",
+        "community",
+        "mental health",
+        "relationships"
+      ],
+      "created_at": "2026-02-21T00:36:57.952016",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-24T01:08:26.984474"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12867": {
+      "topic": "The science of building lasting friendships",
+      "slug": "the-science-of-building-lasting-friendships-what-research-tells-us",
+      "keywords": [
+        "lasting friendships",
+        "friendship research",
+        "building connections",
+        "social psychology",
+        "meaningful relationships",
+        "friendship maintenance"
+      ],
+      "tags": [
+        "friendship science",
+        "building connections",
+        "relationship psychology",
+        "social bonds"
+      ],
+      "created_at": "2026-02-21T05:15:54.422084",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-24T14:02:34.586312"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12869": {
+      "topic": "How to overcome social anxiety in community settings",
+      "slug": "how-to-overcome-social-anxiety-in-community-settings",
+      "keywords": [
+        "social anxiety",
+        "overcome social anxiety",
+        "community settings",
+        "social confidence",
+        "anxiety management",
+        "building connections"
+      ],
+      "tags": [
+        "social anxiety",
+        "mental health",
+        "community building",
+        "personal growth"
+      ],
+      "created_at": "2026-02-21T05:17:58.484730",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-24T14:02:34.586312"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12873": {
+      "topic": "Small acts of kindness that strengthen communities",
+      "slug": "small-acts-of-kindness-that-strengthen-communities",
+      "keywords": [
+        "acts of kindness",
+        "strengthen communities",
+        "community building",
+        "social connection",
+        "neighborhood kindness",
+        "building community bonds"
+      ],
+      "tags": [
+        "community building",
+        "kindness",
+        "social connection",
+        "neighborhood engagement"
+      ],
+      "created_at": "2026-02-21T05:20:31.874118",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-24T14:02:34.586312"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12877": {
+      "topic": "Morning routines for better connections",
+      "slug": "morning-routines-that-set-you-up-for-deeper-human-connections",
+      "keywords": [
+        "morning routine for connection",
+        "building better relationships",
+        "emotional availability",
+        "mindful mornings",
+        "connection practices"
+      ],
+      "tags": [
+        "morning routines",
+        "daily habits",
+        "emotional wellness",
+        "mindfulness",
+        "relationship building"
+      ],
+      "created_at": "2026-02-21T19:56:32.337273",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12879": {
+      "topic": "Quick tips for neighbor introductions",
+      "slug": "quick-tips-for-neighbor-introductions-start-building-community-today",
+      "keywords": [
+        "neighbor introductions",
+        "meeting neighbors",
+        "building community",
+        "neighborhood connections",
+        "social tips"
+      ],
+      "tags": [
+        "neighbor relationships",
+        "community building",
+        "social connections"
+      ],
+      "created_at": "2026-02-21T19:58:37.865337",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12882": {
+      "topic": "The hidden cost of workplace loneliness",
+      "slug": "the-hidden-cost-of-workplace-loneliness-what-it-s-really-costing-you-and-your",
+      "keywords": [
+        "workplace loneliness",
+        "employee connection",
+        "workplace isolation",
+        "organizational culture",
+        "remote work challenges"
+      ],
+      "tags": [
+        "workplace wellness",
+        "employee engagement",
+        "mental health at work"
+      ],
+      "created_at": "2026-02-21T20:12:21.437367",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T23:02:34.062813"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.5
+    },
+    "12884": {
+      "topic": "Building a support network from scratch",
+      "tone": "aspiration",
+      "slug": "building-a-support-network-from-scratch-a-practical-guide-to-creating-your",
+      "keywords": [
+        "building support network",
+        "making friends from scratch",
+        "creating social connections",
+        "finding community",
+        "building meaningful relationships"
+      ],
+      "tags": [
+        "support network",
+        "building friendships",
+        "social connections",
+        "community building"
+      ],
+      "created_at": "2026-02-21T20:20:44.878017",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T23:02:34.062813"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.250000499999
+    },
+    "12886": {
+      "topic": "Overcoming loneliness through shared interests",
+      "tone": "struggle",
+      "slug": "the-shared-interest-myth-why-your-hobbies-haven-t-fixed-your-loneliness",
+      "keywords": [
+        "overcoming loneliness",
+        "shared interests",
+        "genuine connection"
+      ],
+      "tags": [
+        "loneliness",
+        "community building",
+        "authentic connection"
+      ],
+      "created_at": "2026-02-21T21:37:22.297081",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T23:02:34.062813"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.250000499999
+    },
+    "12893": {
+      "topic": "The power of community support in mental wellness",
+      "tone": "belonging",
+      "slug": "why-your-therapist-can-t-replace-what-your-neighbor-could",
+      "keywords": [
+        "community mental health",
+        "social connection",
+        "loneliness and isolation"
+      ],
+      "tags": [
+        "community support",
+        "mental wellness",
+        "human connection"
+      ],
+      "created_at": "2026-02-21T21:54:26.085136",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T20:02:34.619786"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-22T23:02:34.062813"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.250000499999
+    },
+    "12898": {
+      "topic": "Creating inclusive spaces in your community",
+      "tone": "belonging",
+      "slug": "the-woman-who-accidentally-built-a-community-in-a-parking-lot",
+      "keywords": [
+        "making friends as adults",
+        "creating meaningful connections",
+        "building support network",
+        "sense of belonging",
+        "genuine human connection"
+      ],
+      "tags": [
+        "building connections",
+        "adult friendships",
+        "sense of belonging",
+        "support network",
+        "genuine human connection"
+      ],
+      "title": "The Woman Who Accidentally Built a Community in a Parking Lot",
+      "title_style": "statement",
+      "image_id": "KOnqsvsxxgg",
+      "image_description": "",
+      "created_at": "2026-02-23T21:22:10.089288",
+      "horizons": {
+        "6h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-24T14:02:34.586312"
+        },
+        "24h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        },
+        "72h": {
+          "views": 0,
+          "comments": 0,
+          "polled_at": "2026-02-27T19:30:16.217458"
+        }
+      },
+      "final_reward": 0.250000499999
+    }
+  },
+  "reward_history": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.250000499999,
+    0.250000499999,
+    0.250000499999,
+    0.250000499999
+  ],
+  "keyword_scores": {
+    "building support network": 0.09000017999964,
+    "making friends as adults": 0.0500000999998,
+    "creating meaningful connections": 0.0500000999998,
+    "sense of belonging": 0.0500000999998,
+    "genuine human connection": 0.0500000999998,
+    "belonging and happiness": 0.1,
+    "importance of community": 0.1,
+    "social connection": 0.1940000999998,
+    "human connection": 0.1,
+    "loneliness epidemic": 0.1,
+    "meaningful relationships": 0.18000000000000002,
+    "lasting friendships": 0.1,
+    "friendship research": 0.1,
+    "building connections": 0.18000000000000002,
+    "social psychology": 0.1,
+    "friendship maintenance": 0.1,
+    "social anxiety": 0.1,
+    "overcome social anxiety": 0.1,
+    "community settings": 0.1,
+    "social confidence": 0.1,
+    "anxiety management": 0.1,
+    "acts of kindness": 0.1,
+    "strengthen communities": 0.1,
+    "community building": 0.1,
+    "neighborhood kindness": 0.1,
+    "building community bonds": 0.1,
+    "morning routine for connection": 0.1,
+    "building better relationships": 0.1,
+    "emotional availability": 0.1,
+    "mindful mornings": 0.1,
+    "connection practices": 0.1,
+    "neighbor introductions": 0.1,
+    "meeting neighbors": 0.1,
+    "building community": 0.1,
+    "neighborhood connections": 0.1,
+    "social tips": 0.1,
+    "workplace loneliness": 0.1,
+    "employee connection": 0.1,
+    "workplace isolation": 0.1,
+    "organizational culture": 0.1,
+    "remote work challenges": 0.1,
+    "making friends from scratch": 0.0500000999998,
+    "creating social connections": 0.0500000999998,
+    "finding community": 0.0500000999998,
+    "building meaningful relationships": 0.0500000999998,
+    "overcoming loneliness": 0.0500000999998,
+    "shared interests": 0.0500000999998,
+    "genuine connection": 0.0500000999998,
+    "community mental health": 0.0500000999998,
+    "loneliness and isolation": 0.0500000999998
+  },
+  "tag_scores": {
+    "support network": 0.09000017999964,
+    "building connections": 0.1300000999998,
+    "adult friendships": 0.0500000999998,
+    "belonging": 0.1,
+    "long-term happiness": 0.0,
+    "mental wellness": 0.0500000999998,
+    "sense of belonging": 0.0500000999998,
+    "happiness": 0.1,
+    "community": 0.1,
+    "mental health": 0.18000000000000002,
+    "relationships": 0.1,
+    "friendship science": 0.1,
+    "relationship psychology": 0.1,
+    "social bonds": 0.1,
+    "social anxiety": 0.1,
+    "community building": 0.24616017999964,
+    "personal growth": 0.1,
+    "kindness": 0.1,
+    "social connection": 0.1,
+    "neighborhood engagement": 0.1,
+    "morning routines": 0.1,
+    "daily habits": 0.1,
+    "emotional wellness": 0.1,
+    "mindfulness": 0.1,
+    "relationship building": 0.1,
+    "neighbor relationships": 0.1,
+    "social connections": 0.1300000999998,
+    "workplace wellness": 0.1,
+    "employee engagement": 0.1,
+    "mental health at work": 0.1,
+    "building friendships": 0.0500000999998,
+    "loneliness": 0.0500000999998,
+    "authentic connection": 0.0500000999998,
+    "community support": 0.0500000999998,
+    "human connection": 0.0500000999998,
+    "genuine human connection": 0.0500000999998
+  },
+  "episode": 17,
+  "topic_posteriors": {
+    "How to build meaningful friendships as an adult": [
+      0.98,
+      1.98
+    ],
+    "The power of community support in mental wellness": [
+      1.210400499999,
+      2.690399500001
+    ],
+    "Simple ways to reconnect with your neighbors": [
+      1.0,
+      1.0
+    ],
+    "Why belonging matters for long-term happiness": [
+      1.4039207967999998,
+      5.2078809567999995
+    ],
+    "Overcoming loneliness through shared interests": [
+      1.210400499999,
+      2.690399500001
+    ],
+    "How social connections improve physical health": [
+      0.9603999999999999,
+      2.9404
+    ],
+    "Building a support network from scratch": [
+      1.191192499999,
+      3.631591500001
+    ],
+    "The science of genuine human connection": [
+      1.0,
+      1.0
+    ],
+    "Creating inclusive spaces in your community": [
+      1.230000499999,
+      1.729999500001
+    ],
+    "Small acts of kindness that strengthen communities": [
+      1.4604,
+      2.4404
+    ],
+    "The science of building lasting friendships": [
+      1.48,
+      1.48
+    ],
+    "How to overcome social anxiety in community settings": [
+      1.48,
+      1.48
+    ],
+    "Morning routines for better connections": [
+      1.48,
+      1.48
+    ],
+    "Quick tips for neighbor introductions": [
+      1.48,
+      1.48
+    ],
+    "The hidden cost of workplace loneliness": [
+      1.48,
+      1.48
+    ]
+  },
+  "prompt_knobs": {
+    "sarcasm_level": 0.2,
+    "painpoint_intensity": 0.95,
+    "audience_specificity": 0.9000000000000001
+  },
+  "image_archetypes": {
+    "KOnqsvsxxgg": {
+      "tone": "belonging",
+      "description": "",
+      "total_reward": 0.250000499999,
+      "count": 1,
+      "avg_reward": 0.250000499999
+    }
+  },
+  "title_styles": {
+    "statement": {
+      "total_reward": 0.250000499999,
+      "count": 1,
+      "avg_reward": 0.250000499999
+    }
+  }
+}

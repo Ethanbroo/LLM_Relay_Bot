@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Claude Gateway",
+    "slug": "claude-gateway",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E8714A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ethan.claudegateway",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#E8714A"
+      },
+      "package": "com.ethan.claudegateway",
+      "versionCode": 1
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "owner": "ethanbrooks",
+    "plugins": [
+      "expo-asset",
+      "expo-secure-store"
+    ]
+  }
+}

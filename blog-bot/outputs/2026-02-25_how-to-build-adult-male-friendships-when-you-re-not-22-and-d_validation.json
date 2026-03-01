@@ -1,0 +1,166 @@
+{
+  "title": "How to Build Adult Male Friendships When You're Not 22 and Drunk Anymore",
+  "model_used": "claude-sonnet-4-20250514",
+  "attempt_count": 2,
+  "success": true,
+  "validation": {
+    "overall_pass": true,
+    "fail_count": 0,
+    "warn_count": 0,
+    "checks": [
+      {
+        "name": "Word Count",
+        "status": "PASS",
+        "detail": "1346 words (target: 1500, range: 1275-1800)"
+      },
+      {
+        "name": "METADATA Block",
+        "status": "PASS",
+        "detail": "Found 2 anchor\u2192blog mapping(s)."
+      },
+      {
+        "name": "FC Mention",
+        "status": "PASS",
+        "detail": "Found in 1 sentence(s)."
+      },
+      {
+        "name": "No URLs",
+        "status": "PASS",
+        "detail": "No URLs detected in article body."
+      },
+      {
+        "name": "Header Formatting",
+        "status": "PASS",
+        "detail": "H3: 7, H4: 0 \u2014 formatting correct."
+      },
+      {
+        "name": "Section Completeness",
+        "status": "PASS",
+        "detail": "Found 7 section headers (minimum: 7)."
+      },
+      {
+        "name": "Comma-to-Dash Ratio",
+        "status": "PASS",
+        "detail": "Commas: 61, Dashes: 0, Ratio: inf (target: >= 3:1)."
+      },
+      {
+        "name": "No Structural Labels",
+        "status": "PASS",
+        "detail": "No structural labels found in headers."
+      }
+    ]
+  },
+  "all_attempts": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 1,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 1,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "FAIL",
+            "detail": "OVER: 2090 words (maximum: 1800, target: 1500)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 9, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 9 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 98, Dashes: 19, Ratio: 5.2:1 (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 14343
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 2,
+      "validation": {
+        "overall_pass": true,
+        "fail_count": 0,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1346 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 7, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 7 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 61, Dashes: 0, Ratio: inf (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9178
+    }
+  ],
+  "config": {
+    "topic": "The friendship gap: why men struggle more with loneliness",
+    "word_count": 1500,
+    "fc_angle": "Introduce Friendly Connections in the context of paid companionship becoming destigmatized, framing it as part of a broader cultural shift toward people investing in their social health.",
+    "override_dedup": false
+  },
+  "generated_at": "2026-02-25T17:50:40.224216"
+}

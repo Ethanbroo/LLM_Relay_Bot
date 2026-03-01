@@ -1,0 +1,110 @@
+=== BLOG GENERATION REQUEST ===
+
+TITLE: {title}
+TARGET WORD COUNT: {word_count} (minimum: {min_word_count}, maximum: {max_word_count})
+
+=== FRIENDLY CONNECTIONS INTEGRATION ===
+
+Friendly Connections is an Ontario-based service that helps people build real platonic friendships through organized social activities, companionship matching, and community events.
+
+For THIS article, integrate Friendly Connections using this angle:
+{fc_integration_angle}
+
+The mention must be 1-3 sentences, feel like a natural part of the narrative (not an ad), and match the article's current tone and topic. It should read as an unbiased observation, not a sponsored placement.
+
+=== SUB-CONTEXT ===
+
+{sub_context}
+
+=== ARTICLE STRUCTURE ===
+
+Follow these sections in order. Do not skip, reorder, or merge sections. Create captivating subtitles for each (never use the structural labels below as actual headers).
+
+SECTION 1 — Title & Dek
+- Use the title exactly as provided above.
+- Write a 1-sentence dek summarizing the real emotional or social stakes.
+
+SECTION 2 — Hook / Lede (2-4 paragraphs)
+- Drop the reader into a micro-scene or contradiction.
+- Use sensory detail.
+- Include one small humorous or awkward beat.
+- End with the key question the article will explore.
+
+SECTION 3 — Nut Graf (1 short paragraph)
+- State what this article is truly about.
+- Explain why the topic matters now.
+- Situate it in broader social context.
+- Preview the plan for the piece.
+
+SECTION 4 — Context & Definitions (1-3 subsections)
+- Plain-language definition of the core concept.
+- Cultural/historical context.
+- Why the behavior or issue is common.
+- How it affects real people.
+- Include cultural references (apps, trends, norms) if relevant.
+
+SECTION 5 — Evidence & Expert Insight (1-3 subsections)
+For each block, follow this pattern:
+- Surprising research finding
+- One-sentence methodology summary
+- Expert quote (1-2 sentences) or paraphrased expert insight
+- Plain-language breakdown
+- Light humorous or human aside
+IMPORTANT: Only include specific findings, methodology summaries, and expert quotes if you can provide verifiable sources meeting the research standards in the system prompt. Otherwise, use generic references.
+
+SECTION 6 — Narrative Experiments / Attempts (1-3 attempts)
+For each attempt:
+- State the common advice being tested.
+- Describe the setup and expectations.
+- Insert 1-3 micro-scenes.
+- Show awkwardness, internal monologue, or a comedic beat.
+- Reflect on whether it worked and why.
+
+SECTION 7 — Complication & Nuance
+Add friction to prevent simplistic conclusions:
+- A contradictory expert view or counterpoint.
+- Structural barriers (time, money, mental health).
+- Cultural or psychological barriers.
+
+SECTION 8 — Practical Synthesis (3-5 takeaways)
+Each takeaway must:
+- Be grounded in the narrative above.
+- Reflect the evidence discussed.
+- Offer practical but non-generic insights.
+- Be written in casual, VICE-compatible tone.
+- Avoid self-help cliches.
+
+SECTION 9 — Closing Kicker
+Use one of:
+- A callback to an early image or scene.
+- A twist of vulnerability.
+- A bittersweet humor beat.
+- A very short final line (4-12 words).
+
+=== AVAILABLE CROSS-LINK TARGETS ===
+
+Choose 1-2 from this list for your anchor word mappings:
+
+Lifestyle:
+{blog_list_lifestyle}
+
+Learning:
+{blog_list_learning}
+
+Uncategorized:
+{blog_list_uncategorized}
+
+News / Press:
+{blog_list_news}
+
+=== REFERENCE STYLE EXAMPLES ===
+
+Below are excerpts from the highest-performing Friendly Connections blog posts. Match this voice, rhythm, and tone:
+
+{few_shot_examples}
+
+=== REMINDERS ===
+
+- Output the article, then the METADATA block, then stop.
+- No extra commentary or notes.
+- Stay within the word count range.

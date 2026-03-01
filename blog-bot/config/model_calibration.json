@@ -1,0 +1,33 @@
+{
+  "models": {
+    "claude-sonnet-4-20250514": {
+      "provider": "anthropic",
+      "role": "primary",
+      "append_to_system_prompt": "",
+      "notes": "Primary model. Follows complex multi-section prompts reliably. Natural warmth matches the VICE tone target. Conservative with citations (good — avoids hallucination). If output feels too safe on humor, increase temperature to 0.8.",
+      "recommended_temperature": 0.7,
+      "recommended_max_tokens": 4096
+    },
+    "gpt-4o": {
+      "provider": "openai",
+      "role": "backup_1",
+      "append_to_system_prompt": "IMPORTANT CALIBRATION FOR THIS MODEL: Lean harder into casual, messy, VICE-style voice. Your natural tendency is toward polished corporate tone — actively resist this. Be more vulnerable, more awkward, more self-deprecating. Do NOT fabricate specific statistics, study names, expert names, or journal citations. If you are not certain a source is real, use a generic reference instead. When in doubt between sounding professional and sounding human, choose human.",
+      "notes": "First backup. Tends toward polished/corporate voice and frequently hallucinates specific citations. The calibration override helps but does not fully eliminate these tendencies. Citation validation check in validator.py is especially important for GPT-4o output.",
+      "recommended_temperature": 0.8,
+      "recommended_max_tokens": 4096
+    },
+    "deepseek-chat": {
+      "provider": "deepseek",
+      "role": "backup_2",
+      "append_to_system_prompt": "IMPORTANT CALIBRATION FOR THIS MODEL: Follow the 9-section article structure precisely — do not merge, skip, or compress later sections. Maintain the VICE-style first-person narrative voice throughout. Prioritize storytelling and emotional authenticity over information density. The Friendly Connections mention must feel like a natural aside, not a product placement. Do NOT fabricate citations or expert quotes.",
+      "notes": "Second backup. Strong at structured output but can be overly formal. May compress sections 7-9 to stay within word count — section completeness validation is critical. Test thoroughly before relying on this model for production blogs.",
+      "recommended_temperature": 0.8,
+      "recommended_max_tokens": 4096
+    }
+  },
+  "fallback_order": [
+    "claude-sonnet-4-20250514",
+    "gpt-4o",
+    "deepseek-chat"
+  ]
+}

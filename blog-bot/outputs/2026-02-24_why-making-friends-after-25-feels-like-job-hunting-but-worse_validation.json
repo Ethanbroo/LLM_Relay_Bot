@@ -1,0 +1,166 @@
+{
+  "title": "Why Making Friends After 25 Feels Like Job Hunting (But Worse)",
+  "model_used": "claude-sonnet-4-20250514",
+  "attempt_count": 2,
+  "success": true,
+  "validation": {
+    "overall_pass": true,
+    "fail_count": 0,
+    "warn_count": 0,
+    "checks": [
+      {
+        "name": "Word Count",
+        "status": "PASS",
+        "detail": "1314 words (target: 1500, range: 1275-1800)"
+      },
+      {
+        "name": "METADATA Block",
+        "status": "PASS",
+        "detail": "Found 2 anchor\u2192blog mapping(s)."
+      },
+      {
+        "name": "FC Mention",
+        "status": "PASS",
+        "detail": "Found in 1 sentence(s)."
+      },
+      {
+        "name": "No URLs",
+        "status": "PASS",
+        "detail": "No URLs detected in article body."
+      },
+      {
+        "name": "Header Formatting",
+        "status": "PASS",
+        "detail": "H3: 8, H4: 0 \u2014 formatting correct."
+      },
+      {
+        "name": "Section Completeness",
+        "status": "PASS",
+        "detail": "Found 8 section headers (minimum: 7)."
+      },
+      {
+        "name": "Comma-to-Dash Ratio",
+        "status": "PASS",
+        "detail": "Commas: 59, Dashes: 0, Ratio: inf (target: >= 3:1)."
+      },
+      {
+        "name": "No Structural Labels",
+        "status": "PASS",
+        "detail": "No structural labels found in headers."
+      }
+    ]
+  },
+  "all_attempts": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 1,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 1,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "FAIL",
+            "detail": "OVER: 2250 words (maximum: 1800, target: 1500)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 12, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 12 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 123, Dashes: 0, Ratio: inf (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 15167
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 2,
+      "validation": {
+        "overall_pass": true,
+        "fail_count": 0,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1314 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 8, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 8 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 59, Dashes: 0, Ratio: inf (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9217
+    }
+  ],
+  "config": {
+    "topic": "The friendship recession is real and nobody is talking about it honestly",
+    "word_count": 1500,
+    "fc_angle": "Mention Friendly Connections when discussing how some people are turning to organized social services as a practical response to the friendship recession, framing it as part of a growing movement rather than a last resort.",
+    "override_dedup": false
+  },
+  "generated_at": "2026-02-24T03:48:56.970985"
+}

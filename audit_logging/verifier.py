@@ -2,10 +2,10 @@
 Audit log verification and tamper detection for Phase 3.
 
 Responsibilities:
-- Verify hash chain integrity
+- Verify hash chain integrity (GLOBAL across all runs)
 - Verify Ed25519 signatures on all events
 - Detect tampering (chain mismatch, signature invalid)
-- Verify strict event_seq monotonicity
+- Verify per-run event_seq monotonicity
 - Validate against schemas
 """
 
@@ -101,8 +101,8 @@ class AuditLogVerifier:
 
         Checks:
         - Each event has valid JSON
-        - event_seq is strictly monotonic
-        - Hash chain is unbroken
+        - event_seq is strictly monotonic PER RUN
+        - Hash chain is unbroken (GLOBAL)
         - Signatures are valid
         - event_id matches computed value
         - event_type is valid
@@ -122,7 +122,7 @@ class AuditLogVerifier:
         errors = []
         events_verified = 0
         prev_event_hash = GENESIS_HASH
-        expected_seq = 1
+        expected_seq_by_run_id = {}  # Per-run sequence tracking
 
         try:
             with open(segment_path, 'r', encoding='utf-8') as f:
@@ -138,7 +138,7 @@ class AuditLogVerifier:
                         continue
 
                     # Verify event structure
-                    error = self._verify_event(event, expected_seq, prev_event_hash)
+                    error = self._verify_event(event, expected_seq_by_run_id, prev_event_hash, line_num)
                     if error:
                         errors.append(f"Line {line_num}: {error}")
                         if "chain mismatch" in error.lower() or "signature" in error.lower():
@@ -151,9 +151,8 @@ class AuditLogVerifier:
                             )
                         continue
 
-                    # Update chain state
+                    # Update chain state (GLOBAL)
                     prev_event_hash = event["event_hash"]
-                    expected_seq = event["event_seq"] + 1
                     events_verified += 1
 
         except Exception as e:
@@ -180,31 +179,47 @@ class AuditLogVerifier:
     def _verify_event(
         self,
         event: dict,
-        expected_seq: int,
-        expected_prev_hash: str
+        expected_seq_by_run_id: dict,
+        expected_prev_hash: str,
+        line_num: int = 0
     ) -> Optional[str]:
         """
         Verify a single event.
 
         Args:
             event: Event dict
-            expected_seq: Expected event_seq
-            expected_prev_hash: Expected prev_event_hash
+            expected_seq_by_run_id: Dict tracking expected event_seq per run_id
+            expected_prev_hash: Expected prev_event_hash (GLOBAL chain)
+            line_num: Line number for error reporting
 
         Returns:
             Error message if verification failed, None if success
         """
-        # Check event_seq is strictly monotonic
-        if event.get("event_seq") != expected_seq:
-            return f"event_seq mismatch: expected {expected_seq}, got {event.get('event_seq')}"
-
-        # Check prev_event_hash matches chain
+        # Check prev_event_hash matches GLOBAL chain
         if event.get("prev_event_hash") != expected_prev_hash:
             return f"Hash chain mismatch: expected {expected_prev_hash}, got {event.get('prev_event_hash')}"
 
         # Verify event_type is valid
         if event.get("event_type") not in VALID_EVENT_TYPES:
             return f"Invalid event_type: {event.get('event_type')}"
+
+        # Verify per-run event_seq monotonicity
+        run_id = event.get("run_id")
+        event_seq = event.get("event_seq")
+
+        if run_id and isinstance(event_seq, int):
+            if run_id not in expected_seq_by_run_id:
+                # First event for this run
+                if event_seq != 1:
+                    return f"event_seq mismatch: run_id={run_id} first event must be 1, got {event_seq}"
+                expected_seq_by_run_id[run_id] = 2
+            else:
+                # Subsequent event for this run
+                expected_seq = expected_seq_by_run_id[run_id]
+                if event_seq != expected_seq:
+                    event_type = event.get("event_type", "UNKNOWN")
+                    return f"event_seq mismatch: run_id={run_id} expected {expected_seq}, got {event_seq} (event={event_type})"
+                expected_seq_by_run_id[run_id] = event_seq + 1
 
         # Recompute event_hash and verify
         computed_event_hash = compute_event_hash(event)
@@ -247,6 +262,10 @@ class AuditLogVerifier:
         """
         Verify entire audit log chain across multiple segments.
 
+        Maintains:
+        - GLOBAL hash chain across all runs
+        - PER-RUN event_seq monotonicity
+
         Args:
             segment_paths: List of segment paths in order
             manifest_path: Optional path to manifest.json for validation
@@ -258,7 +277,7 @@ class AuditLogVerifier:
         total_segments = 0
         all_errors = []
         prev_event_hash = GENESIS_HASH
-        expected_seq = 1
+        expected_seq_by_run_id = {}  # Per-run sequence tracking
 
         for segment_path in segment_paths:
             if not segment_path.exists():
@@ -280,7 +299,7 @@ class AuditLogVerifier:
                             continue
 
                         # Verify event with chain context
-                        error = self._verify_event(event, expected_seq, prev_event_hash)
+                        error = self._verify_event(event, expected_seq_by_run_id, prev_event_hash, line_num)
                         if error:
                             all_errors.append(f"{segment_path.name} line {line_num}: {error}")
                             if "chain mismatch" in error.lower() or "signature" in error.lower():
@@ -293,9 +312,8 @@ class AuditLogVerifier:
                                 )
                             continue
 
-                        # Update chain state
+                        # Update GLOBAL chain state
                         prev_event_hash = event["event_hash"]
-                        expected_seq = event["event_seq"] + 1
                         total_events += 1
 
                 total_segments += 1

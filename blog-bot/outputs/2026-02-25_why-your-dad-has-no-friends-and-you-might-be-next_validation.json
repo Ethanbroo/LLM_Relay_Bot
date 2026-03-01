@@ -1,0 +1,114 @@
+{
+  "title": "Why Your Dad Has No Friends (And You Might Be Next)",
+  "model_used": "claude-sonnet-4-20250514",
+  "attempt_count": 1,
+  "success": true,
+  "validation": {
+    "overall_pass": true,
+    "fail_count": 0,
+    "warn_count": 0,
+    "checks": [
+      {
+        "name": "Word Count",
+        "status": "PASS",
+        "detail": "1342 words (target: 1500, range: 1275-1800)"
+      },
+      {
+        "name": "METADATA Block",
+        "status": "PASS",
+        "detail": "Found 2 anchor\u2192blog mapping(s)."
+      },
+      {
+        "name": "FC Mention",
+        "status": "PASS",
+        "detail": "Found in 1 sentence(s)."
+      },
+      {
+        "name": "No URLs",
+        "status": "PASS",
+        "detail": "No URLs detected in article body."
+      },
+      {
+        "name": "Header Formatting",
+        "status": "PASS",
+        "detail": "H3: 10, H4: 0 \u2014 formatting correct."
+      },
+      {
+        "name": "Section Completeness",
+        "status": "PASS",
+        "detail": "Found 10 section headers (minimum: 7)."
+      },
+      {
+        "name": "Comma-to-Dash Ratio",
+        "status": "PASS",
+        "detail": "Commas: 66, Dashes: 13, Ratio: 5.1:1 (target: >= 3:1)."
+      },
+      {
+        "name": "No Structural Labels",
+        "status": "PASS",
+        "detail": "No structural labels found in headers."
+      }
+    ]
+  },
+  "all_attempts": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 1,
+      "validation": {
+        "overall_pass": true,
+        "fail_count": 0,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1342 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 10, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 10 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 66, Dashes: 13, Ratio: 5.1:1 (target: >= 3:1)."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9085
+    }
+  ],
+  "config": {
+    "topic": "The friendship gap: why men struggle more with loneliness",
+    "word_count": 1500,
+    "fc_angle": "Reference Friendly Connections as a real-world example of how organized community events can bridge the gap between wanting connection and actually finding it.",
+    "override_dedup": false
+  },
+  "generated_at": "2026-02-25T19:17:45.174746"
+}

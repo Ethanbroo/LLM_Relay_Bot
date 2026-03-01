@@ -313,9 +313,9 @@ class TestClientConfiguration:
         client = ClaudeClient()
         assert client.stub_mode is True
 
-    def test_client_real_api_mode_not_implemented(self):
-        """Real API mode raises error."""
-        client = ClaudeClient(stub_mode=False)
+    def test_client_real_api_mode_raises_without_key(self):
+        """Real API mode raises ClaudeClientError when no API key is set."""
+        client = ClaudeClient(stub_mode=False, api_key=None)
         request = ClaudeRequest(
             run_id="01234567-89ab-cdef-0123-456789abcdef",
             session_id="session_123",
@@ -328,7 +328,7 @@ class TestClientConfiguration:
             context_window_hash="0" * 64
         )
 
-        with pytest.raises(ClaudeClientError, match="Real API mode not implemented"):
+        with pytest.raises(ClaudeClientError, match="Claude API call failed"):
             client.generate(request)
 
 

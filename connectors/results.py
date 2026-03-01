@@ -55,6 +55,8 @@ class ConnectorResult:
 
     Phase 5 Invariant: Result must be deterministic and include
     result_hash for verification.
+    output_metadata: Optional workflow-internal data (e.g. image bytes, post link).
+    Not logged or persisted externally.
     """
     status: ConnectorStatus
     connector_type: str
@@ -65,6 +67,7 @@ class ConnectorResult:
     result_hash: str = ""  # SHA-256 hex (computed excluding this field)
     error_code: Optional[str] = None
     error_message: Optional[str] = None  # Bounded to 200 chars
+    output_metadata: Optional[dict] = None  # Workflow-internal data (image_data, link, etc.)
 
 
 @dataclass

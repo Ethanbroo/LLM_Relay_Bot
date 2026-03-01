@@ -203,9 +203,20 @@ class RulesEngine:
             with open(self.rules_path, 'r', encoding='utf-8') as f:
                 if self.rules_path.suffix == '.json':
                     data = json.load(f)
+                elif self.rules_path.suffix in ('.yaml', '.yml'):
+                    try:
+                        import yaml
+                        data = yaml.safe_load(f)
+                    except ImportError:
+                        raise ValueError(
+                            "PyYAML is required to load YAML rules files. "
+                            "Install it with: pip install pyyaml"
+                        )
                 else:
-                    # TODO: Support YAML
-                    raise ValueError("Only JSON rules files supported")
+                    raise ValueError(
+                        f"Unsupported rules file format: {self.rules_path.suffix}. "
+                        "Use .json or .yaml"
+                    )
 
                 # Handle both single rule and array of rules
                 if isinstance(data, dict):

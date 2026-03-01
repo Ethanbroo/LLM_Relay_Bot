@@ -1,4 +1,4 @@
-"""Unified supervisor for Phases 1-8 integration.
+"""Unified supervisor for Phases 1-8 integration + Video Pipeline.
 
 Coordinates:
 - Phase 1: Validation pipeline (validator/)
@@ -9,6 +9,7 @@ Coordinates:
 - Phase 6: Multi-LLM Orchestration (orchestration/)
 - Phase 7: Monitoring & Recovery (monitoring/)
 - Phase 8: Claude LLM Integration (llm_integration/)
+- Video Pipeline: Video creation (connectors/video_pipeline/)
 
 The supervisor:
 1. Initializes Phase 3 LogDaemon with Ed25519 keys
@@ -17,13 +18,14 @@ The supervisor:
 4. Initializes Phase 6 orchestration pipeline with model registry
 5. Initializes Phase 7 monitor daemon with metrics collection and rules
 6. Initializes Phase 8 Claude client for stateless text transformation
-7. Injects LogDaemon into all phases
-8. Coordinates the full message flow: Validation → Coordination → Orchestration → Execution → Connectors → Audit → Monitoring → Claude
+7. Initializes Video Pipeline with image generator + quality gates
+8. Injects LogDaemon into all phases
+9. Coordinates the full message flow: Validation → Coordination → Orchestration → Execution → Connectors → Audit → Monitoring → Claude
 """
 
 import os
 import uuid
-from uuid6 import uuid7
+from orchestration.uuid7 import generate_uuid7 as uuid7
 import hashlib
 import yaml
 from pathlib import Path
@@ -59,6 +61,12 @@ from orchestration.orchestration_pipeline import OrchestrationPipeline
 from monitoring.monitor_daemon import MonitorDaemon
 # Phase 8 imports
 from llm_integration.claude_client import ClaudeClient
+# Video pipeline imports
+from connectors.video_pipeline.video_agent import VideoAgent
+from connectors.video_pipeline.cloud.orchestrator import RenderOrchestrator
+from connectors.video_pipeline.cloud.models import RenderBackend
+# Plugin imports
+from connectors.video_pipeline.plugins.loader import PluginLoader, PluginLoadResult
 
 
 class SupervisorError(Exception):
@@ -136,6 +144,16 @@ class LLMRelaySupervisor:
         else:
             self.claude_client = None
 
+        # Initialize Video Pipeline (optional)
+        video_config = self.config.get("video", {})
+        if video_config.get("enabled", False):
+            self.video_agent = self._initialize_video_pipeline()
+        else:
+            self.video_agent = None
+
+        # Load plugins (optional)
+        self.plugin_result = self._load_plugins()
+
         # Log RUN_STARTED event
         self.log_daemon.ingest_event(
             event_type="RUN_STARTED",
@@ -153,7 +171,8 @@ class LLMRelaySupervisor:
                     "connectors": "1.0.0",  # Phase 5
                     "orchestration": "1.0.0",  # Phase 6
                     "monitoring": "1.0.0",  # Phase 7
-                    "claude": "1.0.0"  # Phase 8
+                    "claude": "1.0.0",  # Phase 8
+                    "video_pipeline": "0.1.0",  # Video creation pipeline
                 }
             }
         )
@@ -590,6 +609,361 @@ class LLMRelaySupervisor:
 
         except Exception as e:
             raise SupervisorError(f"Failed to initialize Claude client: {e}")
+
+    def _initialize_video_pipeline(self) -> VideoAgent:
+        """Initialize video creation pipeline.
+
+        The video pipeline reuses:
+        - Phase 3 LogDaemon for audit events
+        - Phase 8 Claude client for storyboard generation
+        - Instagram pipeline's image generator and quality gates (if configured)
+        - Cloud rendering orchestrator (if cloud_rendering.enabled in config)
+
+        Returns:
+            VideoAgent instance
+
+        Raises:
+            SupervisorError: If video pipeline initialization fails
+        """
+        video_config = self.config.get("video", {})
+
+        output_dir = str(self.base_dir / video_config.get("output_dir", "output/video"))
+        audio_library_dir = video_config.get("audio_library_dir")
+        if audio_library_dir:
+            audio_library_dir = str(self.base_dir / audio_library_dir)
+        max_retries = video_config.get("max_retries_per_clip", 3)
+
+        # Initialize cloud render orchestrator if enabled
+        render_orchestrator = None
+        cloud_config = video_config.get("cloud_rendering", {})
+        if cloud_config.get("enabled", False):
+            render_orchestrator = self._create_render_orchestrator(cloud_config)
+
+        try:
+            agent = VideoAgent(
+                output_dir=output_dir,
+                image_generator=None,  # Set via configure_video_image_generator()
+                quality_orchestrator=None,  # Set via configure_video_quality_gates()
+                claude_client=self.claude_client,
+                log_daemon=self.log_daemon,
+                audio_library_dir=audio_library_dir,
+                max_retries_per_clip=max_retries,
+                render_orchestrator=render_orchestrator,
+            )
+            return agent
+
+        except Exception as e:
+            raise SupervisorError(f"Failed to initialize video pipeline: {e}")
+
+    def _create_render_orchestrator(self, cloud_config: dict) -> RenderOrchestrator:
+        """Create a RenderOrchestrator from cloud rendering config.
+
+        Args:
+            cloud_config: The video.cloud_rendering config section
+
+        Returns:
+            Configured RenderOrchestrator instance
+        """
+        # Map config backend string to RenderBackend enum
+        backend_str = cloud_config.get("backend", "local")
+        backend_map = {
+            "local": RenderBackend.LOCAL,
+            "local_mp": RenderBackend.LOCAL_MULTIPROCESS,
+            "aws_lambda": RenderBackend.AWS_LAMBDA,
+            "gcp_cloudrun": RenderBackend.GCP_CLOUD_RUN,
+        }
+        backend = backend_map.get(backend_str)
+        if backend is None:
+            raise SupervisorError(
+                f"Unknown cloud rendering backend: {backend_str}. "
+                f"Valid options: {', '.join(backend_map.keys())}"
+            )
+
+        # Build backend-specific config dict
+        backend_config = {}
+        if backend == RenderBackend.LOCAL_MULTIPROCESS:
+            mp_config = cloud_config.get("local_mp", {})
+            backend_config["max_workers"] = mp_config.get("max_workers")
+
+        elif backend == RenderBackend.AWS_LAMBDA:
+            lambda_config = cloud_config.get("aws_lambda", {})
+            backend_config.update({
+                "function_name": lambda_config.get("function_name"),
+                "s3_bucket": lambda_config.get("s3_bucket"),
+                "s3_prefix": lambda_config.get("s3_prefix", "video-render/"),
+                "aws_region": lambda_config.get("aws_region", "us-east-1"),
+                "lambda_memory_mb": lambda_config.get("lambda_memory_mb", 1024),
+                "lambda_timeout_s": lambda_config.get("lambda_timeout_s", 300),
+            })
+
+        elif backend == RenderBackend.GCP_CLOUD_RUN:
+            gcr_config = cloud_config.get("gcp_cloudrun", {})
+            backend_config.update({
+                "service_url": gcr_config.get("service_url"),
+                "gcs_bucket": gcr_config.get("gcs_bucket"),
+                "gcs_prefix": gcr_config.get("gcs_prefix", "video-render/"),
+                "gcp_project": gcr_config.get("gcp_project"),
+                "gcp_region": gcr_config.get("gcp_region", "us-central1"),
+                "vcpu": gcr_config.get("vcpu", 2),
+                "memory_gib": gcr_config.get("memory_gib", 2),
+                "timeout_s": gcr_config.get("timeout_s", 300),
+            })
+
+        return RenderOrchestrator(
+            backend=backend,
+            backend_config=backend_config,
+            frames_per_chunk=cloud_config.get("frames_per_chunk", 300),
+            max_retries=cloud_config.get("max_retries_per_chunk", 2),
+            log_daemon=self.log_daemon,
+        )
+
+    def _load_plugins(self) -> Optional[PluginLoadResult]:
+        """Discover and load plugins from the configured plugin directory.
+
+        Plugins are loaded after the video pipeline is initialized so that
+        plugin effects and templates can register into the existing registries.
+
+        Returns:
+            PluginLoadResult summarizing what was loaded, or None if disabled
+        """
+        plugin_config = self.config.get("plugins", {})
+        if not plugin_config.get("enabled", False):
+            return None
+
+        plugin_dir = self.base_dir / plugin_config.get("directory", "plugins")
+
+        def plugin_audit_callback(event_type: str, payload: dict):
+            """Bridge plugin audit events to Phase 3 LogDaemon."""
+            self.log_daemon.ingest_event(
+                event_type=event_type,
+                actor="plugins.loader",
+                correlation={"session_id": None, "message_id": None, "task_id": None},
+                payload=payload,
+            )
+
+        loader = PluginLoader(
+            plugin_dir=plugin_dir,
+            audit_callback=plugin_audit_callback,
+        )
+
+        result = loader.load_all()
+
+        plugin_audit_callback("PLUGIN_SCAN_COMPLETED", {
+            "plugin_dir": str(plugin_dir),
+            "effects_loaded": result.effects,
+            "templates_loaded": result.templates,
+            "render_backends_loaded": list(result.render_backends.keys()),
+            "total_loaded": result.total_loaded,
+        })
+
+        return result
+
+    def configure_video_image_generator(self, image_generator) -> None:
+        """Attach an image generator to the video agent.
+
+        Call this after initialization to provide the video pipeline
+        with an AbstractAssetGenerator instance (e.g. FluxImageGenerator).
+
+        Args:
+            image_generator: Instance of AbstractAssetGenerator
+        """
+        if self.video_agent:
+            self.video_agent.image_generator = image_generator
+
+    def configure_video_quality_gates(self, quality_orchestrator) -> None:
+        """Attach a quality gate orchestrator to the video agent.
+
+        Call this after initialization to provide the video pipeline
+        with a QualityGateOrchestrator instance for AI-generated frame validation.
+
+        Args:
+            quality_orchestrator: Instance of QualityGateOrchestrator
+        """
+        if self.video_agent:
+            self.video_agent.quality_orchestrator = quality_orchestrator
+
+    def create_video(self, brief: dict) -> str:
+        """Create a video from a content brief.
+
+        This is the main entry point for video creation. It delegates to the
+        VideoAgent, which handles storyboard generation, timeline construction,
+        image generation, quality gating, and FFmpeg encoding.
+
+        Args:
+            brief: Content brief dict with keys:
+                - concept: str (video concept description)
+                - target_platform: str (instagram_reel, tiktok, youtube_short, etc.)
+                - target_duration_seconds: int
+                - character_ids: list[str] (optional)
+                - narrative_hook: str (optional)
+                - tone: str (optional)
+
+        Returns:
+            Path to the rendered video file (as string)
+
+        Raises:
+            RuntimeError: If video pipeline is not enabled or rendering fails
+        """
+        if self.video_agent is None:
+            raise RuntimeError(
+                "Video pipeline is not enabled. Set video.enabled=true in config/core.yaml"
+            )
+
+        result_path = self.video_agent.create_video(brief=brief)
+        return str(result_path)
+
+    def create_video_from_template(self, template_name: str, inputs: dict) -> str:
+        """Create a video using a registered template.
+
+        Templates provide pre-built visual structures — the user only provides
+        content (images, text, etc.). The template converts inputs to a Timeline
+        which is then rendered via the standard video pipeline.
+
+        Args:
+            template_name: Name of a registered template (e.g. 'instagram_reel_slideshow')
+            inputs: Dict of template-specific inputs (varies by template)
+
+        Returns:
+            Path to the rendered video file (as string)
+
+        Raises:
+            RuntimeError: If video pipeline is not enabled
+            ValueError: If template not found or inputs invalid
+        """
+        if self.video_agent is None:
+            raise RuntimeError(
+                "Video pipeline is not enabled. Set video.enabled=true in config/core.yaml"
+            )
+
+        from connectors.video_pipeline.templates.base import TemplateInput
+        from connectors.video_pipeline.templates.registry import get_template
+
+        # Get template to find its input class
+        template = get_template(template_name)
+
+        # Build the appropriate input model from the dict
+        # Templates define custom input classes; we try to instantiate
+        # from the build_timeline method's type hint or fall back to base
+        input_model = TemplateInput(**inputs)
+
+        result_path = self.video_agent.create_video_from_template(
+            template_name=template_name,
+            inputs=input_model,
+        )
+        return str(result_path)
+
+    def create_video_multi_platform(
+        self,
+        platforms: list[str],
+        brief: Optional[dict] = None,
+        storyboard=None,
+        timeline=None,
+    ) -> dict[str, str]:
+        """Render the same content to multiple platform formats in one run.
+
+        Provide one of: brief (generates storyboard via Claude), storyboard,
+        or timeline. The pipeline adapts resolution, duration, safe zones,
+        and codec per platform.
+
+        Args:
+            platforms: Target platforms (e.g. ["instagram_reel", "tiktok", "youtube_short"])
+            brief: Content brief dict (will generate storyboard first)
+            storyboard: Pre-built Storyboard instance
+            timeline: Pre-built Timeline instance
+
+        Returns:
+            Dict mapping platform name -> output video path (as string)
+
+        Raises:
+            RuntimeError: If video pipeline is not enabled
+            ValueError: If no content source provided
+        """
+        if self.video_agent is None:
+            raise RuntimeError(
+                "Video pipeline is not enabled. Set video.enabled=true in config/core.yaml"
+            )
+
+        result = self.video_agent.create_video_multi_platform(
+            platforms=platforms,
+            brief=brief,
+            storyboard=storyboard,
+            timeline=timeline,
+        )
+
+        # Convert Path values to strings for consistent API
+        return {platform: str(path) for platform, path in result.items()}
+
+    def preview_video_timeline(
+        self,
+        timeline_path: Optional[str] = None,
+        timeline=None,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+        preview_scale: float = 0.5,
+    ):
+        """Launch a real-time browser preview for a video timeline.
+
+        Opens http://{host}:{port} with full timeline playback, frame-by-frame
+        scrubbing, speed control, effect toggles, and resolution scaling.
+
+        Provide either timeline_path (JSON file) or a Timeline instance.
+
+        Args:
+            timeline_path: Path to a Timeline JSON file
+            timeline: Pre-built Timeline instance
+            host: Bind address
+            port: Port number
+            preview_scale: Initial resolution scale (0.25-1.0)
+
+        Raises:
+            RuntimeError: If video pipeline is not enabled
+            ValueError: If neither timeline_path nor timeline provided
+        """
+        if self.video_agent is None:
+            raise RuntimeError(
+                "Video pipeline is not enabled. Set video.enabled=true in config/core.yaml"
+            )
+
+        if timeline is None and timeline_path is not None:
+            import json
+            from connectors.video_pipeline.schemas import Timeline as TimelineModel
+            timeline_data = json.loads(Path(timeline_path).read_text())
+            timeline = TimelineModel.model_validate(timeline_data)
+
+        if timeline is None:
+            raise ValueError("Must provide timeline_path or timeline")
+
+        self.video_agent.preview_timeline(
+            timeline=timeline,
+            host=host,
+            port=port,
+            preview_scale=preview_scale,
+        )
+
+    def list_video_templates(self) -> list[dict]:
+        """List all available video templates with metadata.
+
+        Returns:
+            List of dicts with name, description, supported_platforms, etc.
+        """
+        if self.video_agent is None:
+            return []
+        return self.video_agent.list_available_templates()
+
+    def list_loaded_plugins(self) -> dict:
+        """Return summary of all loaded plugins.
+
+        Returns:
+            Dict with effects, templates, render_backends lists and total count
+        """
+        if self.plugin_result is None:
+            return {"effects": [], "templates": [], "render_backends": [], "total": 0}
+        return {
+            "effects": self.plugin_result.effects,
+            "templates": self.plugin_result.templates,
+            "render_backends": list(self.plugin_result.render_backends.keys()),
+            "total": self.plugin_result.total_loaded,
+        }
 
     def process_envelope(self, envelope: dict) -> dict:
         """Process an envelope through the full pipeline.

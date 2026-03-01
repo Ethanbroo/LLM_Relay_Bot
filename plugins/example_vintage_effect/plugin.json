@@ -1,0 +1,8 @@
+{
+    "name": "vintage_effect",
+    "version": "1.0.0",
+    "type": "effect",
+    "entry_point": "effect.py",
+    "description": "Vintage/retro color grading effect with warm tones and faded blacks",
+    "author": "example"
+}

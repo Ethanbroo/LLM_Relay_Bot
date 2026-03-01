@@ -4,12 +4,21 @@ Phase 6 Invariants:
 - Consensus is numeric and deterministic
 - Model identity does NOT change weights
 - Confidence scores are logged but not used
+
+SIMILARITY_EPSILON guards against floating-point noise at exact threshold
+boundaries.  Applied only to gate decisions (check_consensus, select_proposal
+tie-breaking); NOT applied to compute_consensus_score which is a reporting
+function and must remain exact.
 """
 
+import math
 import numpy as np
 from typing import List, Optional, Tuple
 from orchestration.response_parser import LLMProposal
 from orchestration.errors import ConsensusFailedError
+
+# ±0.0005 guard against floating-point noise at threshold boundaries.
+SIMILARITY_EPSILON: float = 0.0005
 
 
 class ConsensusEngine:
@@ -56,7 +65,10 @@ class ConsensusEngine:
             for j in range(i + 1, n):
                 max_similarity = max(max_similarity, similarity_matrix[i, j])
 
-        return bool(max_similarity >= self.consensus_threshold)
+        # Epsilon guard: treat values within SIMILARITY_EPSILON of the threshold
+        # as meeting it, preventing floating-point noise from causing spurious
+        # failures at the boundary.
+        return bool(max_similarity >= self.consensus_threshold - SIMILARITY_EPSILON)
 
     def select_proposal(
         self,
@@ -97,10 +109,12 @@ class ConsensusEngine:
         # Find max average similarity
         max_avg_sim = max(avg_similarities)
 
-        # Get all proposals with max average similarity (for tie-breaking)
+        # Get all proposals within SIMILARITY_EPSILON of the max (tie-breaking
+        # set).  Use math.isclose rather than bare ==  to avoid floating-point
+        # precision issues causing a tied candidate to be dropped.
         candidates = []
         for i, avg_sim in enumerate(avg_similarities):
-            if avg_sim == max_avg_sim:
+            if math.isclose(avg_sim, max_avg_sim, rel_tol=1e-9, abs_tol=SIMILARITY_EPSILON):
                 candidates.append(proposals[i])
 
         # Tie-break by lexicographic proposal_hash

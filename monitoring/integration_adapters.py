@@ -6,8 +6,9 @@ Phase 7 Invariant: Adapters are read-only and cannot modify phases 2-6.
 import psutil
 import os
 import time
-from typing import Optional, Any
-from dataclasses import dataclass
+from collections import deque
+from typing import Optional, Any, Deque
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -15,6 +16,33 @@ class PhaseMetrics:
     """Container for metrics from a specific phase."""
     phase: str
     metrics: dict
+
+
+class _RateCounter:
+    """Thread-safe sliding-window rate counter (events per minute).
+
+    Keeps a deque of event timestamps. Call record() each time an event
+    occurs; call rate_per_min(now_ms) to get the count in the last 60 s.
+    """
+
+    _WINDOW_MS = 60_000  # 1 minute
+
+    def __init__(self) -> None:
+        self._timestamps: Deque[int] = deque()
+
+    def record(self, now_ms: Optional[int] = None) -> None:
+        """Record one event at the given timestamp (ms). Defaults to now."""
+        ts = now_ms if now_ms is not None else int(time.time() * 1000)
+        self._timestamps.append(ts)
+
+    def rate_per_min(self, now_ms: Optional[int] = None) -> int:
+        """Return the count of events in the last 60 seconds."""
+        now = now_ms if now_ms is not None else int(time.time() * 1000)
+        cutoff = now - self._WINDOW_MS
+        # Trim old entries from the left
+        while self._timestamps and self._timestamps[0] < cutoff:
+            self._timestamps.popleft()
+        return len(self._timestamps)
 
 
 class SystemMetricsAdapter:
@@ -83,29 +111,35 @@ class Phase2Adapter:
         """
         self.task_queue = task_queue
         self.engine = engine
+        self._failures = _RateCounter()
+        self._rollback_failures = _RateCounter()
+
+    def record_failure(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever an execution attempt fails."""
+        self._failures.record(now_ms)
+
+    def record_rollback_failure(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever a rollback fails."""
+        self._rollback_failures.record(now_ms)
 
     def collect(self) -> dict:
-        """Collect Phase 2 metrics.
-
-        Returns:
-            Dict of metric_id -> value
-        """
+        """Collect Phase 2 metrics."""
+        now_ms = int(time.time() * 1000)
         metrics = {}
 
         if self.task_queue is not None:
-            # Queue depth
             metrics["queue.depth"] = self.task_queue.size()
-
-            # Oldest age (stub for now)
-            metrics["queue.oldest_age_ms"] = 0
+            # Oldest pending task age — read from queue's oldest_task_enqueued_at if available
+            oldest_ms = getattr(self.task_queue, "oldest_enqueued_at_ms", None)
+            metrics["queue.oldest_age_ms"] = (now_ms - oldest_ms) if oldest_ms else 0
 
         if self.engine is not None:
-            # Attempts inflight (stub for now)
-            metrics["exec.attempts_inflight"] = 0
+            # Count of attempts currently marked inflight in the engine's state
+            inflight = getattr(self.engine, "inflight_count", None)
+            metrics["exec.attempts_inflight"] = inflight if inflight is not None else 0
 
-        # Per-minute counters (stub - would use ring buffers)
-        metrics["exec.failures_per_min"] = 0
-        metrics["exec.rollback_failures_per_min"] = 0
+        metrics["exec.failures_per_min"] = self._failures.rate_per_min(now_ms)
+        metrics["exec.rollback_failures_per_min"] = self._rollback_failures.rate_per_min(now_ms)
 
         return metrics
 
@@ -120,6 +154,11 @@ class Phase3Adapter:
             log_daemon: LogDaemon instance (optional)
         """
         self.log_daemon = log_daemon
+        self._verify_failures = _RateCounter()
+
+    def record_verify_failure(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever a signature verification failure occurs."""
+        self._verify_failures.record(now_ms)
 
     def collect(self) -> dict:
         """Collect Phase 3 metrics.
@@ -148,8 +187,7 @@ class Phase3Adapter:
             metrics["log.ingest_buffer_depth"] = 0
             metrics["log.last_event_seq"] = 0
 
-        # Per-minute counters (stub)
-        metrics["log.verify_failures_per_min"] = 0
+        metrics["log.verify_failures_per_min"] = self._verify_failures.rate_per_min()
 
         return metrics
 
@@ -164,6 +202,11 @@ class Phase4Adapter:
             coordination: CoordinationPipeline instance (optional)
         """
         self.coordination = coordination
+        self._deadlocks = _RateCounter()
+
+    def record_deadlock(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever a deadlock is detected."""
+        self._deadlocks.record(now_ms)
 
     def collect(self) -> dict:
         """Collect Phase 4 metrics.
@@ -194,8 +237,7 @@ class Phase4Adapter:
             metrics["locks.waiting_count"] = 0
             metrics["approval.pending_count"] = 0
 
-        # Per-minute counters (stub)
-        metrics["deadlock.detected_per_min"] = 0
+        metrics["deadlock.detected_per_min"] = self._deadlocks.rate_per_min()
 
         return metrics
 
@@ -210,22 +252,32 @@ class Phase5Adapter:
             connector_registry: ConnectorRegistry instance (optional)
         """
         self.connector_registry = connector_registry
+        self._calls = _RateCounter()
+        self._failures = _RateCounter()
+        self._idempotency_hits = _RateCounter()
+        self._oversize_rejections = _RateCounter()
+
+    def record_call(self, now_ms: Optional[int] = None) -> None:
+        self._calls.record(now_ms)
+
+    def record_failure(self, now_ms: Optional[int] = None) -> None:
+        self._failures.record(now_ms)
+
+    def record_idempotency_hit(self, now_ms: Optional[int] = None) -> None:
+        self._idempotency_hits.record(now_ms)
+
+    def record_oversize_rejection(self, now_ms: Optional[int] = None) -> None:
+        self._oversize_rejections.record(now_ms)
 
     def collect(self) -> dict:
-        """Collect Phase 5 metrics.
-
-        Returns:
-            Dict of metric_id -> value
-        """
-        metrics = {}
-
-        # Per-minute counters (stub - would track in registry)
-        metrics["conn.calls_per_min"] = 0
-        metrics["conn.failures_per_min"] = 0
-        metrics["conn.idempotency_hits_per_min"] = 0
-        metrics["conn.oversize_rejections_per_min"] = 0
-
-        return metrics
+        """Collect Phase 5 metrics."""
+        now_ms = int(time.time() * 1000)
+        return {
+            "conn.calls_per_min": self._calls.rate_per_min(now_ms),
+            "conn.failures_per_min": self._failures.rate_per_min(now_ms),
+            "conn.idempotency_hits_per_min": self._idempotency_hits.rate_per_min(now_ms),
+            "conn.oversize_rejections_per_min": self._oversize_rejections.rate_per_min(now_ms),
+        }
 
 
 class Phase6Adapter:
@@ -238,6 +290,21 @@ class Phase6Adapter:
             orchestration: OrchestrationPipeline instance (optional)
         """
         self.orchestration = orchestration
+        self._parse_failures = _RateCounter()
+        self._consensus_fallbacks = _RateCounter()
+        self._latency_samples: Deque[float] = deque(maxlen=1000)
+
+    def record_parse_failure(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever an LLM response fails to parse."""
+        self._parse_failures.record(now_ms)
+
+    def record_consensus_fallback(self, now_ms: Optional[int] = None) -> None:
+        """Call this whenever consensus fails and escalation is triggered."""
+        self._consensus_fallbacks.record(now_ms)
+
+    def record_latency(self, latency_ms: float) -> None:
+        """Call this with the round-trip latency for each LLM call."""
+        self._latency_samples.append(latency_ms)
 
     def collect(self) -> dict:
         """Collect Phase 6 metrics.
@@ -245,11 +312,18 @@ class Phase6Adapter:
         Returns:
             Dict of metric_id -> value
         """
+        now_ms = int(time.time() * 1000)
         metrics = {}
 
-        # Per-minute counters (stub)
-        metrics["llm.parse_failures_per_min"] = 0
-        metrics["llm.consensus_fallbacks_per_min"] = 0
-        metrics["llm.latency_p95_ms"] = 0
+        metrics["llm.parse_failures_per_min"] = self._parse_failures.rate_per_min(now_ms)
+        metrics["llm.consensus_fallbacks_per_min"] = self._consensus_fallbacks.rate_per_min(now_ms)
+
+        # p95 latency from recent samples
+        if self._latency_samples:
+            import numpy as np
+            samples = list(self._latency_samples)
+            metrics["llm.latency_p95_ms"] = float(np.percentile(samples, 95))
+        else:
+            metrics["llm.latency_p95_ms"] = 0.0
 
         return metrics

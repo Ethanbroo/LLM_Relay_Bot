@@ -1,6 +1,7 @@
-"""WordPress connector for blog draft creation only.
+"""WordPress connector for blog draft creation and post status reads.
 
-CLOSED WORLD: Only implements wp.post.create_draft, wp.media.upload, wp.post.set_featured_media.
+CLOSED WORLD: Only implements wp.post.create_draft, wp.media.upload,
+wp.post.set_featured_media, wp.post.get_post.
 Publish capability MUST NOT EXIST.
 """
 
@@ -11,7 +12,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 from connectors.base import BaseConnector, ConnectorRequest, ConnectorContext
-from connectors.results import ConnectorResult, RollbackResult, ConnectorStatus, ExecutionArtifact
+from connectors.results import ConnectorResult, RollbackResult, ConnectorStatus, RollbackStatus, VerificationMethod, ExecutionArtifact, ArtifactType
 from connectors.errors import ConnectorError, SecretUnavailableError
 from connectors.blog_errors import BlogError, BlogErrorCode
 from connectors.blog_utils import generate_slug, generate_slug_with_collision_suffix, validate_slug, tokenize
@@ -19,7 +20,8 @@ from connectors.blog_utils import generate_slug, generate_slug_with_collision_su
 
 # HTTP Policy
 HTTP_TIMEOUT_SECONDS = 15
-MAX_RETRIES = 1
+HTTP_MEDIA_UPLOAD_TIMEOUT_SECONDS = 60  # Media uploads can be large; allow longer
+MAX_RETRIES = 2  # Retry once more for transient network issues
 RETRYABLE_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 # WordPress Contract Limits
@@ -29,6 +31,15 @@ CONTENT_MAX_CHARS = 40_000
 EXCERPT_MAX_CHARS = 300
 MAX_TAGS_PER_POST = 12
 MAX_NEW_TAGS_PER_RUN = 5
+
+
+def _resolve_secret(ctx: ConnectorContext, primary: str, fallback: str) -> str:
+    """Resolve secret, trying primary then fallback handle."""
+    try:
+        return ctx.secrets_provider.resolve_string(f"secret:{primary}")
+    except Exception:
+        pass
+    return ctx.secrets_provider.resolve_string(f"secret:{fallback}")
 
 
 @dataclass
@@ -46,6 +57,7 @@ class WordPressConnector(BaseConnector):
     - wp.post.create_draft
     - wp.media.upload
     - wp.post.set_featured_media
+    - wp.post.get_post
 
     Authentication: WordPress Application Password (Basic Auth)
     """
@@ -73,10 +85,10 @@ class WordPressConnector(BaseConnector):
             raise ConnectorError("SecretsProvider required for WordPress connector")
 
         try:
-            # Resolve secrets
-            base_url = ctx.secrets_provider.resolve_string("secret:wp_base_url")
-            username = ctx.secrets_provider.resolve_string("secret:wp_username")
-            app_password = ctx.secrets_provider.resolve_string("secret:wp_app_password")
+            # Resolve secrets (support both wp_* and wordpress_* naming)
+            base_url = _resolve_secret(ctx, "wp_base_url", "wordpress_site_url")
+            username = _resolve_secret(ctx, "wp_username", "wordpress_username")
+            app_password = _resolve_secret(ctx, "wp_app_password", "wordpress_app_password")
 
             # Validate base URL format
             if not base_url.startswith(('http://', 'https://')):
@@ -136,6 +148,8 @@ class WordPressConnector(BaseConnector):
             return self._upload_media(req, payload)
         elif action == "wp.post.set_featured_media":
             return self._set_featured_media(req, payload)
+        elif action == "wp.post.get_post":
+            return self._get_post(req, payload)
         else:
             # CLOSED WORLD: Reject unknown actions
             error = BlogError(
@@ -160,24 +174,28 @@ class WordPressConnector(BaseConnector):
         # Draft operations are safe to leave (won't be published)
         if action == "wp.post.create_draft":
             return RollbackResult(
-                success=True,
-                message="Draft rollback not required (status=draft, unpublished)"
+                rollback_status=RollbackStatus.NOT_APPLICABLE,
+                verification_method=VerificationMethod.NOT_APPLICABLE,
+                notes="Draft rollback not required (status=draft, unpublished)"
             )
         elif action == "wp.media.upload":
             # Media cleanup could be implemented here
             return RollbackResult(
-                success=True,
-                message="Media rollback: uploaded media remains (orphaned if post rolled back)"
+                rollback_status=RollbackStatus.NOT_APPLICABLE,
+                verification_method=VerificationMethod.NOT_APPLICABLE,
+                notes="Media rollback: uploaded media remains (orphaned if post rolled back)"
             )
         elif action == "wp.post.set_featured_media":
             return RollbackResult(
-                success=True,
-                message="Featured media rollback: metadata remains (safe for draft)"
+                rollback_status=RollbackStatus.NOT_APPLICABLE,
+                verification_method=VerificationMethod.NOT_APPLICABLE,
+                notes="Featured media rollback: metadata remains (safe for draft)"
             )
         else:
             return RollbackResult(
-                success=True,
-                message=f"No rollback needed for {action}"
+                rollback_status=RollbackStatus.NOT_APPLICABLE,
+                verification_method=VerificationMethod.NOT_APPLICABLE,
+                notes=f"No rollback needed for {action}"
             )
 
     def disconnect(self) -> None:
@@ -277,7 +295,7 @@ class WordPressConnector(BaseConnector):
 
         if len(slug_matches) == 1:
             # Update existing post
-            return self._update_existing_draft(slug_matches[0], title, content, excerpt, tags, base_slug)
+            return self._update_existing_draft(req, slug_matches[0], title, content, excerpt, tags, base_slug)
         elif len(slug_matches) > 1:
             error = BlogError(
                 code=BlogErrorCode.ERR_NON_UNIQUE_MATCH,
@@ -293,7 +311,7 @@ class WordPressConnector(BaseConnector):
 
         if len(title_matches) == 1:
             # Update existing post
-            return self._update_existing_draft(title_matches[0], title, content, excerpt, tags, base_slug)
+            return self._update_existing_draft(req, title_matches[0], title, content, excerpt, tags, base_slug)
         elif len(title_matches) > 1:
             error = BlogError(
                 code=BlogErrorCode.ERR_NON_UNIQUE_MATCH,
@@ -307,7 +325,52 @@ class WordPressConnector(BaseConnector):
         if isinstance(final_slug, BlogError):
             return self._error_result(final_slug)
 
-        return self._create_new_draft(title, content, excerpt, tags, final_slug)
+        return self._create_new_draft(req, title, content, excerpt, tags, final_slug)
+
+    def _get_post(self, req: ConnectorRequest, payload: Dict) -> ConnectorResult:
+        """Get a single post by ID — returns status and featured_media.
+
+        Payload: {"post_id": 12345}
+        """
+        post_id = payload.get("post_id")
+        if not post_id:
+            error = BlogError(
+                code=BlogErrorCode.ERR_VALIDATION,
+                message="post_id is required for wp.post.get_post",
+                retryable=False,
+            )
+            return self._error_result(error)
+
+        url = f"{self._config.base_url}/wp-json/wp/v2/posts/{post_id}"
+
+        try:
+            response = self._http_get(url)
+            if isinstance(response, BlogError):
+                return self._error_result(response)
+
+            return ConnectorResult(
+                connector_type="wordpress",
+                action=req.action,
+                status=ConnectorStatus.SUCCESS,
+                payload_hash=hashlib.sha256(
+                    req.payload_canonical.encode()
+                ).hexdigest()[:16],
+                response_data=json.dumps({
+                    "post_id": response.get("id"),
+                    "status": response.get("status"),
+                    "featured_media": response.get("featured_media", 0),
+                    "title": response.get("title", {}).get("rendered", ""),
+                    "link": response.get("link", ""),
+                }),
+                verification_method=VerificationMethod.RESPONSE_CODE,
+            )
+        except Exception as e:
+            error = BlogError(
+                code=BlogErrorCode.ERR_HTTP,
+                message=f"Get post failed: {e}",
+                retryable=False,
+            )
+            return self._error_result(error)
 
     def _search_posts_by_slug(self, slug: str) -> List[Dict[str, Any]] | BlogError:
         """Search posts by slug (exact match).
@@ -402,7 +465,7 @@ class WordPressConnector(BaseConnector):
             retryable=False
         )
 
-    def _create_new_draft(self, title: str, content: str, excerpt: str, tags: List[str], slug: str) -> ConnectorResult:
+    def _create_new_draft(self, req: ConnectorRequest, title: str, content: str, excerpt: str, tags: List[str], slug: str) -> ConnectorResult:
         """Create new WordPress draft.
 
         Args:
@@ -440,24 +503,28 @@ class WordPressConnector(BaseConnector):
             post_id = response.get("id")
             post_link = response.get("link", "")
 
+            artifact_data = json.dumps({
+                "post_id": post_id,
+                "title": title,
+                "slug": slug,
+                "status": "draft",
+                "link": post_link,
+                "operation": "create"
+            })
+            artifact_hash = hashlib.sha256(artifact_data.encode()).hexdigest()
+            artifact = ExecutionArtifact(
+                artifact_type=ArtifactType.EXTERNAL_REFERENCE,
+                artifact_hash=artifact_hash,
+                artifact_ref=f"wordpress:draft:{post_id}"
+            )
             return ConnectorResult(
                 status=ConnectorStatus.SUCCESS,
-                message=f"Created WordPress draft: {title}",
-                artifacts=[
-                    ExecutionArtifact(
-                        artifact_type="wordpress_draft",
-                        content_type="application/json",
-                        data=json.dumps({
-                            "post_id": post_id,
-                            "title": title,
-                            "slug": slug,
-                            "status": "draft",
-                            "link": post_link,
-                            "operation": "create"
-                        })
-                    )
-                ],
-                external_effects={"post_id": post_id, "operation": "create"}
+                connector_type="wordpress",
+                idempotency_key=req.idempotency_key,
+                external_transaction_id=str(post_id),
+                artifacts={"wordpress_draft": artifact_hash},
+                side_effect_summary=f"Created WordPress draft: {title}",
+                output_metadata={"post_link": post_link},
             )
         except Exception as e:
             error = BlogError(
@@ -467,7 +534,7 @@ class WordPressConnector(BaseConnector):
             )
             return self._error_result(error)
 
-    def _update_existing_draft(self, post: Dict[str, Any], title: str, content: str, excerpt: str, tags: List[str], slug: str) -> ConnectorResult:
+    def _update_existing_draft(self, req: ConnectorRequest, post: Dict[str, Any], title: str, content: str, excerpt: str, tags: List[str], slug: str) -> ConnectorResult:
         """Update existing WordPress draft.
 
         Args:
@@ -507,24 +574,23 @@ class WordPressConnector(BaseConnector):
 
             post_link = response.get("link", "")
 
+            artifact_data = json.dumps({
+                "post_id": post_id,
+                "title": title,
+                "slug": slug,
+                "status": "draft",
+                "link": post_link,
+                "operation": "update"
+            })
+            artifact_hash = hashlib.sha256(artifact_data.encode()).hexdigest()
             return ConnectorResult(
                 status=ConnectorStatus.SUCCESS,
-                message=f"Updated WordPress draft: {title}",
-                artifacts=[
-                    ExecutionArtifact(
-                        artifact_type="wordpress_draft",
-                        content_type="application/json",
-                        data=json.dumps({
-                            "post_id": post_id,
-                            "title": title,
-                            "slug": slug,
-                            "status": "draft",
-                            "link": post_link,
-                            "operation": "update"
-                        })
-                    )
-                ],
-                external_effects={"post_id": post_id, "operation": "update"}
+                connector_type="wordpress",
+                idempotency_key=req.idempotency_key,
+                external_transaction_id=str(post_id),
+                artifacts={"wordpress_draft": artifact_hash},
+                side_effect_summary=f"Updated WordPress draft: {title}",
+                output_metadata={"post_link": post_link},
             )
         except Exception as e:
             error = BlogError(
@@ -658,21 +724,20 @@ class WordPressConnector(BaseConnector):
             media_id = response.get("id")
             media_url = response.get("source_url", "")
 
+            artifact_data = json.dumps({
+                "media_id": media_id,
+                "filename": filename,
+                "url": media_url
+            })
+            artifact_hash = hashlib.sha256(artifact_data.encode()).hexdigest()
             return ConnectorResult(
                 status=ConnectorStatus.SUCCESS,
-                message=f"Uploaded media: {filename}",
-                artifacts=[
-                    ExecutionArtifact(
-                        artifact_type="wordpress_media",
-                        content_type="application/json",
-                        data=json.dumps({
-                            "media_id": media_id,
-                            "filename": filename,
-                            "url": media_url
-                        })
-                    )
-                ],
-                external_effects={"media_id": media_id}
+                connector_type="wordpress",
+                idempotency_key=req.idempotency_key,
+                external_transaction_id=str(media_id),
+                artifacts={"wordpress_media": artifact_hash},
+                side_effect_summary=f"Uploaded media: {filename}",
+                output_metadata={"media_url": media_url},
             )
         except Exception as e:
             error = BlogError(
@@ -712,20 +777,15 @@ class WordPressConnector(BaseConnector):
             if isinstance(response, BlogError):
                 return self._error_result(response)
 
+            artifact_data = json.dumps({"post_id": post_id, "media_id": media_id})
+            artifact_hash = hashlib.sha256(artifact_data.encode()).hexdigest()
             return ConnectorResult(
                 status=ConnectorStatus.SUCCESS,
-                message=f"Set featured media {media_id} for post {post_id}",
-                artifacts=[
-                    ExecutionArtifact(
-                        artifact_type="wordpress_featured_media",
-                        content_type="application/json",
-                        data=json.dumps({
-                            "post_id": post_id,
-                            "media_id": media_id
-                        })
-                    )
-                ],
-                external_effects={"post_id": post_id, "media_id": media_id}
+                connector_type="wordpress",
+                idempotency_key=req.idempotency_key,
+                external_transaction_id=str(post_id),
+                artifacts={"wordpress_featured_media": artifact_hash},
+                side_effect_summary=f"Set featured media {media_id} for post {post_id}",
             )
         except Exception as e:
             error = BlogError(
@@ -868,6 +928,8 @@ class WordPressConnector(BaseConnector):
     def _http_post_multipart(self, url: str, files: Dict) -> Any | BlogError:
         """HTTP POST multipart/form-data with retry policy.
 
+        Uses longer timeout for media uploads (images can be several MB).
+
         Args:
             url: Request URL
             files: Files dict for multipart upload
@@ -875,17 +937,22 @@ class WordPressConnector(BaseConnector):
         Returns:
             Response JSON or BlogError
         """
+        timeout = HTTP_MEDIA_UPLOAD_TIMEOUT_SECONDS
         for attempt in range(MAX_RETRIES + 1):
             try:
-                # Remove Content-Type header for multipart (requests sets it automatically)
-                headers = dict(self._session.headers)
-                headers.pop('Content-Type', None)
+                # WordPress media upload: use direct requests.post (not session)
+                # to avoid Content-Type conflicts. Only keep essential headers.
+                headers = {
+                    'User-Agent': 'LLM-Relay/1.0',
+                }
 
-                response = self._session.post(
+                # Use direct requests call with explicit auth
+                response = requests.post(
                     url,
                     files=files,
                     headers=headers,
-                    timeout=HTTP_TIMEOUT_SECONDS
+                    auth=self._session.auth,
+                    timeout=timeout
                 )
 
                 # Handle rate limiting
@@ -947,15 +1014,14 @@ class WordPressConnector(BaseConnector):
         Returns:
             ConnectorResult with FAILED status
         """
+        error_data = json.dumps(error.to_dict())
+        error_hash = hashlib.sha256(error_data.encode()).hexdigest()
         return ConnectorResult(
-            status=ConnectorStatus.FAILED,
-            message=error.message,
-            artifacts=[
-                ExecutionArtifact(
-                    artifact_type="blog_error",
-                    content_type="application/json",
-                    data=json.dumps(error.to_dict())
-                )
-            ],
-            external_effects={"error_code": error.code.value, "retryable": error.retryable}
+            status=ConnectorStatus.FAILURE,
+            connector_type="wordpress",
+            idempotency_key="",
+            artifacts={"blog_error": error_hash},
+            side_effect_summary=error.message[:500],
+            error_code=error.code.value,
+            error_message=error.message[:200],
         )

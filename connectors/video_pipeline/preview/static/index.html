@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Pipeline Preview</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Video Preview</h1>
+            <div id="timeline-info">
+                <span id="resolution-label">--</span>
+                <span id="fps-label">--</span>
+                <span id="duration-label">--</span>
+            </div>
+        </header>
+
+        <main>
+            <div id="canvas-container">
+                <canvas id="preview-canvas"></canvas>
+                <div id="loading-overlay" class="hidden">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <div id="controls">
+                <div id="scrubber-row">
+                    <span id="current-time">0:00.000</span>
+                    <input type="range" id="scrubber" min="0" max="0" value="0" step="1">
+                    <span id="total-time">0:00.000</span>
+                </div>
+
+                <div id="transport-row">
+                    <div id="transport-left">
+                        <button id="btn-start" title="Go to start">⏮</button>
+                        <button id="btn-prev" title="Previous frame">◀</button>
+                        <button id="btn-play" title="Play/Pause">▶</button>
+                        <button id="btn-next" title="Next frame">▶</button>
+                        <button id="btn-end" title="Go to end">⏭</button>
+                    </div>
+
+                    <div id="transport-center">
+                        <label>Speed:</label>
+                        <select id="speed-select">
+                            <option value="0.25">0.25x</option>
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                            <option value="4">4x</option>
+                        </select>
+
+                        <label>Scale:</label>
+                        <select id="scale-select">
+                            <option value="0.25">25%</option>
+                            <option value="0.5" selected>50%</option>
+                            <option value="0.75">75%</option>
+                            <option value="1">100%</option>
+                        </select>
+                    </div>
+
+                    <div id="transport-right">
+                        <span id="frame-label">Frame: 0 / 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sidebar">
+                <div id="clips-panel">
+                    <h3>Clips</h3>
+                    <ul id="clip-list"></ul>
+                </div>
+
+                <div id="effects-panel">
+                    <h3>Effects</h3>
+                    <ul id="effect-list"></ul>
+                </div>
+
+                <div id="cache-panel">
+                    <h3>Cache</h3>
+                    <div id="cache-stats">
+                        <div>Size: <span id="cache-size">0</span> / <span id="cache-max">0</span></div>
+                        <div>Hit rate: <span id="cache-hit-rate">0%</span></div>
+                        <div>Memory: <span id="cache-memory">0 MB</span></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/player.js"></script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dev.generate_code/1.0.0",
+  "title": "dev.generate_code action payload",
+  "description": "Structured code-change proposal for the dev.generate_code action type. Schema validation gates execution mechanics, not intent safety — a structurally valid diff may still contain malicious content.",
+  "type": "object",
+  "required": ["diff_entries", "diff_identity_hash", "proposal_hash", "workspace_root"],
+  "additionalProperties": false,
+  "properties": {
+    "diff_entries": {
+      "type": "array",
+      "description": "Ordered list of file changes. Must not exceed 50 entries.",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["file_path", "operation"],
+        "additionalProperties": false,
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Relative path within the workspace root. Stored as-is (not NFC-normalized) for filesystem operations.",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "operation": {
+            "type": "string",
+            "description": "Type of file change.",
+            "enum": ["create", "modify", "delete"]
+          },
+          "content": {
+            "type": "string",
+            "description": "New file content for create/modify operations. Empty string for delete.",
+            "default": ""
+          }
+        }
+      }
+    },
+    "diff_identity_hash": {
+      "type": "string",
+      "description": "canonical_hash of the structured diff (sorted by file_path). Used for structural consensus and replay verification. Separate from proposal_hash.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "proposal_hash": {
+      "type": "string",
+      "description": "SHA-256 of the normalized proposal_text (Layer 1 field, carried for audit correlation).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "workspace_root": {
+      "type": "string",
+      "description": "realpath()-resolved workspace root directory captured at construction time.",
+      "minLength": 1
+    }
+  }
+}

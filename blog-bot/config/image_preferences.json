@@ -1,0 +1,135 @@
+{
+  "last_updated": null,
+  "total_blogs_with_feedback": 0,
+  "cold_start_active": true,
+  "attributes": {
+    "style": {
+      "illustration": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "photo_realistic": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "minimal_line_art": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "editorial_photography": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "watercolor": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "flat_graphic": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      }
+    },
+    "subject": {
+      "people_interacting": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "solo_person": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "urban_scene": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "nature_scene": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "abstract_conceptual": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "objects_symbolic": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      }
+    },
+    "color_tone": {
+      "warm": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "cool": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "muted": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "vibrant": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "monochrome": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "brand_colors": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      }
+    },
+    "composition": {
+      "close_up": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "wide_shot": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "centered_subject": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "environmental": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "overhead": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      },
+      "asymmetric": {
+        "accepted": 0,
+        "total": 0,
+        "rate": 0.5
+      }
+    }
+  }
+}

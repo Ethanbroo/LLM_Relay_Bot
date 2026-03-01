@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1
+# docker/Dockerfile.relay-bot
+#
+# Multi-stage build: dependencies in builder (cached), lean runtime stage.
+# Uses requirements.txt + venv (not Poetry) for simpler Docker caching.
+# Selective COPY — only the code the bot needs, never COPY . .
+# Includes Node.js 20 + Claude Code CLI for VPS mode.
+
+# ─── Stage 1: Builder (dependencies + build tools) ──────────
+FROM python:3.12-slim AS builder
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+# Build dependencies (gcc for C extensions like hiredis, curl for Node.js)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 for Claude Code CLI
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @anthropic-ai/claude-code
+
+# Create venv and install Python dependencies
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# ─── Stage 2: Runtime (clean, minimal) ──────────────────────
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/opt/venv/bin:/usr/local/bin:/usr/bin:$PATH"
+
+# Copy Node.js runtime + Claude Code from builder
+COPY --from=builder /usr/bin/node /usr/bin/node
+COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=builder /usr/local/bin/claude /usr/local/bin/claude
+
+# Copy Python venv from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Create non-root user with UID 1000 (matches compose.yaml user: "1000:1000")
+RUN groupadd --gid 1000 botuser \
+    && useradd --uid 1000 --gid botuser --shell /bin/bash --create-home botuser
+
+# COPY ONLY what the bot needs — never COPY . .
+# This prevents blog-bot/, connectors/, video_pipeline/, etc. from leaking in.
+COPY --chown=botuser:botuser telegram_bot/ ./telegram_bot/
+COPY --chown=botuser:botuser multi_agent_v2/real_claude.py ./multi_agent_v2/real_claude.py
+COPY --chown=botuser:botuser webhook_main.py .
+
+USER botuser
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"
+
+CMD ["python", "webhook_main.py"]

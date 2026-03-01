@@ -1,12 +1,12 @@
-import hashlib
 """Escalation logic for Phase 6.
 
 Phase 6 Invariant: Escalation paths are closed and finite.
 """
 
+import hashlib
 from enum import Enum
 from typing import List, Optional
-from orchestration.response_parser import LLMProposal
+from orchestration.response_parser import LLMProposal, normalize_text
 from orchestration.models import BaseLLMModel
 from orchestration.errors import EscalationRequiredError
 
@@ -113,8 +113,9 @@ class EscalationEngine:
 
     Respond with EXACTLY ONE of these three options."""
 
-
-        return prompt
+        # Normalize the prompt at the escalation input boundary so the task_hash
+        # computed below is deterministic regardless of Unicode encoding of reason.
+        return normalize_text(prompt)
 
     def _parse_escalation_decision(self, response: str) -> EscalationDecision:
         """Parse escalation decision from response.

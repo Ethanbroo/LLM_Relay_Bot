@@ -1,0 +1,97 @@
+# docker-compose.yml — LLM Relay Bot (VPS Deployment)
+#
+# Architecture: Cloudflare (TLS + IPv4→IPv6) → nginx (reverse proxy) → relay-bot
+#
+# Services:
+#   relay-bot:    Telegram webhook bot (FastAPI + python-telegram-bot)
+#   claude-code:  Sandboxed Claude Code CLI execution environment
+#   code-server:  VS Code in browser for live preview / file inspection
+#   nginx:        Reverse proxy (Cloudflare handles TLS)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f relay-bot
+
+services:
+  # ── Telegram Bot (webhook mode) ──────────────────────────────
+  relay-bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.relay-bot
+    container_name: relay-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - BOT_MODE=webhook
+      - PORT=8000
+    volumes:
+      - shared-workspace:/workspace
+    networks:
+      - relay-net
+    depends_on:
+      - claude-code
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+  # ── Claude Code CLI (sandboxed execution) ────────────────────
+  claude-code:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.claude-code
+    container_name: claude-code
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - shared-workspace:/workspace
+    networks:
+      - relay-net
+    # No CMD — relay-bot invokes via docker exec
+    command: ["sleep", "infinity"]
+
+  # ── code-server (VS Code in browser) ─────────────────────────
+  code-server:
+    image: codercom/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
+    volumes:
+      - shared-workspace:/config/workspace
+    networks:
+      - relay-net
+    # Exposed through nginx, not directly
+    expose:
+      - "8443"
+
+  # ── Nginx (reverse proxy — Cloudflare handles TLS) ──────────
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - relay-net
+    depends_on:
+      - relay-bot
+      - code-server
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  shared-workspace:
+    driver: local
+
+networks:
+  relay-net:
+    driver: bridge

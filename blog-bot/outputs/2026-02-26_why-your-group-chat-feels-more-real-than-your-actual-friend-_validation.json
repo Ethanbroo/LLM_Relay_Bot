@@ -1,0 +1,278 @@
+{
+  "title": "Why Your Group Chat Feels More Real Than Your Actual Friend Group",
+  "model_used": "claude-sonnet-4-20250514",
+  "attempt_count": 7,
+  "success": false,
+  "validation": {
+    "overall_pass": false,
+    "fail_count": 1,
+    "warn_count": 0,
+    "checks": [
+      {
+        "name": "Word Count",
+        "status": "PASS",
+        "detail": "1485 words (target: 1500, range: 1275-1800)"
+      },
+      {
+        "name": "METADATA Block",
+        "status": "PASS",
+        "detail": "Found 2 anchor\u2192blog mapping(s)."
+      },
+      {
+        "name": "FC Mention",
+        "status": "PASS",
+        "detail": "Found in 1 sentence(s)."
+      },
+      {
+        "name": "No URLs",
+        "status": "PASS",
+        "detail": "No URLs detected in article body."
+      },
+      {
+        "name": "Header Formatting",
+        "status": "PASS",
+        "detail": "H3: 10, H4: 0 \u2014 formatting correct."
+      },
+      {
+        "name": "Section Completeness",
+        "status": "PASS",
+        "detail": "Found 10 section headers (minimum: 7)."
+      },
+      {
+        "name": "Comma-to-Dash Ratio",
+        "status": "PASS",
+        "detail": "Commas: 48, Dashes: 11, Ratio: 4.4:1 (target: >= 3:1)."
+      },
+      {
+        "name": "Em-Dash Usage",
+        "status": "FAIL",
+        "detail": "Found 11 em-dash(es) (maximum: 3). Em-dashes should only be used for compound words, not clause breaks."
+      },
+      {
+        "name": "Preachy Tone",
+        "status": "PASS",
+        "detail": "No imperative self-help patterns detected."
+      },
+      {
+        "name": "No Structural Labels",
+        "status": "PASS",
+        "detail": "No structural labels found in headers."
+      }
+    ]
+  },
+  "all_attempts": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 1,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 1,
+        "warn_count": 0,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1485 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 10, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 10 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 48, Dashes: 11, Ratio: 4.4:1 (target: >= 3:1)."
+          },
+          {
+            "name": "Em-Dash Usage",
+            "status": "FAIL",
+            "detail": "Found 11 em-dash(es) (maximum: 3). Em-dashes should only be used for compound words, not clause breaks."
+          },
+          {
+            "name": "Preachy Tone",
+            "status": "PASS",
+            "detail": "No imperative self-help patterns detected."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 9650
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 2,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 1,
+        "warn_count": 1,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1520 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "PASS",
+            "detail": "No URLs detected in article body."
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 9, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 9 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 72, Dashes: 10, Ratio: 7.2:1 (target: >= 3:1)."
+          },
+          {
+            "name": "Em-Dash Usage",
+            "status": "FAIL",
+            "detail": "Found 10 em-dash(es) (maximum: 3). Em-dashes should only be used for compound words, not clause breaks."
+          },
+          {
+            "name": "Preachy Tone",
+            "status": "WARN",
+            "detail": "Found 2 preachy pattern(s): Recognize that different relationships serve different needs.; Accept that building adult friendships requires more intentional effort than it ..."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "PASS",
+            "detail": "No structural labels found in headers."
+          }
+        ]
+      },
+      "output_length": 10285
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "attempt": 3,
+      "validation": {
+        "overall_pass": false,
+        "fail_count": 2,
+        "warn_count": 1,
+        "checks": [
+          {
+            "name": "Word Count",
+            "status": "PASS",
+            "detail": "1512 words (target: 1500, range: 1275-1800)"
+          },
+          {
+            "name": "METADATA Block",
+            "status": "PASS",
+            "detail": "Found 2 anchor\u2192blog mapping(s)."
+          },
+          {
+            "name": "FC Mention",
+            "status": "PASS",
+            "detail": "Found in 1 sentence(s)."
+          },
+          {
+            "name": "No URLs",
+            "status": "FAIL",
+            "detail": "Found 2 URL pattern(s) in article body: ['https://', 'friendlyconnections.services']"
+          },
+          {
+            "name": "Header Formatting",
+            "status": "PASS",
+            "detail": "H3: 8, H4: 0 \u2014 formatting correct."
+          },
+          {
+            "name": "Section Completeness",
+            "status": "PASS",
+            "detail": "Found 8 section headers (minimum: 7)."
+          },
+          {
+            "name": "Comma-to-Dash Ratio",
+            "status": "PASS",
+            "detail": "Commas: 72, Dashes: 0, Ratio: inf (target: >= 3:1)."
+          },
+          {
+            "name": "Em-Dash Usage",
+            "status": "PASS",
+            "detail": "Found 0 em-dash(es) (maximum: 3)."
+          },
+          {
+            "name": "Preachy Tone",
+            "status": "WARN",
+            "detail": "Found 1 preachy pattern(s): Try to recreate this in physical spaces by being available for the unscheduled m..."
+          },
+          {
+            "name": "No Structural Labels",
+            "status": "FAIL",
+            "detail": "Found 1 structural label(s) in headers: 'The Complication Nobody Talks About' contains 'complication'"
+          }
+        ]
+      },
+      "output_length": 10030
+    },
+    {
+      "model": "gpt-4o",
+      "attempt": 1,
+      "error": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
+    },
+    {
+      "model": "gpt-4o",
+      "attempt": 2,
+      "error": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
+    },
+    {
+      "model": "deepseek-chat",
+      "attempt": 1,
+      "error": "No DeepSeek API key (DEEPSEEK_API_KEY)."
+    },
+    {
+      "model": "deepseek-chat",
+      "attempt": 2,
+      "error": "No DeepSeek API key (DEEPSEEK_API_KEY)."
+    }
+  ],
+  "config": {
+    "topic": "Digital connection vs real connection \u2014 where the line blurs",
+    "word_count": 1500,
+    "fc_angle": "Reference Friendly Connections when comparing different ways adults try to make friends \u2014 apps, meetups, classes, coworking \u2014 noting it as the curated, low-pressure alternative.",
+    "override_dedup": false
+  },
+  "generated_at": "2026-02-26T21:30:30.126306"
+}

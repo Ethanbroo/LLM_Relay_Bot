@@ -1,0 +1,46 @@
+{
+  "character_id": "solana_v1",
+  "display_name": "Solana",
+  "identity_anchor": {
+    "face_description": "youthful round face with soft jawline, large wide-set warm amber-brown doe eyes, naturally arched eyebrows, small delicate nose, full lips with a defined cupid bow, high cheekbones, youthful 18 year old appearance",
+    "body_description": "curvy hourglass figure 5 foot 7, full bust, round hips, narrow waist, toned legs, graceful posture, long neck",
+    "hair_description": "dark espresso brown hair with subtle warm auburn highlights, long layered cut falling past shoulders, natural soft waves, slight volume at roots, wispy face-framing layers",
+    "skin_description": "warm golden-tan complexion, smooth with natural skin texture visible, faint sun freckles across nose bridge and upper cheeks in outdoor light, healthy natural glow without heavy makeup look",
+    "distinctive_marks": [
+      "small beauty mark on left cheekbone near outer eye corner",
+      "faint sun freckles across nose bridge"
+    ]
+  },
+  "style_dna": {
+    "photography_style": "editorial lifestyle with cinematic quality, natural light dominant, slight warm color grade, shallow depth of field for portraits, mix of candid moments and intentional compositions, film-like grain on moody shots",
+    "color_palette": "warm earth tones as foundation \u2014 terracotta, honey gold, cream, warm sand \u2014 accented with deep teal and burnt sienna. Avoid primary colors, neon, and cool blue-grey tones. Golden hour warmth as the signature look.",
+    "composition_tendency": "rule of thirds with subject slightly off-center, environmental context visible to tell a story, mix of close-up portraits and full environmental wide shots, leading lines and natural framing with doorways and architecture",
+    "lighting_preference": "golden hour is the signature \u2014 warm directional light with long shadows. Also uses soft overcast natural light, indoor window light with gentle shadows, cafe ambient warm lighting. Avoids harsh midday sun and studio flash.",
+    "wardrobe_style": "elevated casual with Mediterranean influence \u2014 linen, cotton, neutral tones. Earth-toned basics with occasional deep teal or burnt orange accent pieces. Minimal jewelry \u2014 thin gold chain, small hoop earrings. No logos, no fast fashion. Lived-in texture, not pristine.",
+    "environment_range": [
+      "sun-drenched Mediterranean cafe terrace",
+      "coastal cliffside golden hour",
+      "warm-toned city street with architecture",
+      "cozy indoor window seat with plants",
+      "outdoor market with warm string lights",
+      "rooftop at sunset",
+      "beach boardwalk golden light",
+      "art gallery or bookshop interior"
+    ]
+  },
+  "lora_model_path": null,
+  "lora_model_hash": null,
+  "lora_trigger_word": "SOLANA_V1",
+  "lora_base_model": "black-forest-labs/FLUX.1-dev",
+  "lora_provider": "fal.ai",
+  "lora_version_string": null,
+  "heygen_avatar_id": null,
+  "heygen_training_video_path": null,
+  "voice_id": null,
+  "face_embedding_path": null,
+  "embedding_model": "buffalo_l",
+  "created_at": "2026-02-26T03:42:45.585558",
+  "version": 1,
+  "disclosure_label_required": true,
+  "character_hash": "6592a9f25d08bab1ef68505ca3bb0df8de4007935f95ca1044d649342d72d9db"
+}

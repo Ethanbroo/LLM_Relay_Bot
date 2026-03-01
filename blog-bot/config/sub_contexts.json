@@ -1,0 +1,133 @@
+{
+  "contexts": [
+    {
+      "id": "seasonal_jan",
+      "category": "seasonal",
+      "text": "It's January \u2014 New Year's resolutions about being more social are already crumbling.",
+      "applicable_months": [
+        1,
+        2
+      ],
+      "last_used": "2026-02-27T18:01:29.356909",
+      "use_count": 3
+    },
+    {
+      "id": "seasonal_summer",
+      "category": "seasonal",
+      "text": "Summer in Ontario means patios, festivals, and the unique loneliness of watching everyone else seem to have plans.",
+      "applicable_months": [
+        6,
+        7,
+        8
+      ],
+      "last_used": null,
+      "use_count": 0
+    },
+    {
+      "id": "seasonal_holidays",
+      "category": "seasonal",
+      "text": "The holidays amplify loneliness \u2014 this is peak season for people re-evaluating their social lives.",
+      "applicable_months": [
+        11,
+        12
+      ],
+      "last_used": null,
+      "use_count": 0
+    },
+    {
+      "id": "seasonal_spring",
+      "category": "seasonal",
+      "text": "Spring in Ontario brings that restless energy where everyone suddenly wants to 'get out more,' but nobody knows where to start.",
+      "applicable_months": [
+        3,
+        4,
+        5
+      ],
+      "last_used": null,
+      "use_count": 0
+    },
+    {
+      "id": "seasonal_fall",
+      "category": "seasonal",
+      "text": "Fall is when the social calendar resets \u2014 summer plans evaporate, and the long indoor months start feeling inevitable.",
+      "applicable_months": [
+        9,
+        10
+      ],
+      "last_used": null,
+      "use_count": 0
+    },
+    {
+      "id": "local_kw_tech",
+      "category": "local",
+      "text": "Kitchener-Waterloo's tech scene has created a wave of young transplants who don't know anyone.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T18:30:31.138964",
+      "use_count": 3
+    },
+    {
+      "id": "local_toronto_density",
+      "category": "local",
+      "text": "Toronto's density creates an illusion of social abundance that makes actual connection harder.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T19:53:57.976918",
+      "use_count": 3
+    },
+    {
+      "id": "local_ontario_winters",
+      "category": "local",
+      "text": "Ontario's long winters create seasonal isolation patterns that compound existing loneliness.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T19:56:46.947613",
+      "use_count": 3
+    },
+    {
+      "id": "cultural_remote_work",
+      "category": "cultural",
+      "text": "Remote work is now the default for many, and water-cooler friendships have disappeared with it.",
+      "applicable_months": null,
+      "last_used": "2026-02-28T17:03:26.833692",
+      "use_count": 3
+    },
+    {
+      "id": "cultural_loneliness_epidemic",
+      "category": "cultural",
+      "text": "The Surgeon General called loneliness an epidemic \u2014 so why does nobody talk about it casually?",
+      "applicable_months": null,
+      "last_used": "2026-02-26T21:57:36.608968",
+      "use_count": 2
+    },
+    {
+      "id": "cultural_gen_z",
+      "category": "cultural",
+      "text": "Gen Z is the first generation to grow up with friendship mediated by algorithms.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T16:53:59.649914",
+      "use_count": 2
+    },
+    {
+      "id": "demo_late_20s",
+      "category": "demographic",
+      "text": "Angle this toward someone in their late 20s who just realized their college friend group has quietly dissolved.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T19:27:30.274412",
+      "use_count": 3
+    },
+    {
+      "id": "demo_new_city",
+      "category": "demographic",
+      "text": "Write for someone who moved cities for a job and has been 'meaning to put themselves out there' for six months.",
+      "applicable_months": null,
+      "last_used": "2026-02-26T21:31:21.071726",
+      "use_count": 2
+    },
+    {
+      "id": "demo_work_only",
+      "category": "demographic",
+      "text": "Target someone who's socially functional at work but has zero close friends outside of it.",
+      "applicable_months": null,
+      "last_used": "2026-02-27T17:09:44.060267",
+      "use_count": 2
+    }
+  ]
+}

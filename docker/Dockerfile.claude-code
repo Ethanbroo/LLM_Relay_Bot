@@ -1,0 +1,21 @@
+# docker/Dockerfile.claude-code
+#
+# Sandboxed Claude Code CLI execution environment.
+# Node 20 LTS (not 22) — officially supported by Claude Code CLI.
+# No ENTRYPOINT/CMD — relay-bot invokes via docker exec.
+
+FROM node:20-alpine AS claude-builder
+RUN npm install -g @anthropic-ai/claude-code
+
+FROM node:20-alpine
+RUN apk add --no-cache python3 py3-pip git curl bash jq
+
+# Copy Claude Code CLI from builder
+COPY --from=claude-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=claude-builder /usr/local/bin/claude /usr/local/bin/claude
+
+# Create non-root user with UID 1000 (matches shared-workspace ownership)
+RUN adduser -D -u 1000 claude
+
+USER claude
+WORKDIR /workspace
