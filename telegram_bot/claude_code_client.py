@@ -54,7 +54,10 @@ class ClaudeCodeClient:
         # os.environ.copy() is critical: passing a partial env= dict to
         # create_subprocess_exec REPLACES the entire environment.
         self._env = os.environ.copy()
-        if session_token:
+        if session_token and session_token != "api-key-auth":
+            # Real OAuth token (Max subscription) — set explicitly.
+            # When session_token is "api-key-auth", the CLI authenticates
+            # via ANTHROPIC_API_KEY already present in the inherited env.
             self._env["CLAUDE_CODE_OAUTH_TOKEN"] = session_token
 
     async def classify(self, prompt: str, model: str) -> str:
