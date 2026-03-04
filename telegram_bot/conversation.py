@@ -125,6 +125,16 @@ def create_conversation_handler(persistent: bool = True) -> ConversationHandler:
                     build.handle_execution_control,
                     pattern=r"^exec_",
                 ),
+                # Continue build button appears after pipeline hits a limit
+                CallbackQueryHandler(
+                    build.handle_continue_build,
+                    pattern=r"^cont_",
+                ),
+                # Delivery buttons may appear when pipeline completes in background
+                CallbackQueryHandler(
+                    build.handle_delivery_action,
+                    pattern=r"^dlvr_",
+                ),
                 # Allow new messages even during execution (they queue)
                 MessageHandler(
                     filters.TEXT & ~filters.COMMAND,
@@ -168,6 +178,17 @@ def create_conversation_handler(persistent: bool = True) -> ConversationHandler:
                 CallbackQueryHandler(
                     edit.handle_quick_fix_decision,
                     pattern=r"^qfix_",
+                ),
+            ],
+            BotState.AWAITING_CONTINUE_BUILD: [
+                CallbackQueryHandler(
+                    build.handle_continue_build,
+                    pattern=r"^cont_",
+                ),
+                # Allow new messages while waiting for continue decision
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    restricted(start.handle_freeform_message),
                 ),
             ],
 

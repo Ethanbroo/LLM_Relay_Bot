@@ -55,3 +55,4 @@ class BotState(IntEnum):
     # --- Group 4: Delivery ---
     AWAITING_DELIVERY_ACTION = 40         # Build complete, delivery options shown
     AWAITING_QUICK_FIX_CONFIRM = 41       # Quick fix applied, confirm or retry
+    AWAITING_CONTINUE_BUILD = 42          # Build hit limit, user can continue

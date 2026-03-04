@@ -16,7 +16,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from telegram_bot.keyboards.anchor import anchor_approval_keyboard
@@ -334,6 +334,65 @@ async def _handle_pipeline_complete(
 ) -> None:
     """Called when the pipeline finishes. Sends structured delivery message."""
     if not result.success:
+        # Check if this is a recoverable limit (budget, context overflow, max turns)
+        # vs a hard failure (auth error, crash)
+        error_lower = (result.error_message or "").lower()
+        is_recoverable = any(kw in error_lower for kw in [
+            "budget exceeded", "context overflow", "max turns",
+            "token limit", "forcing handoff",
+        ])
+
+        if is_recoverable and result.session_id:
+            # Save session so Continue can resume it
+            context.user_data["last_session_id"] = result.session_id
+            context.user_data["last_project"] = result.project_name
+            context.user_data["continue_reason"] = result.error_message
+
+            session_manager = context.bot_data.get("session_manager")
+            if session_manager:
+                from telegram_bot.session_manager import SessionRecord
+                max_phase = max(
+                    (pr.phase_number for pr in result.phase_results), default=0
+                )
+                await session_manager.save(SessionRecord(
+                    session_id=result.session_id,
+                    project_name=result.project_name,
+                    semantic_anchor=result.anchor,
+                    file_manifest=result.files_created,
+                    total_tokens=result.total_tokens,
+                    cost_usd=result.cost_usd,
+                    phase_reached=max_phase,
+                    handoff_written=True,
+                ))
+
+            # Build progress summary for user
+            phases_done = sum(1 for pr in result.phase_results if pr.success)
+            total_phases = len(result.phase_results)
+
+            continue_kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "\u25b6\ufe0f Continue Build",
+                    callback_data="cont_resume",
+                ),
+                InlineKeyboardButton(
+                    "\u23f9 Stop",
+                    callback_data="cont_stop",
+                ),
+            ]])
+
+            await reporter.finish(
+                f"\u26a0\ufe0f Build paused: {result.project_name}\n\n"
+                f"Reason: {result.error_message}\n\n"
+                f"Progress: {phases_done}/{total_phases} phases completed\n"
+                f"Tokens used: {result.total_tokens:,}\n"
+                f"Cost so far: ${result.cost_usd:.4f}\n"
+                f"Session: {result.session_id[:8]}...\n\n"
+                "The build can continue from where it left off. "
+                "All files and context are preserved.",
+                keyboard=continue_kb,
+            )
+            return
+
         await reporter.finish(
             f"\u274c Build failed: {result.project_name}\n\n"
             f"{result.error_message}"
@@ -699,3 +758,74 @@ async def handle_delivery_action(
         return BotState.AWAITING_DELIVERY_ACTION
 
     return BotState.AWAITING_DELIVERY_ACTION
+
+
+# --- Continue Build (resume after hitting limits) ---
+
+
+async def handle_continue_build(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle the Continue Build / Stop buttons after a build hits a limit."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "cont_stop":
+        await query.edit_message_text(
+            "\u23f9 Build stopped. You can resume later by sending an edit request "
+            "for this project."
+        )
+        return BotState.IDLE
+
+    if query.data == "cont_resume":
+        session_id = context.user_data.get("last_session_id")
+        project_name = context.user_data.get("last_project", "Build")
+
+        if not session_id:
+            await query.edit_message_text(
+                "\u274c No session to resume. Please start a new build."
+            )
+            return BotState.IDLE
+
+        await query.edit_message_text(
+            f"\u25b6\ufe0f Continuing build: {project_name}\n"
+            f"Resuming session {session_id[:8]}..."
+        )
+
+        chat_id = update.effective_chat.id
+        reporter = ProgressReporter(chat_id=chat_id, context=context)
+        await reporter.start(f"Continuing: {project_name[:30]}")
+
+        async def on_progress(phase: str, pct: float, detail: str):
+            reporter.progress.current_phase = phase
+            reporter.progress.phase_number = int(pct * 9)
+            reporter.progress.total_phases = 9
+            await reporter.update()
+
+        adapter: PipelineAdapter = context.bot_data["pipeline_adapter"]
+
+        async def _run_continuation():
+            try:
+                # Use run_build with existing_session_id to resume.
+                # The HANDOFF.md written by the previous run gives the CLI
+                # full context of what was done and what remains.
+                result = await adapter.run_build(
+                    user_prompt=(
+                        "Continue the build from where it left off. "
+                        "Read HANDOFF.md for context on what was completed "
+                        "and what still needs to be done. Complete all "
+                        "remaining phases."
+                    ),
+                    project_name=project_name,
+                    on_progress=on_progress,
+                    existing_session_id=session_id,
+                )
+                await _handle_pipeline_complete(chat_id, context, result, reporter)
+            except Exception as e:
+                logger.error("Continue build failed: %s", e, exc_info=True)
+                await reporter.finish(f"\u274c Continue failed: {e}")
+
+        context.user_data["pipeline_task"] = asyncio.create_task(_run_continuation())
+        return BotState.EXECUTING
+
+    return BotState.AWAITING_CONTINUE_BUILD
