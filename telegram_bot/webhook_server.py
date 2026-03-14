@@ -3,7 +3,7 @@ FastAPI webhook server for VPS deployment.
 
 Separated from bot.py for clean concern boundaries:
   - bot.py handles python-telegram-bot setup
-  - webhook_server.py handles FastAPI + webhook endpoint
+  - webhook_server.py handles FastAPI + webhook endpoint + Mini App API
 
 They share the PTB Application instance.
 """
@@ -11,8 +11,10 @@ They share the PTB Application instance.
 import logging
 from contextlib import asynccontextmanager
 from http import HTTPStatus
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
+from fastapi.staticfiles import StaticFiles
 from telegram import Update
 from telegram.ext import Application
 
@@ -70,5 +72,20 @@ def create_webhook_app(ptb_app: Application, config: BotConfig) -> FastAPI:
             "redis": "connected" if redis_ok else "disconnected",
             "mode": "vps" if ptb_app.bot_data["config"].is_vps_mode else "local",
         }
+
+    # --- Mini App API ---
+    from telegram_bot.webapp_api import create_webapp_router
+    webapp_router = create_webapp_router(ptb_app)
+    fastapi_app.include_router(webapp_router)
+
+    # --- Mini App static files ---
+    webapp_dir = Path(__file__).resolve().parent.parent / "webapp"
+    if webapp_dir.is_dir():
+        fastapi_app.mount(
+            "/webapp",
+            StaticFiles(directory=str(webapp_dir), html=True),
+            name="webapp",
+        )
+        logger.info("Mini App static files mounted from %s", webapp_dir)
 
     return fastapi_app
