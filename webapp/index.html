@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Relay Bot</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #000000);
+    --hint: var(--tg-theme-hint-color, #999999);
+    --link: var(--tg-theme-link-color, #2678b6);
+    --button: var(--tg-theme-button-color, #2678b6);
+    --button-text: var(--tg-theme-button-text-color, #ffffff);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    --user-bubble: var(--tg-theme-button-color, #2678b6);
+    --bot-bubble: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 12px 16px;
+    background: var(--secondary-bg);
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .header-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #34c759;
+    flex-shrink: 0;
+  }
+
+  .header-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .header-subtitle {
+    font-size: 12px;
+    color: var(--hint);
+    margin-left: auto;
+  }
+
+  .settings-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--hint);
+    cursor: pointer;
+    padding: 2px 4px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  /* Chat area */
+  .chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .message {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 15px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+  }
+
+  .message.user {
+    align-self: flex-end;
+    background: var(--user-bubble);
+    color: var(--button-text);
+    border-bottom-right-radius: 4px;
+  }
+
+  .message.bot {
+    align-self: flex-start;
+    background: var(--bot-bubble);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+
+  .message .intent-tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: rgba(128, 128, 128, 0.15);
+    color: var(--hint);
+    margin-bottom: 6px;
+  }
+
+  .message .bot-text {
+    display: block;
+  }
+
+  /* Typing indicator */
+  .typing {
+    align-self: flex-start;
+    padding: 12px 18px;
+    background: var(--bot-bubble);
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+    display: none;
+  }
+
+  .typing.visible { display: flex; gap: 4px; }
+
+  .typing span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--hint);
+    animation: bounce 1.4s infinite ease-in-out;
+  }
+
+  .typing span:nth-child(1) { animation-delay: 0s; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Welcome message */
+  .welcome {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--hint);
+  }
+
+  .welcome h2 {
+    font-size: 18px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .welcome p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Input area */
+  .input-area {
+    padding: 8px 12px;
+    background: var(--secondary-bg);
+    border-top: 1px solid rgba(128, 128, 128, 0.15);
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+
+  .input-area textarea {
+    flex: 1;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 20px;
+    padding: 10px 16px;
+    font-size: 15px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--text);
+    resize: none;
+    outline: none;
+    max-height: 120px;
+    min-height: 40px;
+    line-height: 1.4;
+  }
+
+  .input-area textarea::placeholder { color: var(--hint); }
+
+  .input-area button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s;
+  }
+
+  .input-area button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* Error toast */
+  .error-toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ff3b30;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+    z-index: 100;
+    animation: fadeIn 0.2s;
+  }
+
+  .error-toast.visible { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Settings panel */
+  .settings-panel {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .settings-panel.visible { display: flex; }
+
+  .settings-header {
+    padding: 14px 16px;
+    background: var(--secondary-bg);
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 16px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--hint);
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  .settings-body {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .settings-section {
+    margin-bottom: 24px;
+  }
+
+  .settings-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--hint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .tier-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tier-btn {
+    display: block;
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid rgba(128, 128, 128, 0.2);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .tier-btn strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .tier-btn small {
+    display: block;
+    font-size: 12px;
+    color: var(--hint);
+    line-height: 1.4;
+  }
+
+  .tier-btn.active {
+    border-color: var(--button);
+    background: rgba(38, 120, 182, 0.06);
+  }
+
+  /* Credential list */
+  .credential-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--secondary-bg);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    gap: 10px;
+  }
+
+  .credential-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .credential-domain {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .credential-user {
+    font-size: 12px;
+    color: var(--hint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .credential-delete {
+    background: none;
+    border: none;
+    color: #ff3b30;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    flex-shrink: 0;
+  }
+
+  .no-credentials {
+    text-align: center;
+    padding: 16px;
+    color: var(--hint);
+    font-size: 13px;
+  }
+
+  .add-cred-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    border: 2px dashed rgba(128, 128, 128, 0.3);
+    border-radius: 10px;
+    background: none;
+    color: var(--button);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  /* Add credential form */
+  .cred-form-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+  }
+
+  .cred-form-overlay.visible { display: flex; }
+
+  .form-body {
+    padding: 20px 16px;
+    flex: 1;
+  }
+
+  .form-body label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--hint);
+    margin-bottom: 16px;
+  }
+
+  .form-body input {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 14px;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+  }
+
+  .form-body input:focus {
+    border-color: var(--button);
+  }
+
+  .save-cred-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  .save-cred-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-dot"></div>
+  <div class="header-title">Relay Bot</div>
+  <div class="header-subtitle" id="statusText">Ready</div>
+  <button class="settings-btn" id="settingsBtn" aria-label="Settings">&#9881;</button>
+</div>
+
+<div class="chat" id="chat">
+  <div class="welcome" id="welcome">
+    <h2>Relay Bot</h2>
+    <p>Just type what you need in plain English.<br>
+    Build code, browse the web, research,<br>
+    or just chat.</p>
+  </div>
+</div>
+
+<div class="typing" id="typing">
+  <span></span><span></span><span></span>
+</div>
+
+<div class="error-toast" id="errorToast"></div>
+
+<div class="input-area">
+  <textarea id="input" placeholder="Type a message..." rows="1"></textarea>
+  <button id="sendBtn" aria-label="Send">&#9654;</button>
+</div>
+
+<!-- Settings Panel -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-header">
+    <span>Settings</span>
+    <button class="close-btn" id="closeSettings">&times;</button>
+  </div>
+  <div class="settings-body">
+    <div class="settings-section">
+      <h3>Safety Level</h3>
+      <div class="tier-buttons">
+        <button class="tier-btn" data-tier="SUPER_SAFE" id="tierSuperSafe">
+          <strong>Super Safe</strong>
+          <small>You stay in full control. The bot asks before every action and never stores your personal data.</small>
+        </button>
+        <button class="tier-btn" data-tier="MODERATELY_SAFE" id="tierModSafe">
+          <strong>Moderately Safe</strong>
+          <small>Save credentials for faster access. The bot still asks permission each time it uses your data.</small>
+        </button>
+      </div>
+    </div>
+    <div class="settings-section" id="credentialSection" style="display:none;">
+      <h3>Saved Credentials</h3>
+      <div id="credentialList"></div>
+      <button class="add-cred-btn" id="addCredBtn">+ Add Credential</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Credential Form -->
+<div class="cred-form-overlay" id="credFormOverlay">
+  <div class="settings-header">
+    <span>Add Credential</span>
+    <button class="close-btn" id="closeCredForm">&times;</button>
+  </div>
+  <div class="form-body">
+    <label>Website URL
+      <input type="url" id="credDomain" placeholder="https://example.com">
+    </label>
+    <label>Username / Email
+      <input type="text" id="credUsername" placeholder="user@example.com">
+    </label>
+    <label>Password
+      <input type="password" id="credPassword" placeholder="Password">
+    </label>
+    <button class="save-cred-btn" id="saveCredBtn">Save Credential</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const typing = document.getElementById('typing');
+  const welcome = document.getElementById('welcome');
+  const statusText = document.getElementById('statusText');
+  const errorToast = document.getElementById('errorToast');
+
+  let sending = false;
+
+  function getInitData() {
+    return tg ? tg.initData : '';
+  }
+
+  // Auto-resize textarea
+  input.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  // Send on Enter (Shift+Enter for newline)
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  function addMessage(text, sender, intentTag) {
+    if (welcome.parentNode) welcome.remove();
+
+    const div = document.createElement('div');
+    div.className = 'message ' + sender;
+
+    if (sender === 'bot' && intentTag) {
+      const tag = document.createElement('span');
+      tag.className = 'intent-tag';
+      tag.textContent = intentTag;
+      div.appendChild(tag);
+    }
+
+    const span = document.createElement('span');
+    span.className = sender + '-text';
+    span.textContent = text;
+    div.appendChild(span);
+
+    chat.appendChild(div);
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(function() {
+      chat.scrollTop = chat.scrollHeight;
+    });
+  }
+
+  function showTyping() {
+    typing.classList.add('visible');
+    chat.appendChild(typing);
+    scrollToBottom();
+  }
+
+  function hideTyping() {
+    typing.classList.remove('visible');
+  }
+
+  function showError(msg) {
+    errorToast.textContent = msg;
+    errorToast.classList.add('visible');
+    setTimeout(function() {
+      errorToast.classList.remove('visible');
+    }, 4000);
+  }
+
+  function formatIntent(intent) {
+    if (!intent) return '';
+    return intent.replace(/_/g, ' ').toLowerCase()
+      .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || sending) return;
+
+    sending = true;
+    sendBtn.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+
+    addMessage(text, 'user');
+    showTyping();
+    statusText.textContent = 'Thinking...';
+
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, init_data: getInitData() }),
+      });
+
+      hideTyping();
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'Request failed (' + resp.status + ')');
+      }
+
+      const data = await resp.json();
+      const intentLabel = formatIntent(data.intent);
+      addMessage(data.response, 'bot', intentLabel);
+
+      if (data.task_id) {
+        addMessage('Task started. You can monitor progress in the Telegram chat.', 'bot');
+      }
+
+      statusText.textContent = 'Ready';
+    } catch (e) {
+      hideTyping();
+      showError(e.message || 'Something went wrong');
+      statusText.textContent = 'Ready';
+    } finally {
+      sending = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ── Settings ───────────────────────────────────────────
+
+  const settingsPanel = document.getElementById('settingsPanel');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const closeSettings = document.getElementById('closeSettings');
+  const tierSuperSafe = document.getElementById('tierSuperSafe');
+  const tierModSafe = document.getElementById('tierModSafe');
+  const credentialSection = document.getElementById('credentialSection');
+  const credentialList = document.getElementById('credentialList');
+  const addCredBtn = document.getElementById('addCredBtn');
+  const credFormOverlay = document.getElementById('credFormOverlay');
+  const closeCredForm = document.getElementById('closeCredForm');
+  const saveCredBtn = document.getElementById('saveCredBtn');
+  const credDomain = document.getElementById('credDomain');
+  const credUsername = document.getElementById('credUsername');
+  const credPassword = document.getElementById('credPassword');
+
+  let currentTier = 'SUPER_SAFE';
+
+  settingsBtn.addEventListener('click', openSettings);
+  closeSettings.addEventListener('click', function() {
+    settingsPanel.classList.remove('visible');
+  });
+
+  tierSuperSafe.addEventListener('click', function() { setTier('SUPER_SAFE'); });
+  tierModSafe.addEventListener('click', function() { setTier('MODERATELY_SAFE'); });
+
+  addCredBtn.addEventListener('click', function() {
+    credDomain.value = '';
+    credUsername.value = '';
+    credPassword.value = '';
+    credFormOverlay.classList.add('visible');
+    credDomain.focus();
+  });
+
+  closeCredForm.addEventListener('click', function() {
+    credFormOverlay.classList.remove('visible');
+  });
+
+  saveCredBtn.addEventListener('click', saveCredential);
+
+  async function openSettings() {
+    settingsPanel.classList.add('visible');
+    try {
+      const resp = await fetch('/api/settings?init_data=' + encodeURIComponent(getInitData()));
+      if (resp.ok) {
+        const data = await resp.json();
+        currentTier = data.safety_tier || 'SUPER_SAFE';
+        updateTierUI();
+      }
+    } catch (e) {
+      // Use defaults
+    }
+    if (currentTier === 'MODERATELY_SAFE') {
+      loadCredentials();
+    }
+  }
+
+  function updateTierUI() {
+    tierSuperSafe.classList.toggle('active', currentTier === 'SUPER_SAFE');
+    tierModSafe.classList.toggle('active', currentTier === 'MODERATELY_SAFE');
+    credentialSection.style.display = currentTier === 'MODERATELY_SAFE' ? 'block' : 'none';
+  }
+
+  async function setTier(tier) {
+    currentTier = tier;
+    updateTierUI();
+
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ safety_tier: tier, init_data: getInitData() }),
+      });
+    } catch (e) {
+      showError('Failed to save settings');
+    }
+
+    if (tier === 'MODERATELY_SAFE') {
+      loadCredentials();
+    }
+  }
+
+  async function loadCredentials() {
+    try {
+      const resp = await fetch('/api/credentials?init_data=' + encodeURIComponent(getInitData()));
+      if (!resp.ok) return;
+      const creds = await resp.json();
+      renderCredentials(creds);
+    } catch (e) {
+      // Silently fail
+    }
+  }
+
+  function renderCredentials(creds) {
+    credentialList.innerHTML = '';
+    if (!creds.length) {
+      credentialList.innerHTML = '<div class="no-credentials">No saved credentials yet.</div>';
+      return;
+    }
+    creds.forEach(function(c) {
+      const item = document.createElement('div');
+      item.className = 'credential-item';
+      item.innerHTML =
+        '<div class="credential-info">' +
+          '<div class="credential-domain">' + escapeHtml(c.domain) + '</div>' +
+          '<div class="credential-user">' + escapeHtml(c.username) + '</div>' +
+        '</div>' +
+        '<button class="credential-delete" data-id="' + escapeHtml(c.credential_id) + '">&times;</button>';
+      item.querySelector('.credential-delete').addEventListener('click', function() {
+        deleteCredential(c.credential_id, item);
+      });
+      credentialList.appendChild(item);
+    });
+  }
+
+  function escapeHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  async function deleteCredential(id, element) {
+    try {
+      const resp = await fetch(
+        '/api/credentials/' + encodeURIComponent(id) + '?init_data=' + encodeURIComponent(getInitData()),
+        { method: 'DELETE' }
+      );
+      if (resp.ok) {
+        element.remove();
+        if (!credentialList.children.length) {
+          credentialList.innerHTML = '<div class="no-credentials">No saved credentials yet.</div>';
+        }
+      } else {
+        showError('Failed to delete credential');
+      }
+    } catch (e) {
+      showError('Failed to delete credential');
+    }
+  }
+
+  async function saveCredential() {
+    var domain = credDomain.value.trim();
+    var username = credUsername.value.trim();
+    var password = credPassword.value;
+
+    if (!domain || !username || !password) {
+      showError('All fields are required');
+      return;
+    }
+
+    saveCredBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: domain,
+          username: username,
+          password: password,
+          init_data: getInitData(),
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'Save failed');
+      }
+
+      credFormOverlay.classList.remove('visible');
+      loadCredentials();
+    } catch (e) {
+      showError(e.message || 'Failed to save credential');
+    } finally {
+      saveCredBtn.disabled = false;
+    }
+  }
+
+  // ── Auto-open credential form from inline button ──────
+  // When launched via "Add login for X" button, URL contains
+  // ?prefill_domain=...&open_cred_form=1
+  var autoOpenMode = false;
+
+  function checkUrlParams() {
+    var params = new URLSearchParams(window.location.search);
+    var prefillDomain = params.get('prefill_domain') || '';
+    var openCredForm = params.get('open_cred_form') === '1';
+
+    if (openCredForm && prefillDomain) {
+      autoOpenMode = true;
+      // Ensure tier is MODERATELY_SAFE (credentials require it)
+      currentTier = 'MODERATELY_SAFE';
+      updateTierUI();
+      // Persist the tier change
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ safety_tier: 'MODERATELY_SAFE', init_data: getInitData() }),
+      }).catch(function() {});
+
+      // Open settings panel and credential form
+      settingsPanel.classList.add('visible');
+      credFormOverlay.classList.add('visible');
+      credDomain.value = prefillDomain;
+      credDomain.readOnly = true;
+      credUsername.focus();
+    }
+  }
+
+  checkUrlParams();
+
+  // Override saveCredential to close Mini App in auto-open mode
+  var originalSaveCredential = saveCredential;
+  if (autoOpenMode) {
+    saveCredBtn.removeEventListener('click', saveCredential);
+    saveCredBtn.addEventListener('click', async function() {
+      var domain = credDomain.value.trim();
+      var username = credUsername.value.trim();
+      var password = credPassword.value;
+
+      if (!domain || !username || !password) {
+        showError('All fields are required');
+        return;
+      }
+
+      saveCredBtn.disabled = true;
+      try {
+        var resp = await fetch('/api/credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: domain,
+            username: username,
+            password: password,
+            init_data: getInitData(),
+          }),
+        });
+
+        if (!resp.ok) {
+          var err = await resp.json().catch(function() { return {}; });
+          throw new Error(err.detail || 'Save failed');
+        }
+
+        // Close the Mini App so user returns to chat
+        if (tg) {
+          setTimeout(function() { tg.close(); }, 400);
+        } else {
+          credFormOverlay.classList.remove('visible');
+          loadCredentials();
+        }
+      } catch (e) {
+        showError(e.message || 'Failed to save credential');
+      } finally {
+        saveCredBtn.disabled = false;
+      }
+    });
+  }
+
+  input.focus();
+})();
+</script>
+</body>
+</html>
