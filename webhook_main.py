@@ -274,6 +274,11 @@ def main() -> None:
 
     ptb_app = builder.build()
 
+    # Debug: verify post_init is registered
+    print(f">>> post_init callback set: {ptb_app.post_init is not None}", flush=True)
+    print(f">>> post_init function: {ptb_app.post_init}", flush=True)
+    logger.info("post_init callback set: %s", ptb_app.post_init is not None)
+
     # Store config as BotConfig object (not dict) so handlers use config.field
     ptb_app.bot_data["config"] = config
 
