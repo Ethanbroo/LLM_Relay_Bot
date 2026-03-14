@@ -38,9 +38,17 @@ def create_webhook_app(ptb_app: Application, config: BotConfig) -> FastAPI:
         logger.info("Webhook registered: %s/webhook/<TOKEN>", config.webhook_url)
 
         async with ptb_app:
+            # PTB v22.6: initialize() does NOT call post_init — only
+            # run_polling() / run_webhook() do. Since we use FastAPI+uvicorn
+            # instead of PTB's built-in webhook server, we must call it
+            # ourselves after initialize() has completed.
+            if ptb_app.post_init:
+                await ptb_app.post_init(ptb_app)
             await ptb_app.start()
             yield
             await ptb_app.stop()
+            if ptb_app.post_shutdown:
+                await ptb_app.post_shutdown(ptb_app)
 
     fastapi_app = FastAPI(lifespan=lifespan)
 
