@@ -56,6 +56,17 @@ class BotConfig:
     critical_questions_timeout: int = 900   # 15 min for answering questions
     checkpoint_timeout: int = 1800          # 30 min for execution checkpoints
 
+    # --- Browser Agent Timeouts ---
+    approval_timeout_seconds: int = 300     # 5 min for user to approve/reject
+    session_timeout_seconds: int = 1800     # 30 min idle before session cleanup
+    task_history_retention_days: int = 7    # Days to keep task history in Redis
+
+    # --- Phase 5: Domain Allowlist + Security Hardening ---
+    domain_allowlist_path: str = "config/domain-allowlist.yaml"
+    audit_log_dir: str = "/var/log/browser-agent"
+    enable_dual_model_verification: bool = False  # Optional: second LLM consistency check
+    verifier_model: str = "claude-haiku-4-5-20251001"
+
     # --- Progress ---
     progress_update_interval: float = 2.0   # Seconds between progress edits
 
@@ -72,6 +83,17 @@ class BotConfig:
     preview_timeout_seconds: int = 7200              # Default 2 hours
     token_budget_default: float = 10.00              # USD equivalent per project
 
+    # --- Web Research (optional) ---
+    tavily_api_key: str = ""              # Tavily search API key (empty = disabled)
+    jina_api_key: str = ""                # Jina Reader API key (empty = disabled)
+
+    # --- Mini App ---
+    webapp_url: str = ""                  # URL where Mini App is hosted (for BotFather)
+
+    # --- Credential Vault (per-user) ---
+    credential_master_secret: str = ""    # For AES-256-GCM key derivation
+    credential_ttl_hours: int = 24        # Auto-expire credentials (0 = no expiry)
+
     # --- Computed properties ---
 
     @property
@@ -81,8 +103,8 @@ class BotConfig:
 
     @property
     def use_mock_orchestrator(self) -> bool:
-        """True if pipeline should use mock (local dev / testing)."""
-        return not self.is_vps_mode
+        """True if pipeline should use mock (only when no API key available)."""
+        return not self.is_vps_mode and not self.classifier_api_key
 
     @property
     def webhook_url(self) -> str:
@@ -183,4 +205,16 @@ class BotConfig:
             github_pat=github_pat,
             preview_timeout_seconds=preview_timeout_seconds,
             token_budget_default=token_budget_default,
+            approval_timeout_seconds=int(os.environ.get("APPROVAL_TIMEOUT_SECONDS", "300")),
+            session_timeout_seconds=int(os.environ.get("SESSION_TIMEOUT_SECONDS", "1800")),
+            task_history_retention_days=int(os.environ.get("TASK_HISTORY_RETENTION_DAYS", "7")),
+            domain_allowlist_path=os.environ.get("DOMAIN_ALLOWLIST_PATH", "config/domain-allowlist.yaml"),
+            audit_log_dir=os.environ.get("AUDIT_LOG_DIR", "/var/log/browser-agent"),
+            enable_dual_model_verification=os.environ.get("ENABLE_DUAL_MODEL_VERIFICATION", "false").lower() == "true",
+            verifier_model=os.environ.get("VERIFIER_MODEL", "claude-haiku-4-5-20251001"),
+            tavily_api_key=os.environ.get("TAVILY_API_KEY", ""),
+            jina_api_key=os.environ.get("JINA_API_KEY", ""),
+            webapp_url=os.environ.get("WEBAPP_URL", ""),
+            credential_master_secret=os.environ.get("CREDENTIAL_MASTER_SECRET", ""),
+            credential_ttl_hours=int(os.environ.get("CREDENTIAL_TTL_HOURS", "24")),
         )

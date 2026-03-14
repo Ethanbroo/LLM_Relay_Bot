@@ -50,7 +50,7 @@ class APIBackend:
     async def run(
         self,
         prompt: str,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "claude-sonnet-4-20250514",
         max_turns: int = 1,
         session_id: str | None = None,
         system_prompt_append: str | None = None,

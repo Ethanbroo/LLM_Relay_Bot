@@ -5,7 +5,7 @@ Supports mock (local dev) and real (VPS) backends. The interface is stable
 across Sections 2, 3, and 4 — handlers call run_build/run_edit/run_question
 without knowing which backend is active.
 
-Section 3: Real backend uses the 9-phase PipelineOrchestrator.
+Real backend uses the 7-phase PipelineOrchestrator.
 """
 
 import asyncio
@@ -52,10 +52,27 @@ ProgressCallback = Callable[[str, float, str], Awaitable[None]]
 class PipelineAdapter:
     """Selects and delegates to the appropriate pipeline backend."""
 
-    def __init__(self, config: BotConfig, claude_client=None, redis_client=None):
+    def __init__(
+        self,
+        config: BotConfig,
+        claude_client=None,
+        redis_client=None,
+        browser_client=None,
+        credential_vault=None,
+        credential_request_manager=None,
+        anthropic_client=None,
+        bot=None,
+        browser_agent_cls=None,
+    ):
         self.config = config
         self.claude_client = claude_client
         self.redis_client = redis_client
+        self.browser_client = browser_client
+        self.credential_vault = credential_vault
+        self.credential_request_manager = credential_request_manager
+        self.anthropic_client = anthropic_client
+        self.bot = bot
+        self.browser_agent_cls = browser_agent_cls
 
     async def run_build(
         self,
@@ -65,14 +82,22 @@ class PipelineAdapter:
         semantic_anchor: Optional[str] = None,
         existing_session_id: Optional[str] = None,
         on_user_prompt: Optional[UserPromptCallback] = None,
+        user_id: int = 0,
+        chat_id: int = 0,
+        on_payment_approval=None,
     ) -> PipelineResult:
         """Run a full build pipeline (new project or feature addition)."""
         if self.config.use_mock_orchestrator:
             return await self._run_mock(user_prompt, project_name, on_progress)
+        elif not self.redis_client:
+            # API-only mode: no Redis/Docker infrastructure available
+            return await self._run_api_build(user_prompt, project_name, on_progress)
         else:
             return await self._run_real_orchestrated(
                 user_prompt, project_name, on_progress,
                 existing_session_id, on_user_prompt,
+                user_id=user_id, chat_id=chat_id,
+                on_payment_approval=on_payment_approval,
             )
 
     async def run_edit(
@@ -203,7 +228,42 @@ class PipelineAdapter:
             cost_usd=result.get("total_cost_usd", 0.0),
         )
 
-    # ── Real orchestrated (Section 3 — 9-phase pipeline) ──
+    # ── API-only build (direct Claude call, no Docker infrastructure) ──
+
+    async def _run_api_build(
+        self,
+        prompt: str, project_name: str,
+        on_progress: Optional[ProgressCallback],
+    ) -> PipelineResult:
+        """Direct API fallback for build requests when full pipeline infra is unavailable."""
+        if on_progress:
+            await on_progress("Building", 0.1, "Sending to Claude...")
+
+        response = await self.claude_client.run(
+            prompt=prompt,
+            model="sonnet",
+            max_turns=5,
+            system_prompt_append=(
+                "You are an expert software engineer. The user wants to build something. "
+                "Provide a complete, working implementation with code. Include all necessary "
+                "files and clear instructions. Be thorough but concise."
+            ),
+        )
+
+        if on_progress:
+            await on_progress("Complete", 1.0, "Build finished")
+
+        return PipelineResult(
+            success=not response.is_error,
+            project_name=project_name,
+            session_id=response.session_id,
+            summary=response.text[:2000] if not response.is_error else "",
+            total_tokens=response.input_tokens + response.output_tokens,
+            cost_usd=response.cost_usd,
+            error_message=response.error_message,
+        )
+
+    # ── Real orchestrated (7-phase pipeline) ──
 
     async def _run_real_orchestrated(
         self,
@@ -211,8 +271,11 @@ class PipelineAdapter:
         on_progress: Optional[ProgressCallback],
         existing_session_id: Optional[str],
         on_user_prompt: Optional[UserPromptCallback],
+        user_id: int = 0,
+        chat_id: int = 0,
+        on_payment_approval=None,
     ) -> PipelineResult:
-        """Real backend: 9-phase orchestrated pipeline via PipelineOrchestrator."""
+        """Real backend: 7-phase orchestrated pipeline via PipelineOrchestrator."""
         from telegram_bot.pipeline.orchestrator import PipelineOrchestrator
         from telegram_bot.pipeline.cost_tracker import CostTracker
 
@@ -223,67 +286,51 @@ class PipelineAdapter:
             cost_tracker=cost_tracker,
             on_progress=on_progress,
             on_user_prompt=on_user_prompt,
+            on_payment_approval=on_payment_approval,
             budget_limit=self.config.token_budget_default,
             workspace_path=self.config.workspace_path,
+            browser_client=self.browser_client,
+            credential_vault=self.credential_vault,
+            credential_request_manager=self.credential_request_manager,
+            anthropic_client=self.anthropic_client,
+            bot=self.bot,
+            browser_agent_cls=self.browser_agent_cls,
         )
 
         ctx = await orchestrator.run(
             user_prompt=prompt,
             project_name=project_name,
+            user_id=user_id,
+            chat_id=chat_id,
             existing_session_id=existing_session_id,
         )
-
-        # Extract file manifest from architecture JSON if available
-        files_created = []
-        file_descriptions = {}
-        if ctx.architecture_json and "file_manifest" in ctx.architecture_json:
-            for f in ctx.architecture_json["file_manifest"]:
-                path = f.get("path", "")
-                if path:
-                    files_created.append(path)
-                    file_descriptions[path] = f.get("purpose", "")
 
         # Determine overall success: check if any phase failed critically
         any_critical_failure = any(
             not r.success and r.error_message
+            and any(
+                kw in r.error_message.lower()
+                for kw in ("budget exceeded", "authentication")
+            )
             for r in ctx.phase_results
-            if "budget exceeded" in r.error_message.lower()
-            or "authentication" in r.error_message.lower()
         )
 
-        # Build summary from documentation or last successful phase
-        summary = ctx.documentation or ""
+        # Build summary from final summary or last successful phase
+        summary = ctx.final_summary or ""
         if not summary:
-            # Use last successful phase output as summary
             for r in reversed(ctx.phase_results):
                 if r.success and r.raw_output:
                     summary = r.raw_output[:500]
                     break
-
-        # Extract review info
-        review_output = ctx.review_output
-        review_json = None
-        for r in ctx.phase_results:
-            if r.phase_number == 7 and r.parsed_json:
-                review_json = r.parsed_json
-                break
 
         return PipelineResult(
             success=not any_critical_failure,
             project_name=project_name,
             session_id=ctx.session_id,
             summary=summary,
-            anchor=ctx.anchor,
-            documentation=ctx.documentation,
-            files_created=files_created,
-            file_descriptions=file_descriptions,
-            lint_status="pass" if review_json and review_json.get("passed") else "n/a",
-            test_status="pass" if review_json and not review_json.get("missing_from_plan") else "n/a",
-            security_status="pass" if review_json and not review_json.get("security_findings") else "n/a",
             total_tokens=ctx.total_input_tokens + ctx.total_output_tokens,
             cost_usd=ctx.total_cost_usd,
             phase_results=ctx.phase_results,
-            review_output=review_output,
             error_message=next(
                 (r.error_message for r in ctx.phase_results if not r.success and r.error_message),
                 "",
