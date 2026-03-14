@@ -47,6 +47,23 @@ async def post_init(application: Application) -> None:
     classifier, pipeline adapter, session manager, project context, router,
     and episodic manager.
     """
+    import traceback
+    logger.info(">>> post_init STARTING <<<")
+    print(">>> post_init STARTING <<<", flush=True)  # In case logger is broken
+    try:
+        await _post_init_inner(application)
+        logger.info(">>> post_init COMPLETED SUCCESSFULLY <<<")
+        print(">>> post_init COMPLETED SUCCESSFULLY <<<", flush=True)
+    except Exception as e:
+        logger.error(">>> post_init FAILED: %s <<<", e)
+        logger.error(traceback.format_exc())
+        print(f">>> post_init FAILED: {e} <<<", flush=True)
+        print(traceback.format_exc(), flush=True)
+        raise  # Re-raise so PTB knows initialization failed
+
+
+async def _post_init_inner(application: Application) -> None:
+    """Actual post_init logic, wrapped for error reporting."""
     config: BotConfig = application.bot_data["config"]
 
     # --- Redis client (already created before builder) ---
@@ -74,13 +91,48 @@ async def post_init(application: Application) -> None:
 
     application.bot_data["claude_client"] = claude_client
 
-    # --- Classifier ---
+    # --- Classifier (Gemini Flash free tier if available, else Anthropic Haiku) ---
     from telegram_bot.classifier import MessageClassifier
-    from multi_agent_v2.real_claude import RealClaudeClient
 
-    api_client = RealClaudeClient()
-    classifier = MessageClassifier(api_client, model=config.classifier_model)
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if gemini_key:
+        from telegram_bot.gemini_client import GeminiClassifierClient
+        classifier_client = GeminiClassifierClient(api_key=gemini_key)
+        logger.info("Classifier using Gemini Flash (free tier)")
+    else:
+        from multi_agent_v2.real_claude import RealClaudeClient
+        classifier_client = RealClaudeClient()
+        logger.info("Classifier using Anthropic Haiku (no GEMINI_API_KEY set)")
+
+    classifier = MessageClassifier(classifier_client, model=config.classifier_model)
     application.bot_data["classifier"] = classifier
+
+    # --- Anthropic client (for Phase 1 critical thinking + build handler) ---
+    anthropic_client = None
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if anthropic_key:
+        try:
+            import anthropic
+            anthropic_client = anthropic.Anthropic(api_key=anthropic_key)
+            logger.info("Anthropic client initialized for Phase 1")
+        except Exception as e:
+            logger.warning("Failed to create Anthropic client: %s", e)
+    application.bot_data["anthropic_client"] = anthropic_client
+
+    # --- User credential vault ---
+    from telegram_bot.user_credential_vault import UserCredentialVault
+    credential_vault = UserCredentialVault(redis_client) if redis_client else None
+    application.bot_data["credential_vault"] = credential_vault
+
+    # --- Browser client ---
+    from telegram_bot.browser_client import BrowserClient
+    _browser_client = BrowserClient()
+    application.bot_data["_browser_client"] = _browser_client
+
+    # --- Credential request manager ---
+    from telegram_bot.credential_request_manager import CredentialRequestManager
+    cred_req_manager = CredentialRequestManager()
+    application.bot_data["credential_request_manager"] = cred_req_manager
 
     # --- Pipeline adapter ---
     from telegram_bot.pipeline_adapter import PipelineAdapter
@@ -88,6 +140,11 @@ async def post_init(application: Application) -> None:
         config=config,
         claude_client=claude_client,
         redis_client=redis_client,
+        browser_client=_browser_client,
+        credential_vault=credential_vault,
+        credential_request_manager=cred_req_manager,
+        anthropic_client=anthropic_client,
+        bot=application.bot,
     )
 
     # --- Session manager (Section 4) ---
