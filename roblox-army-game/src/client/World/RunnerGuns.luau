@@ -44,7 +44,7 @@
 	Bullet styles (bulletStyle of RunnerDefs.WEAPONS). The track floor is
 	white, so bullets are solid (not Neon: glowing yellows turned white) in
 	strong, dark-enough colours, one per gun:
-		pistol  small orange slug        rifle   long red tracer
+		pistol  small orange slug        rifle   long teal tracer
 		smg     small fast pink slug     assault blue tracer
 		minigun thin purple stream       rocket  big dark-red rocket + smoke trail + explosion flash
 ]]
@@ -300,7 +300,7 @@ type Style = {
 -- white track floor (owner feedback: the old yellow / pale Neon bullets were
 -- invisible on it). Hit flashes use the same colour.
 local BULLET_ORANGE = Color3.fromRGB(235, 90, 0)
-local BULLET_RED = Color3.fromRGB(215, 20, 35)
+local BULLET_TEAL = Color3.fromRGB(0, 150, 160) -- not red: enemies wear red
 local BULLET_PINK = Color3.fromRGB(220, 30, 150)
 local BULLET_BLUE = Color3.fromRGB(25, 85, 235)
 local BULLET_PURPLE = Color3.fromRGB(125, 35, 220)
@@ -317,10 +317,10 @@ local STYLES: { [string]: Style } = {
 	},
 	rifle = {
 		size = Vector3.new(0.26, 0.26, 2.8),
-		color = BULLET_RED,
+		color = BULLET_TEAL,
 		shape = Enum.PartType.Block,
 		hitSize = 1.3,
-		hitColor = BULLET_RED,
+		hitColor = BULLET_TEAL,
 		smoke = false,
 	},
 	smg = {

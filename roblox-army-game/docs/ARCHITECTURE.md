@@ -299,7 +299,8 @@ are written by the lead after the build — do not create them.
   (guns reach GUN_RANGE = 1.5 rows) kills enemies, survivors cost troops 1:1);
   **barricades** (HP; destroyed if that damage ≥ HP, else lose 25% of troops).
   Every value label (cash values, toll cash, squad "N SOLDIERS", barricade HP bar) is
-  hidden until the previous row is crossed, and is outlined text without a background.
+  hidden until the previous row is crossed (a squad/barricade also as soon as it is
+  engaged, so it is never shot unlabelled), and is outlined text without a background.
   The option you run through (gate panel, toll cash, cash stack) is removed instantly.
   Final **castle boss** (owner request): walks out of the castle with a head HP bar and
   kills one unit per interval (troops first, the avatar last); HP = BOSS_HP_SHARE × the

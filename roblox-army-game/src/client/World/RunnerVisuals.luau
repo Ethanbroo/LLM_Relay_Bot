@@ -19,8 +19,10 @@
 	  * value labels- a row's cash values, a red toll gate's cash, a squad's
 	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
 	                  previous row has been crossed (owner request: far-away labels
-	                  cluttered the view); row 1's are visible from the start. They
-	                  are plain outlined text (no dark pill behind them), so they never
+	                  cluttered the view); row 1's are visible from the start, and a
+	                  squad / barricade also shows its label as soon as the guns reach
+	                  it (Engage). They are plain outlined text (no dark pill behind
+	                  them; a toll gate's cash floats above its panel), so they never
 	                  cover what is further down the track
 	  * the castle  - at the end of the track, with a 13-stud gateway; the BOSS
 	                  (RunnerBoss) waits hidden behind its door and walks out of it
@@ -450,8 +452,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				local base = worldAt(row.distance + 2.5, option.x, 0)
 				local stack = RunnerModels.CoinStack(rowFolder, base, 4)
 				tollCash = stack
-				local anchor = anchorPart(stack, base + Vector3.new(0, 3.2, 0))
-				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6)
+				-- The value floats ABOVE the panel (not in front of its "-4" text).
+				local anchor = anchorPart(stack, worldAt(row.distance, option.x, GATE_HEIGHT + 2))
+				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0)
 				gui.Enabled = false
 				valueLabel = gui
 			end
@@ -1149,6 +1152,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			return
 		end
 		engaged[rowIndex] = { lane = lane, fight = newFight }
+		-- Shooting starts up to half a row before the previous row is crossed:
+		-- show the "N SOLDIERS" / HP label now, before anything falls or drains.
+		reveal(rowIndex, tier)
 	end
 
 	function self.RowCrossed(

@@ -21839,9 +21839,13 @@ local accumulator = 0
 local UPDATE_RATE = 1 / 30
 local PROMPT_DISTANCE = 10
 local BILLBOARD_DISTANCE = 150
--- AlwaysOnTop labels show through walls, so they stop at a shorter distance
--- (pads of the next area, 184 studs away, stay hidden).
-local PAD_LABEL_DISTANCE = 110
+-- Unlock pad / "Hire me" labels (AlwaysOnTop). MaxDistance is measured from the
+-- camera: 180 keeps every pad of the player's area labelled from the spawn
+-- camera even at the 90-stud max zoom (the far pads are ~178 studs away there).
+local PAD_LABEL_DISTANCE = 180
+-- How high the pad labels float above their tile: the bottom edge stays clear
+-- of the Unlock / Hire prompt shown at the tile itself.
+local PAD_LABEL_HEIGHT = 5.6
 local EMPLOYEE_HOP_TIME = 0.55
 
 -------------------------------------------------------------------------------
@@ -22000,7 +22004,7 @@ local function buildPad(sv: SlotVisual)
 	-- Lifted well above the pad AND drawn on top: the pad's white/green
 	-- picture is a SurfaceGui, and Roblox can draw it over a normal billboard
 	-- that overlaps it on screen, which cut the name + price off (owner feedback).
-	local board, content = billboard(tile, 14, 4, 4.6, PAD_LABEL_DISTANCE, true)
+	local board, content = billboard(tile, 14, 4, PAD_LABEL_HEIGHT, PAD_LABEL_DISTANCE, true)
 	board.Name = "PadInfo"
 	sv.content = content
 	local titleText = if isArena then "⚔️ Combat Arena" else sv.def.icon .. " " .. sv.def.name
@@ -22175,7 +22179,7 @@ local function buildHireTile(sv: SlotVisual)
 		BuildingFactory.FlatTile(folder, CFrame.new(pos + Vector3.new(0, 0.42, 0)), 7, 7, P.HireTile, P.White, 0.45)
 	tile.Name = "HireTile"
 	-- Drawn on top for the same reason as the unlock pad label (buildPad).
-	local board, content = billboard(tile, 6, 6, 4.6, PAD_LABEL_DISTANCE, true)
+	local board, content = billboard(tile, 6, 6, PAD_LABEL_HEIGHT, PAD_LABEL_DISTANCE, true)
 	board.Name = "HireInfo"
 	local face = Theme.Label({
 		Text = "🧑‍💼",
@@ -25099,7 +25103,7 @@ return RunnerBoss
 	Bullet styles (bulletStyle of RunnerDefs.WEAPONS). The track floor is
 	white, so bullets are solid (not Neon: glowing yellows turned white) in
 	strong, dark-enough colours, one per gun:
-		pistol  small orange slug        rifle   long red tracer
+		pistol  small orange slug        rifle   long teal tracer
 		smg     small fast pink slug     assault blue tracer
 		minigun thin purple stream       rocket  big dark-red rocket + smoke trail + explosion flash
 ]]
@@ -25355,7 +25359,7 @@ type Style = {
 -- white track floor (owner feedback: the old yellow / pale Neon bullets were
 -- invisible on it). Hit flashes use the same colour.
 local BULLET_ORANGE = Color3.fromRGB(235, 90, 0)
-local BULLET_RED = Color3.fromRGB(215, 20, 35)
+local BULLET_TEAL = Color3.fromRGB(0, 150, 160) -- not red: enemies wear red
 local BULLET_PINK = Color3.fromRGB(220, 30, 150)
 local BULLET_BLUE = Color3.fromRGB(25, 85, 235)
 local BULLET_PURPLE = Color3.fromRGB(125, 35, 220)
@@ -25372,10 +25376,10 @@ local STYLES: { [string]: Style } = {
 	},
 	rifle = {
 		size = Vector3.new(0.26, 0.26, 2.8),
-		color = BULLET_RED,
+		color = BULLET_TEAL,
 		shape = Enum.PartType.Block,
 		hitSize = 1.3,
-		hitColor = BULLET_RED,
+		hitColor = BULLET_TEAL,
 		smoke = false,
 	},
 	smg = {
@@ -26140,8 +26144,10 @@ return RunnerModels
 	  * value labels- a row's cash values, a red toll gate's cash, a squad's
 	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
 	                  previous row has been crossed (owner request: far-away labels
-	                  cluttered the view); row 1's are visible from the start. They
-	                  are plain outlined text (no dark pill behind them), so they never
+	                  cluttered the view); row 1's are visible from the start, and a
+	                  squad / barricade also shows its label as soon as the guns reach
+	                  it (Engage). They are plain outlined text (no dark pill behind
+	                  them; a toll gate's cash floats above its panel), so they never
 	                  cover what is further down the track
 	  * the castle  - at the end of the track, with a 13-stud gateway; the BOSS
 	                  (RunnerBoss) waits hidden behind its door and walks out of it
@@ -26571,8 +26577,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				local base = worldAt(row.distance + 2.5, option.x, 0)
 				local stack = RunnerModels.CoinStack(rowFolder, base, 4)
 				tollCash = stack
-				local anchor = anchorPart(stack, base + Vector3.new(0, 3.2, 0))
-				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6)
+				-- The value floats ABOVE the panel (not in front of its "-4" text).
+				local anchor = anchorPart(stack, worldAt(row.distance, option.x, GATE_HEIGHT + 2))
+				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0)
 				gui.Enabled = false
 				valueLabel = gui
 			end
@@ -27270,6 +27277,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			return
 		end
 		engaged[rowIndex] = { lane = lane, fight = newFight }
+		-- Shooting starts up to half a row before the previous row is crossed:
+		-- show the "N SOLDIERS" / HP label now, before anything falls or drains.
+		reveal(rowIndex, tier)
 	end
 
 	function self.RowCrossed(

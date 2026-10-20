@@ -76,8 +76,9 @@ were measured from the pixels, not guessed (section 10).
 coins of the original game). Exactly two **×2** gates appear per course, so troop counts stay readable.
 Red gates can also carry cash ("toll gates": −3 troops but +$15), which gives a real choice.
 ✅ The gate (or cash stack) you run through **disappears instantly** (owner request). 💡 Every label on the track
-(cash values, toll cash, "N SOLDIERS", barricade HP) appears one row ahead only, as outlined text with no dark
-background, so nothing hides the track behind it.
+(cash values, toll cash, "N SOLDIERS", barricade HP) appears one row ahead only (a squad or barricade a moment
+earlier if your guns already reach it), as outlined text with no dark background, so nothing hides the track
+behind it.
 Weapons and damage use their own gold gates, not maths.
 
 ### 2.2 Guns and the squad (owner requests)
@@ -90,7 +91,7 @@ Weapons and damage use their own gold gates, not maths.
 | Gun | Damage per bullet | Bullets per second | Damage per second (per unit) | Bullets |
 |---|---|---|---|---|
 | Pistol | 10 | 2 | 20 | small orange |
-| Rifle | 18 | 1.5 | 27 | long red tracer |
+| Rifle | 18 | 1.5 | 27 | long teal tracer |
 | SMG | 5 | 7 | 35 | small fast pink |
 | Assault Rifle | 9 | 5 | 45 | blue tracers |
 | Minigun | 6 | 10 | 60 | thin purple streams |

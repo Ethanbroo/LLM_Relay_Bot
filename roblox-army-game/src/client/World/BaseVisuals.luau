@@ -125,9 +125,13 @@ local accumulator = 0
 local UPDATE_RATE = 1 / 30
 local PROMPT_DISTANCE = 10
 local BILLBOARD_DISTANCE = 150
--- AlwaysOnTop labels show through walls, so they stop at a shorter distance
--- (pads of the next area, 184 studs away, stay hidden).
-local PAD_LABEL_DISTANCE = 110
+-- Unlock pad / "Hire me" labels (AlwaysOnTop). MaxDistance is measured from the
+-- camera: 180 keeps every pad of the player's area labelled from the spawn
+-- camera even at the 90-stud max zoom (the far pads are ~178 studs away there).
+local PAD_LABEL_DISTANCE = 180
+-- How high the pad labels float above their tile: the bottom edge stays clear
+-- of the Unlock / Hire prompt shown at the tile itself.
+local PAD_LABEL_HEIGHT = 5.6
 local EMPLOYEE_HOP_TIME = 0.55
 
 -------------------------------------------------------------------------------
@@ -286,7 +290,7 @@ local function buildPad(sv: SlotVisual)
 	-- Lifted well above the pad AND drawn on top: the pad's white/green
 	-- picture is a SurfaceGui, and Roblox can draw it over a normal billboard
 	-- that overlaps it on screen, which cut the name + price off (owner feedback).
-	local board, content = billboard(tile, 14, 4, 4.6, PAD_LABEL_DISTANCE, true)
+	local board, content = billboard(tile, 14, 4, PAD_LABEL_HEIGHT, PAD_LABEL_DISTANCE, true)
 	board.Name = "PadInfo"
 	sv.content = content
 	local titleText = if isArena then "⚔️ Combat Arena" else sv.def.icon .. " " .. sv.def.name
@@ -461,7 +465,7 @@ local function buildHireTile(sv: SlotVisual)
 		BuildingFactory.FlatTile(folder, CFrame.new(pos + Vector3.new(0, 0.42, 0)), 7, 7, P.HireTile, P.White, 0.45)
 	tile.Name = "HireTile"
 	-- Drawn on top for the same reason as the unlock pad label (buildPad).
-	local board, content = billboard(tile, 6, 6, 4.6, PAD_LABEL_DISTANCE, true)
+	local board, content = billboard(tile, 6, 6, PAD_LABEL_HEIGHT, PAD_LABEL_DISTANCE, true)
 	board.Name = "HireInfo"
 	local face = Theme.Label({
 		Text = "🧑‍💼",
