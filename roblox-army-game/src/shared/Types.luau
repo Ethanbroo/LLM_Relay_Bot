@@ -122,9 +122,10 @@ Types.DeepCopy = deepCopy
 function Types.Reconcile(data: any): PlayerData
 	local function fill(target: any, template: any)
 		for k, v in template do
-			if target[k] == nil then
+			if target[k] == nil or type(target[k]) ~= type(v) then
+				-- Missing, or corrupted into the wrong type: use the default.
 				target[k] = deepCopy(v)
-			elseif type(v) == "table" and type(target[k]) == "table" and next(v) ~= nil then
+			elseif type(v) == "table" and next(v) ~= nil then
 				-- Only recurse into "struct" tables, not open maps such as inventory.
 				local isStruct = true
 				for key in v do

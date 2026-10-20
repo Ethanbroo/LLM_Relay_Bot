@@ -188,6 +188,14 @@ customRequire = function(target: any)
 	error("harness: unsupported require target " .. tostring(target))
 end
 
+Harness.customRequire = function(target: any)
+	return customRequire(target)
+end
+
+Harness.serviceProxy = function(name: string)
+	return serviceProxy(name)
+end
+
 -- Load a module by its path under src/ with extra globals (used by scripts/bake.luau
 -- to run server code that builds Instances into a real Lune DataModel).
 -- `services` maps service name -> Instance returned by game:GetService.

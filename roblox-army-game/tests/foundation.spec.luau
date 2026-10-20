@@ -43,6 +43,17 @@ return function(H)
 		H.expect(fixed.equipped.weapon == "5", "equipped kept")
 	end)
 
+	H.test("Reconcile repairs fields with the wrong type", function()
+		local data = Types.DefaultData() :: any
+		data.stats = 5
+		data.cash = "lots"
+		data.base.sections = { a1s1 = { level = 2, stock = 3, employee = true } }
+		local fixed = Types.Reconcile(data)
+		H.expect(type(fixed.stats) == "table" and fixed.stats.playSeconds == 0, "stats repaired")
+		H.expect(fixed.cash == 0, "cash repaired")
+		H.expect(fixed.base.sections.a1s1.level == 2, "open maps kept")
+	end)
+
 	H.test("Layout areas do not overlap", function()
 		H.expect(Layout.AREA_PITCH > Layout.AREA_SIZE, "pitch > size")
 		H.expect(Layout.AreaAt(Layout.AreaCenter(3), #Config.Areas) == 3, "AreaAt")
