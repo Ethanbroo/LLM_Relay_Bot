@@ -145,7 +145,11 @@ local function bar(kit: Kit, a: Vector3, b: Vector3, thickness: number, color: C
 	if length < 0.01 then
 		return
 	end
-	local cf = CFrame.lookAt((a + b) / 2, b)
+	-- lookAt has no valid answer when the bar points straight up/down with the
+	-- default up vector, so use Z as "up" for (nearly) vertical bars.
+	local direction = (b - a).Unit
+	local up = if math.abs(direction.Y) > 0.99 then Vector3.zAxis else Vector3.yAxis
+	local cf = CFrame.lookAt((a + b) / 2, b, up)
 	add(kit, "Bar", Vector3.new(thickness, thickness, length), cf, color)
 end
 
