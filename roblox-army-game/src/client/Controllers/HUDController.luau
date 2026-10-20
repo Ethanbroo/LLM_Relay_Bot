@@ -81,6 +81,9 @@ function HUD:Init(_registry: { [string]: any })
 	-- so hide the list (players can still be seen in the Roblox menu).
 	pcall(function()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+		-- No tools to pick in this game; hiding the hotbar also stops players
+		-- from unequipping the runner gun with the number keys.
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 	end)
 
 	local topRight = Instance.new("Frame")

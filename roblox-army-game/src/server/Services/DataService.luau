@@ -7,7 +7,7 @@
 		DataService:Get(player): PlayerData?          -- live table, mutate it then MarkDirty
 		DataService:WaitFor(player, timeout?): PlayerData?
 		DataService:MarkDirty(player)                  -- sync to client soon + save later
-		DataService:AddCash(player, amount, opts?): number
+		DataService:AddCash(player, amount, opts?): number   -- rounded to whole dollars
 			opts.boostable = true -> multiplied by BoostService:GetCashMultiplier (2x boost)
 			opts.source = "runner" | "section" | "combat" | ... (for logging)
 			returns the amount actually added
@@ -164,7 +164,10 @@ local function loadWithLock(activeStore: DataStore, player: Player): PlayerData?
 					blocked = true
 					return nil -- cancel the write: another server still owns this save
 				end
-				local record = if old ~= nil then Types.Reconcile(old) else Types.DefaultData();
+				local record = if old ~= nil then Types.Reconcile(old) else Types.DefaultData()
+				-- Saves from before whole-dollar money may hold cents.
+				record.cash = math.floor(record.cash)
+				record.lifetimeCash = math.floor(record.lifetimeCash);
 				(record :: any)._lock = { jobId = game.JobId, t = os.time() }
 				loaded = record
 				return record
@@ -402,9 +405,12 @@ function DataService:AddCash(player: Player, amount: number, opts: { boostable: 
 			final *= boostService:GetCashMultiplier(player)
 		end
 	end
-	final = Format.RoundCents(final)
-	data.cash = Format.RoundCents(data.cash + final)
-	data.lifetimeCash = Format.RoundCents(data.lifetimeCash + final)
+	final = Format.RoundWhole(final)
+	if final <= 0 then
+		return 0
+	end
+	data.cash = Format.RoundWhole(data.cash + final)
+	data.lifetimeCash = Format.RoundWhole(data.lifetimeCash + final)
 	self:MarkDirty(player)
 	return final
 end
@@ -422,7 +428,7 @@ function DataService:SpendCash(player: Player, amount: number): boolean
 	if data.cash + 1e-6 < amount then
 		return false
 	end
-	data.cash = math.max(0, Format.RoundCents(data.cash - amount))
+	data.cash = math.max(0, Format.RoundWhole(data.cash - amount))
 	self:MarkDirty(player)
 	return true
 end

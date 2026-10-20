@@ -33,15 +33,13 @@ function Format.Short(n: number): string
 	return (if negative then "-" else "") .. text
 end
 
--- Money like the reference images: "$0.00", "$1,562.50", then "$1.25M".
+-- Money in whole dollars (no cents, owner request): "$0", "$1,563", then "$1.25M".
 function Format.Money(n: number): string
 	local negative = n < 0
 	n = math.abs(n)
 	local text: string
 	if n < 1e6 then
-		local cents = math.floor(n * 100 + 0.5)
-		local whole = math.floor(cents / 100)
-		text = withCommas(whole) .. string.format(".%02d", cents % 100)
+		text = withCommas(math.floor(n + 0.5))
 	else
 		text = Format.Short(n)
 	end
@@ -86,9 +84,15 @@ function Format.Percent(fraction: number): string
 	return string.format("%.1f%%", p)
 end
 
--- Round money to cents (all stored cash values go through this).
+-- Round to cents (only for intermediate maths such as rates per second).
 function Format.RoundCents(n: number): number
 	return math.floor(n * 100 + 0.5) / 100
+end
+
+-- Round money to whole dollars. Every price, payout and stored cash value
+-- goes through this (owner request: no cents anywhere).
+function Format.RoundWhole(n: number): number
+	return math.floor(n + 0.5)
 end
 
 return Format

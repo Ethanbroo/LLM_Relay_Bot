@@ -277,7 +277,9 @@ local function buildPad(sv: SlotVisual)
 
 	local price = Economy.SlotUnlockPrice(sv.id)
 	local priceText = Format.Money(price)
-	local board, content = billboard(tile, 14, 4, 1.9)
+	-- Lifted well above the pad so the name + price are never cut off by the
+	-- floor when the camera looks down at the plot (owner feedback).
+	local board, content = billboard(tile, 14, 4, 4.6)
 	board.Name = "PadInfo"
 	sv.content = content
 	local titleText = if isArena then "⚔️ Combat Arena" else sv.def.icon .. " " .. sv.def.name
@@ -404,7 +406,8 @@ local function refreshBuilding(sv: SlotVisual, section: Types.SectionState)
 		if maxed then " (MAX)" else "",
 		if employee then "  🧑‍💼" else ""
 	)
-	ui.rateLabel.Text = Format.Money(stats.incomePerSecond) .. "/s"
+	-- Per minute so the rate is a whole-dollar amount (no cents).
+	ui.rateLabel.Text = Format.Money(stats.incomePerSecond * 60) .. "/min"
 	local fraction = stock / capacity
 	ui.stockFill.Size = UDim2.fromScale(math.max(fraction, 0.001), 1)
 	ui.stockFill.Visible = stock > 0
@@ -450,7 +453,7 @@ local function buildHireTile(sv: SlotVisual)
 	local tile =
 		BuildingFactory.FlatTile(folder, CFrame.new(pos + Vector3.new(0, 0.42, 0)), 7, 7, P.HireTile, P.White, 0.45)
 	tile.Name = "HireTile"
-	local board, content = billboard(tile, 6, 6, 3.4)
+	local board, content = billboard(tile, 6, 6, 4.6)
 	board.Name = "HireInfo"
 	local face = Theme.Label({
 		Text = "🧑‍💼",
