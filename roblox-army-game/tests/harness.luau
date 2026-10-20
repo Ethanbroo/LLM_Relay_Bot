@@ -29,11 +29,28 @@ local ROOTS = {
 local moduleCache: { [string]: any } = {}
 local loading: { [string]: boolean } = {}
 
+-- Index every file and folder under src/ ONCE, up front. Proxy lookups run
+-- inside metamethods, where Lune's (yielding) fs calls are not allowed.
+local knownFiles: { [string]: boolean } = {}
+local knownDirs: { [string]: boolean } = {}
+local function indexTree(dir: string)
+	knownDirs[dir] = true
+	for _, name in fs.readDir(dir) do
+		local full = dir .. "/" .. name
+		if fs.isDir(full) then
+			indexTree(full)
+		else
+			knownFiles[full] = true
+		end
+	end
+end
+indexTree(SRC)
+
 local makeProxy
 
 local function resolveFile(path: string): string?
 	for _, candidate in { path .. ".luau", path .. ".lua", path .. "/init.luau", path .. "/init.lua" } do
-		if fs.isFile(candidate) then
+		if knownFiles[candidate] then
 			return candidate
 		end
 	end
@@ -43,7 +60,7 @@ end
 local function childPath(path: string, name: string): string?
 	local base = path:gsub("/init%.luau$", ""):gsub("/init%.lua$", ""):gsub("%.luau$", ""):gsub("%.lua$", "")
 	local candidate = base .. "/" .. name
-	if resolveFile(candidate) or fs.isDir(candidate) then
+	if resolveFile(candidate) or knownDirs[candidate] then
 		return candidate
 	end
 	return nil

@@ -219,7 +219,11 @@ function Theme.ResponsiveScale(gui: GuiObject, baseHeight: number?): UIScale
 	update()
 	local camera = Workspace.CurrentCamera
 	if camera then
-		camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+		local connection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+		-- Stop listening once the UI is destroyed (panels are created and destroyed often).
+		scale.Destroying:Connect(function()
+			connection:Disconnect()
+		end)
 	end
 	return scale
 end

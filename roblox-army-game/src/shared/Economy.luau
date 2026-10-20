@@ -1,92 +1,489 @@
 --!strict
 --[[
-	Economy  (STUB written by the lead — ECON replaces the bodies, keeps every signature)
-	See docs/ARCHITECTURE.md §4.1.
+	Economy
+	Every price and income in the game, derived from ONE measured number: the
+	best-case cash of the army runner. Pure (no services, no Instances),
+	deterministic and memoized, so the server, the client and the Lune tests /
+	scripts/simulate.luau all see the same numbers. Tunables: Shared/EconomyDefs.
+
+	Public API (docs/ARCHITECTURE.md §4.1). `area` = index into Config.Areas.
+		Economy.RunBenchmark(area): number           R(area): average best-case payout of the 10 benchmark runs
+		Economy.TenRunBenchmark(area): number        B10(area): sum of the 10 best-case runs
+		Economy.BenchmarkDetails(area): { upgradeLevel, runs = { { level, payout } }, total }
+		Economy.ReferenceUpgrades(area): { troops, damage, capacity }
+		Economy.SlotUnlockPrice(slotId): number      revenue section or the Combat Arena slot
+		Economy.GatePrice(area): number              gate from `area` into `area + 1` (strictly increasing)
+		Economy.SectionStats(slotId, level): { incomePerSale, saleInterval, stockCapacity, incomePerSecond }
+		Economy.SectionMaxLevel: number
+		Economy.SectionUpgradePrice(slotId, currentLevel): number?   nil at max level
+		Economy.EmployeeCashPrice(slotId, playerHighestArea): number
+		Economy.ReferencePassiveRate(area): number   $/s of all level-1 sections in areas <= area
+		Economy.RunnerUpgradeMaxLevel: number
+		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
+		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
+		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
+		Economy.BoostValue(boostId, playerArea): number
+		Economy.BoostCoinPrice(boostId, playerArea): number
+		Economy.VehicleCoinPrice(vehicleId, playerArea): number
+		Economy.CombatLevelReward(level): number
+		Economy.BarrierCombatLevel(area): number
+		Economy.EquipmentUpgradePrice(rarity, currentLevel): number? nil at the rarity's max level
+		Economy.RunDurationSeconds(): number
+	Extras (not in the contract, handy for UIs and tools):
+		Economy.SlotArea(slotId): number?            area index of a slot id
+		Economy.AreaUnlockTotal(area): number        all 4 slots + the exit gate of an area
+		Economy._ClearCache()                        tests: forget memoized values (e.g. after
+		                                             switching Config.Benchmark.Mode)
+
+	Definitions (answers to the brief's open questions; all [PROPOSAL]):
+	* 10-run benchmark (question 3): the benchmark runs of area a are the courses
+	  (a, L0 .. L0+9) with L0 = 1 + 10*(a-1). Each is solved EXACTLY with
+	  RunnerSim.BestCase using the reference player of that area:
+	  ReferenceUpgrades(a) = every permanent upgrade at level
+	  (a-1) * Config.Benchmark.ReferenceUpgradeLevelsPerArea.
+	  B10(a) = sum of the 10 best-case payouts, R(a) = B10(a) / 10.
+	* "Three area upgrades" = the first three revenue sections of an area,
+	  following Config.Benchmark.Mode:
+	    "CombinedSections" -> the three together cost B10 (split by income weight).
+	    "EachSection"      -> each of the three costs B10.
+	  The 4th revenue section costs the same $ per income weight as the first
+	  three; the Combat Arena slot (a2s4) costs EconomyDefs.Slots.ArenaShare x B10.
+	* Gate a -> a+1 costs GateShare x B10(a), and always more than the gate before.
+	* Employee cash price (question 4): Config.Employee.RunsEquivalent (20) x R,
+	  i.e. 20 best-case benchmark runs of the section's area ("SectionArea") or
+	  of the player's highest area ("PlayerArea").
+	* Sections: a full area of level-1 sections earns PassiveShare (32%) of the
+	  active runner rate R / RunDurationSeconds().
+	* Boost value V ("used properly", question 10): a 2x multiplier doubles your
+	  earnings while you play runs for its duration -> extra = minutes*60 /
+	  RunDurationSeconds() x R(area). A time skip pays hours*3600 x
+	  ReferencePassiveRate(area). Coin price = (1 - NetGainShare) x V = 0.8 V:
+	  80% less net gain than the Robux route, still +25% return.
+	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)).
+	* Combat: the barrier of area a is combat level 3a-1. A perfect clear of a
+	  combat level pays ~3 best-case runs of the area the level belongs to
+	  (geometric interpolation between areas, strictly increasing).
+	Every price is rounded to cents (Format.RoundCents).
 ]]
+
+local Shared = script.Parent
+local Config = require(Shared:WaitForChild("Config"))
+local EconomyDefs = require(Shared:WaitForChild("EconomyDefs"))
+local Format = require(Shared:WaitForChild("Format"))
+local RunnerFolder = Shared:WaitForChild("Runner")
+local RunnerCourse = require(RunnerFolder:WaitForChild("RunnerCourse"))
+local RunnerDefs = require(RunnerFolder:WaitForChild("RunnerDefs"))
+local RunnerSim = require(RunnerFolder:WaitForChild("RunnerSim"))
+
+export type BenchmarkRun = { level: number, payout: number }
+export type BenchmarkDetails = { upgradeLevel: number, runs: { BenchmarkRun }, total: number }
+export type Upgrades = { troops: number, damage: number, capacity: number }
+export type RunnerStats = { startTroops: number, damage: number, capacity: number }
+export type SectionStats = { incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
+
+type SlotInfo = { area: number, index: number, def: Config.SlotDef }
 
 local Economy = {}
 
-Economy.SectionMaxLevel = 10
-Economy.RunnerUpgradeMaxLevel = 50
+Economy.SectionMaxLevel = EconomyDefs.Sections.MaxLevel
+Economy.RunnerUpgradeMaxLevel = EconomyDefs.Runner.MaxLevel
 
-function Economy.RunBenchmark(_area: number): number
-	return 100
+local AREA_COUNT = #Config.Areas
+local round = Format.RoundCents
+
+-------------------------------------------------------------------------------
+-- Small helpers
+-------------------------------------------------------------------------------
+local function num(value: any, fallback: number): number
+	if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge then
+		return fallback
+	end
+	return value
 end
 
-function Economy.TenRunBenchmark(area: number): number
-	return Economy.RunBenchmark(area) * 10
+-- Any area >= 1 (benchmarks beyond the last area are extrapolated).
+local function anyArea(area: any): number
+	return math.max(1, math.floor(num(area, 1)))
 end
 
-function Economy.BenchmarkDetails(_area: number): { upgradeLevel: number, runs: { { level: number, payout: number } }, total: number }
-	return { upgradeLevel = 0, runs = {}, total = 0 }
+-- An area that exists in Config.Areas.
+local function realArea(area: any): number
+	return math.clamp(math.floor(num(area, 1)), 1, AREA_COUNT)
 end
 
-function Economy.ReferenceUpgrades(_area: number): { troops: number, damage: number, capacity: number }
-	return { troops = 0, damage = 0, capacity = 0 }
+-- Slot id -> where it is.
+local slotLookup: { [string]: SlotInfo } = {}
+for areaIndex, areaDef in Config.Areas do
+	for slotIndex, slotDef in areaDef.slots do
+		slotLookup[slotDef.id] = { area = areaIndex, index = slotIndex, def = slotDef }
+	end
 end
 
-function Economy.SlotUnlockPrice(_slotId: string): number
-	return 100
+local boostLookup: { [string]: Config.BoostDef } = {}
+for _, boost in Config.Boosts do
+	boostLookup[boost.id] = boost
 end
 
-function Economy.GatePrice(area: number): number
-	return 1000 * area
+local vehicleLookup: { [string]: Config.VehicleDef } = {}
+for _, vehicle in Config.Vehicles do
+	vehicleLookup[vehicle.id] = vehicle
 end
 
-function Economy.SectionStats(_slotId: string, _level: number): { incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
-	return { incomePerSale = 1, saleInterval = 5, stockCapacity = 20, incomePerSecond = 0.2 }
+-- Memo tables (cleared by Economy._ClearCache).
+local benchCache: { [number]: BenchmarkDetails } = {}
+local gateCache: { [number]: number } = {}
+
+function Economy._ClearCache()
+	table.clear(benchCache)
+	table.clear(gateCache)
 end
 
-function Economy.SectionUpgradePrice(_slotId: string, _currentLevel: number): number?
-	return 100
-end
-
-function Economy.EmployeeCashPrice(_slotId: string, _playerHighestArea: number): number
-	return 2000
-end
-
-function Economy.ReferencePassiveRate(_area: number): number
-	return 1
-end
-
-function Economy.RunnerUpgradePrice(_kind: string, _currentLevel: number): number?
-	return 50
-end
-
-function Economy.RunnerStats(_upgrades: { troops: number, damage: number, capacity: number }, _area: number): { startTroops: number, damage: number, capacity: number }
-	return { startTroops = 3, damage = 10, capacity = 60 }
-end
-
-function Economy.RunnerUpgradeEffect(_kind: string, _level: number): string
-	return ""
-end
-
-function Economy.BoostValue(_boostId: string, _playerArea: number): number
-	return 100
-end
-
-function Economy.BoostCoinPrice(_boostId: string, _playerArea: number): number
-	return 80
-end
-
-function Economy.VehicleCoinPrice(_vehicleId: string, _playerArea: number): number
-	return 1000
-end
-
-function Economy.CombatLevelReward(_level: number): number
-	return 100
-end
-
-function Economy.BarrierCombatLevel(area: number): number
-	return area
-end
-
-function Economy.EquipmentUpgradePrice(_rarity: number, _currentLevel: number): number?
-	return 50
+function Economy.SlotArea(slotId: string): number?
+	local info = slotLookup[slotId]
+	return if info then info.area else nil
 end
 
 function Economy.RunDurationSeconds(): number
-	return 60
+	-- Running time to the enemy base + menus / summary overhead.
+	return RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED + RunnerDefs.RUN_OVERHEAD_SECONDS
+end
+
+-------------------------------------------------------------------------------
+-- Permanent runner upgrades
+-------------------------------------------------------------------------------
+local function referenceLevel(area: number): number
+	local perArea = num(Config.Benchmark.ReferenceUpgradeLevelsPerArea, 0)
+	return math.clamp(math.floor((anyArea(area) - 1) * perArea), 0, EconomyDefs.Runner.MaxLevel)
+end
+
+function Economy.ReferenceUpgrades(area: number): Upgrades
+	local level = referenceLevel(area)
+	return { troops = level, damage = level, capacity = level }
+end
+
+local function upgradeLevel(value: any): number
+	return math.clamp(math.floor(num(value, 0)), 0, EconomyDefs.Runner.MaxLevel)
+end
+
+-- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
+-- the reference player's capacity bonus, so a reference-upgraded player can
+-- carry about BaseCapacity x AreaScale^(a-1) in every area: the bag stays a
+-- real limit everywhere and capacity upgrades keep mattering.
+local function baseCapacity(area: number): number
+	local d = EconomyDefs.Runner
+	local a = anyArea(area)
+	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
+end
+
+function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
+	local d = EconomyDefs.Runner
+	local u: any = if type(upgrades) == "table" then upgrades else {}
+	local troops = upgradeLevel(u.troops)
+	local damage = upgradeLevel(u.damage)
+	local capacity = upgradeLevel(u.capacity)
+	return {
+		startTroops = d.BaseTroops + troops * d.TroopsPerLevel,
+		damage = round(d.BaseDamage * (1 + d.DamagePerLevel * damage)),
+		capacity = round(baseCapacity(area) * (1 + d.CapacityPerLevel * capacity)),
+	}
+end
+
+function Economy.RunnerUpgradeEffect(kind: string, level: number): string
+	if upgradeLevel(level) >= EconomyDefs.Runner.MaxLevel then
+		return "MAX"
+	end
+	local d = EconomyDefs.Runner
+	if kind == "troops" then
+		return "+" .. d.TroopsPerLevel .. (if d.TroopsPerLevel == 1 then " troop" else " troops")
+	elseif kind == "damage" then
+		return "+" .. math.floor(d.DamagePerLevel * 100 + 0.5) .. "% damage"
+	elseif kind == "capacity" then
+		return "+" .. math.floor(d.CapacityPerLevel * 100 + 0.5) .. "% carry"
+	end
+	return ""
+end
+
+-------------------------------------------------------------------------------
+-- The 10-run benchmark
+-------------------------------------------------------------------------------
+local function simulateArea(area: number): BenchmarkDetails
+	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local first = RunnerDefs.FirstLevelOfArea(area)
+	local runs: { BenchmarkRun } = {}
+	local total = 0
+	for i = 0, num(Config.Benchmark.Runs, 10) - 1 do
+		local course = RunnerCourse.Generate(area, first + i)
+		local result = RunnerSim.BestCase(course, {
+			startTroops = stats.startTroops,
+			damage = stats.damage,
+			capacity = stats.capacity,
+		})
+		table.insert(runs, { level = first + i, payout = result.total })
+		total += result.total
+	end
+	return { upgradeLevel = referenceLevel(area), runs = runs, total = round(total) }
+end
+
+local function details(area: number): BenchmarkDetails
+	local a = anyArea(area)
+	local cached = benchCache[a]
+	if cached then
+		return cached
+	end
+	local result: BenchmarkDetails
+	if a <= AREA_COUNT or AREA_COUNT < 2 then
+		result = simulateArea(a)
+	else
+		-- [PROPOSAL] Beyond the last area (only combat levels reach here) grow
+		-- by the same ratio as the last two real areas.
+		local last = details(AREA_COUNT)
+		local before = details(AREA_COUNT - 1)
+		local ratio = math.max(1.05, last.total / math.max(0.01, before.total))
+		local factor = ratio ^ (a - AREA_COUNT)
+		local runs: { BenchmarkRun } = {}
+		local total = 0
+		for i, run in last.runs do
+			local payout = round(run.payout * factor)
+			table.insert(runs, { level = RunnerDefs.FirstLevelOfArea(a) + i - 1, payout = payout })
+			total += payout
+		end
+		result = { upgradeLevel = referenceLevel(a), runs = runs, total = round(total) }
+	end
+	benchCache[a] = result
+	return result
+end
+
+function Economy.BenchmarkDetails(area: number): BenchmarkDetails
+	local d = details(area)
+	local runs: { BenchmarkRun } = {}
+	for _, run in d.runs do
+		table.insert(runs, { level = run.level, payout = run.payout })
+	end
+	return { upgradeLevel = d.upgradeLevel, runs = runs, total = d.total }
+end
+
+function Economy.TenRunBenchmark(area: number): number
+	return details(area).total
+end
+
+function Economy.RunBenchmark(area: number): number
+	local d = details(area)
+	return round(d.total / math.max(1, #d.runs))
+end
+
+-------------------------------------------------------------------------------
+-- Slots, gates, sections
+-------------------------------------------------------------------------------
+-- The first three revenue slots of an area, and the sum of their income weights.
+local function firstThree(area: number): ({ [string]: boolean }, number)
+	local set: { [string]: boolean } = {}
+	local weight = 0
+	local count = 0
+	for _, slotDef in Config.Areas[area].slots do
+		if slotDef.kind == "revenue" and count < 3 then
+			set[slotDef.id] = true
+			weight += slotDef.incomeWeight
+			count += 1
+		end
+	end
+	return set, weight
+end
+
+function Economy.SlotUnlockPrice(slotId: string): number
+	local info = slotLookup[slotId]
+	if not info then
+		return math.huge -- unknown slot: can never be bought
+	end
+	local b10 = Economy.TenRunBenchmark(info.area)
+	if info.def.kind ~= "revenue" then
+		return round(EconomyDefs.Slots.ArenaShare * b10)
+	end
+	local set, weightOfThree = firstThree(info.area)
+	local w = info.def.incomeWeight
+	if Config.Benchmark.Mode == "EachSection" then
+		if set[slotId] then
+			return round(b10)
+		end
+		-- 4th revenue section: B10 per average weight of the first three.
+		return round(b10 * w / math.max(0.01, weightOfThree / 3))
+	end
+	-- "CombinedSections" (default): the first three cost B10 together.
+	return round(b10 * w / math.max(0.01, weightOfThree))
+end
+
+function Economy.GatePrice(area: number): number
+	local a = anyArea(area)
+	local cached = gateCache[a]
+	if cached then
+		return cached
+	end
+	local price = round(EconomyDefs.Slots.GateShare * Economy.TenRunBenchmark(a))
+	if a > 1 then
+		price = math.max(price, round(Economy.GatePrice(a - 1) * EconomyDefs.Slots.GateMinStep))
+	end
+	gateCache[a] = price
+	return price
+end
+
+function Economy.AreaUnlockTotal(area: number): number
+	local a = realArea(area)
+	local total = 0
+	for _, slotDef in Config.Areas[a].slots do
+		total += Economy.SlotUnlockPrice(slotDef.id)
+	end
+	return round(total + Economy.GatePrice(a))
+end
+
+local NO_INCOME: SectionStats = { incomePerSale = 0, saleInterval = 5, stockCapacity = 0, incomePerSecond = 0 }
+
+function Economy.SectionStats(slotId: string, level: number): SectionStats
+	local info = slotLookup[slotId]
+	if not info or info.def.kind ~= "revenue" then
+		return table.clone(NO_INCOME)
+	end
+	local d = EconomyDefs.Sections
+	local lvl = math.clamp(math.floor(num(level, 1)), 1, d.MaxLevel)
+	local areaWeight = 0
+	for _, slotDef in Config.Areas[info.area].slots do
+		if slotDef.kind == "revenue" then
+			areaWeight += slotDef.incomeWeight
+		end
+	end
+	local activeRate = Economy.RunBenchmark(info.area) / Economy.RunDurationSeconds()
+	local levelOneRate = d.PassiveShare * activeRate * info.def.incomeWeight / math.max(0.01, areaWeight)
+	local interval = d.SaleInterval[info.index] or d.SaleInterval[#d.SaleInterval]
+	local stock = d.StockCapacity[info.index] or d.StockCapacity[#d.StockCapacity]
+	local perSale = math.max(0.01, round(levelOneRate * (1 + d.IncomePerLevel * (lvl - 1)) * interval))
+	return {
+		incomePerSale = perSale,
+		saleInterval = interval,
+		stockCapacity = math.floor(stock * (1 + d.StockPerLevel * (lvl - 1)) + 0.5),
+		incomePerSecond = perSale / interval,
+	}
+end
+
+function Economy.SectionUpgradePrice(slotId: string, currentLevel: number): number?
+	local info = slotLookup[slotId]
+	if not info or info.def.kind ~= "revenue" then
+		return nil
+	end
+	local d = EconomyDefs.Sections
+	local lvl = math.max(1, math.floor(num(currentLevel, 1)))
+	if lvl >= d.MaxLevel then
+		return nil
+	end
+	return round(Economy.SlotUnlockPrice(slotId) * d.UpgradeBaseShare * d.UpgradeGrowth ^ (lvl - 1))
+end
+
+function Economy.ReferencePassiveRate(area: number): number
+	local total = 0
+	for a = 1, realArea(area) do
+		for _, slotDef in Config.Areas[a].slots do
+			if slotDef.kind == "revenue" then
+				total += Economy.SectionStats(slotDef.id, 1).incomePerSecond
+			end
+		end
+	end
+	return total
+end
+
+function Economy.EmployeeCashPrice(slotId: string, playerHighestArea: number): number
+	local info = slotLookup[slotId]
+	local area: number
+	if info and Config.Employee.PriceScalesWith ~= "PlayerArea" then
+		area = info.area
+	else
+		area = realArea(playerHighestArea)
+	end
+	return round(num(Config.Employee.RunsEquivalent, 20) * Economy.RunBenchmark(area))
+end
+
+-------------------------------------------------------------------------------
+-- Runner upgrade prices
+-------------------------------------------------------------------------------
+function Economy.RunnerUpgradePrice(kind: string, currentLevel: number): number?
+	local d = EconomyDefs.Runner
+	local factor = (d.KindPriceFactor :: { [string]: number })[kind]
+	if factor == nil then
+		return nil
+	end
+	local lvl = math.max(0, math.floor(num(currentLevel, 0)))
+	if lvl >= d.MaxLevel then
+		return nil
+	end
+	return math.max(0.01, round(d.BasePriceShare * Economy.RunBenchmark(1) * d.PriceGrowth ^ lvl * factor))
+end
+
+-------------------------------------------------------------------------------
+-- Boosts and vehicles
+-------------------------------------------------------------------------------
+function Economy.BoostValue(boostId: string, playerArea: number): number
+	local boost = boostLookup[boostId]
+	if not boost then
+		return 0
+	end
+	local area = realArea(playerArea)
+	if boost.kind == "multiplier" then
+		local seconds = num(boost.minutes, 0) * 60
+		return round(seconds / Economy.RunDurationSeconds() * Economy.RunBenchmark(area))
+	elseif boost.kind == "timeskip" then
+		local seconds = num(boost.hours, 0) * 3600
+		return round(seconds * Economy.ReferencePassiveRate(area))
+	end
+	return 0
+end
+
+function Economy.BoostCoinPrice(boostId: string, playerArea: number): number
+	if not boostLookup[boostId] then
+		return math.huge -- unknown boost: can never be bought
+	end
+	local share = 1 - num(Config.CoinRoute.NetGainShare, 0.2)
+	return math.max(0.01, round(share * Economy.BoostValue(boostId, playerArea)))
+end
+
+function Economy.VehicleCoinPrice(vehicleId: string, playerArea: number): number
+	local vehicle = vehicleLookup[vehicleId]
+	if not vehicle then
+		return math.huge -- unknown vehicle: can never be bought
+	end
+	local area = math.max(realArea(playerArea), realArea(vehicle.area))
+	return round(vehicle.priceFactor * Economy.GatePrice(area))
+end
+
+-------------------------------------------------------------------------------
+-- Combat and equipment
+-------------------------------------------------------------------------------
+function Economy.BarrierCombatLevel(area: number): number
+	local c = EconomyDefs.Combat
+	return math.max(1, c.BarrierLevelsPerArea * anyArea(area) + c.BarrierLevelOffset)
+end
+
+-- R on a continuous area scale: R(a) at whole numbers, geometric in between.
+local function smoothBenchmark(x: number): number
+	local lower = math.max(1, math.floor(x))
+	local r1 = Economy.RunBenchmark(lower)
+	local r2 = Economy.RunBenchmark(lower + 1)
+	local ratio = math.max(1.05, r2 / math.max(0.01, r1))
+	return r1 * ratio ^ (x - lower)
+end
+
+function Economy.CombatLevelReward(level: number): number
+	local c = EconomyDefs.Combat
+	local lvl = math.max(1, math.floor(num(level, 1)))
+	-- Level L sits at "area position" x where the barrier level of area a maps to x = a.
+	local x = (lvl - c.BarrierLevelOffset) / c.BarrierLevelsPerArea
+	return math.max(0.01, round(c.RewardRuns * smoothBenchmark(x)))
+end
+
+function Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): number?
+	local d = EconomyDefs.Equipment
+	local r = math.clamp(math.floor(num(rarity, 1)), 1, #Config.Rarities)
+	local lvl = math.max(1, math.floor(num(currentLevel, 1)))
+	if lvl >= Config.Rarities[r].maxLevel then
+		return nil
+	end
+	local factor = d.RarityFactor[r] or d.RarityFactor[#d.RarityFactor]
+	return math.max(0.01, round(d.BaseShare * Economy.RunBenchmark(1) * d.Growth ^ (lvl - 1) * factor))
 end
 
 return Economy
