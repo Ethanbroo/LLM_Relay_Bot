@@ -112,7 +112,12 @@ return function(H)
 				end
 				H.near(sum, Economy.TenRunBenchmark(area), 0.03, "three sections = B10 in area " .. area)
 			end
-			H.near(Economy.SlotUnlockPrice(Config.ArenaSlotId), EconomyDefs.Slots.ArenaShare * Economy.TenRunBenchmark(Config.ArenaArea), 0.01, "arena price")
+			H.near(
+				Economy.SlotUnlockPrice(Config.ArenaSlotId),
+				EconomyDefs.Slots.ArenaShare * Economy.TenRunBenchmark(Config.ArenaArea),
+				0.01,
+				"arena price"
+			)
 		end)
 	end)
 
@@ -160,7 +165,12 @@ return function(H)
 						passive += s.incomePerSecond
 						-- Upgrades: +20% income, +10% stock per level, nil at max.
 						local s10 = Economy.SectionStats(slotDef.id, Economy.SectionMaxLevel)
-						H.near(s10.incomePerSale, s.incomePerSale * (1 + 0.2 * (Economy.SectionMaxLevel - 1)), 0.02, "level 10 income")
+						H.near(
+							s10.incomePerSale,
+							s.incomePerSale * (1 + 0.2 * (Economy.SectionMaxLevel - 1)),
+							0.02,
+							"level 10 income"
+						)
 						H.expect(s10.stockCapacity > s.stockCapacity, "level 10 stock")
 						local prev = 0
 						for level = 1, Economy.SectionMaxLevel - 1 do
@@ -183,7 +193,12 @@ return function(H)
 	H.test("Employee cash price = 20 runs of R (both scaling rules)", function()
 		for area = 1, AREAS do
 			local slotId = Config.Areas[area].slots[1].id
-			H.near(Economy.EmployeeCashPrice(slotId, AREAS), Config.Employee.RunsEquivalent * Economy.RunBenchmark(area), 0.01, "SectionArea")
+			H.near(
+				Economy.EmployeeCashPrice(slotId, AREAS),
+				Config.Employee.RunsEquivalent * Economy.RunBenchmark(area),
+				0.01,
+				"SectionArea"
+			)
 		end
 		withConfig(Config.Employee, "PriceScalesWith", "PlayerArea", function()
 			H.near(Economy.EmployeeCashPrice("a1s1", 5), 20 * Economy.RunBenchmark(5), 0.01, "PlayerArea")
@@ -219,7 +234,12 @@ return function(H)
 				H.expect(price >= previous, "vehicle price never drops")
 				previous = price
 			end
-			H.near(Economy.VehicleCoinPrice(v.id, 1), v.priceFactor * Economy.GatePrice(math.max(1, v.area)), 0.01, "definition")
+			H.near(
+				Economy.VehicleCoinPrice(v.id, 1),
+				v.priceFactor * Economy.GatePrice(math.max(1, v.area)),
+				0.01,
+				"definition"
+			)
 		end
 	end)
 
@@ -250,7 +270,12 @@ return function(H)
 		-- Base capacity keeps up with the area so the bag stays relevant.
 		for area = 1, AREAS do
 			local ref = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
-			H.near(ref.capacity, EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1), 0.02, "reference capacity")
+			H.near(
+				ref.capacity,
+				EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1),
+				0.02,
+				"reference capacity"
+			)
 		end
 	end)
 
@@ -262,7 +287,12 @@ return function(H)
 			H.expect(b > previousBarrier, "barrier levels increase")
 			previousBarrier = b
 			-- A barrier pays about 3 runs of its area.
-			H.near(Economy.CombatLevelReward(b), EconomyDefs.Combat.RewardRuns * Economy.RunBenchmark(area), 0.02, "barrier reward")
+			H.near(
+				Economy.CombatLevelReward(b),
+				EconomyDefs.Combat.RewardRuns * Economy.RunBenchmark(area),
+				0.02,
+				"barrier reward"
+			)
 		end
 		local previous = 0
 		for level = 1, 60 do
@@ -285,7 +315,11 @@ return function(H)
 			end
 			H.expect(Economy.EquipmentUpgradePrice(rarity, def.maxLevel) == nil, "nil at max")
 			if rarity > 1 then
-				H.expect((Economy.EquipmentUpgradePrice(rarity, 1) :: number) > (Economy.EquipmentUpgradePrice(rarity - 1, 1) :: number), "rarity factor")
+				H.expect(
+					(Economy.EquipmentUpgradePrice(rarity, 1) :: number)
+						> Economy.EquipmentUpgradePrice(rarity - 1, 1) :: number,
+					"rarity factor"
+				)
 			end
 		end
 	end)

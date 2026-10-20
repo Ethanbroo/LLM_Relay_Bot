@@ -79,7 +79,14 @@ emit()
 emit(string.format("* Benchmark mode: **%s** (Config.Benchmark.Mode)", Config.Benchmark.Mode))
 emit(string.format("* Reference upgrade levels per area: %d", Config.Benchmark.ReferenceUpgradeLevelsPerArea))
 emit(string.format("* Area cash scale: x%.2f per area", EconomyDefs.AreaScale))
-emit(string.format("* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %d s menus)", T, RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED, RunnerDefs.RUN_OVERHEAD_SECONDS))
+emit(
+	string.format(
+		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %d s menus)",
+		T,
+		RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED,
+		RunnerDefs.RUN_OVERHEAD_SECONDS
+	)
+)
 emit()
 
 -------------------------------------------------------------------------------
@@ -98,7 +105,9 @@ for area = 1, AREAS do
 	for _, r in d.runs do
 		table.insert(runs, string.format("%.0f", r.payout))
 	end
-	local ratio = if area > 1 then string.format("x%.2f", Economy.RunBenchmark(area) / Economy.RunBenchmark(area - 1)) else "-"
+	local ratio = if area > 1
+		then string.format("x%.2f", Economy.RunBenchmark(area) / Economy.RunBenchmark(area - 1))
+		else "-"
 	row({
 		area,
 		Config.Areas[area].name,
@@ -119,7 +128,16 @@ emit("Best-case play by the reference player vs an un-upgraded player (level 0) 
 emit("10 benchmark courses. Search size = largest Pareto frontier in the exact optimiser")
 emit(string.format("(cap %d).", RunnerSim.STATE_CAP))
 emit()
-header({ "Area", "Ref payout", "No-upgrade payout", "Ref boss %", "Ref soldiers killed", "Ref barricades", "Weapon/damage gates taken", "Search size" })
+header({
+	"Area",
+	"Ref payout",
+	"No-upgrade payout",
+	"Ref boss %",
+	"Ref soldiers killed",
+	"Ref barricades",
+	"Weapon/damage gates taken",
+	"Search size",
+})
 for area = 1, AREAS do
 	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
 	local weak = Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, area)
@@ -179,7 +197,18 @@ local function slotTable(mode: string)
 	Economy._ClearCache()
 	emit("### Mode " .. mode .. (if mode == saved then " (active)" else ""))
 	emit()
-	header({ "Area", "Slot 1", "Slot 2", "Slot 3", "Slot 4", "First three / B10", "Gate -> next", "Slots total", "Slots + gate", "= runs of R" })
+	header({
+		"Area",
+		"Slot 1",
+		"Slot 2",
+		"Slot 3",
+		"Slot 4",
+		"First three / B10",
+		"Gate -> next",
+		"Slots total",
+		"Slots + gate",
+		"= runs of R",
+	})
 	for area = 1, AREAS do
 		local cells: { any } = { area }
 		local three, slots = 0, 0
@@ -209,10 +238,29 @@ slotTable("EachSection")
 -------------------------------------------------------------------------------
 emit("## 4. Revenue sections")
 emit()
-emit(string.format("Passive target: a full area of level-1 sections = %.0f%% of the active runner rate R / %.1f s.", EconomyDefs.Sections.PassiveShare * 100, T))
+emit(
+	string.format(
+		"Passive target: a full area of level-1 sections = %.0f%% of the active runner rate R / %.1f s.",
+		EconomyDefs.Sections.PassiveShare * 100,
+		T
+	)
+)
 emit("Payback = unlock price / income per second while stocked.")
 emit()
-header({ "Slot", "Name", "Unlock", "$/sale", "Every", "Stock", "$/s L1", "Payback", "Restock every", "$/s L10", "Upgrade L1->2", "Upgrade L9->10" })
+header({
+	"Slot",
+	"Name",
+	"Unlock",
+	"$/sale",
+	"Every",
+	"Stock",
+	"$/s L1",
+	"Payback",
+	"Restock every",
+	"$/s L10",
+	"Upgrade L1->2",
+	"Upgrade L9->10",
+})
 for area = 1, AREAS do
 	for _, slotDef in Config.Areas[area].slots do
 		if slotDef.kind == "revenue" then
@@ -237,27 +285,51 @@ for area = 1, AREAS do
 	end
 end
 emit()
-header({ "Area", "Area passive $/s (L1)", "Active $/s (R/T)", "Passive / active", "ReferencePassiveRate (all areas <=)" })
+header({
+	"Area",
+	"Area passive $/s (L1)",
+	"Active $/s (R/T)",
+	"Passive / active",
+	"ReferencePassiveRate (all areas <=)",
+})
 for area = 1, AREAS do
 	local passive = 0
 	for _, slotDef in Config.Areas[area].slots do
 		passive += Economy.SectionStats(slotDef.id, 1).incomePerSecond
 	end
 	local active = Economy.RunBenchmark(area) / T
-	row({ area, string.format("%.2f", passive), string.format("%.2f", active), string.format("%.0f%%", 100 * passive / active), string.format("%.2f", Economy.ReferencePassiveRate(area)) })
+	row({
+		area,
+		string.format("%.2f", passive),
+		string.format("%.2f", active),
+		string.format("%.0f%%", 100 * passive / active),
+		string.format("%.2f", Economy.ReferencePassiveRate(area)),
+	})
 end
 emit()
 
 -------------------------------------------------------------------------------
 emit("## 5. Employees")
 emit()
-emit(string.format("R$ %d or cash = %d x R(area) (PriceScalesWith = %s).", Config.Employee.Robux, Config.Employee.RunsEquivalent, Config.Employee.PriceScalesWith))
+emit(
+	string.format(
+		"R$ %d or cash = %d x R(area) (PriceScalesWith = %s).",
+		Config.Employee.Robux,
+		Config.Employee.RunsEquivalent,
+		Config.Employee.PriceScalesWith
+	)
+)
 emit()
 header({ "Area", "Employee cash price", "= runs of R", "vs cheapest section unlock" })
 for area = 1, AREAS do
 	local slotId = Config.Areas[area].slots[1].id
 	local price = Economy.EmployeeCashPrice(slotId, area)
-	row({ area, money(price), string.format("%.1f", price / Economy.RunBenchmark(area)), string.format("x%.1f", price / Economy.SlotUnlockPrice(slotId)) })
+	row({
+		area,
+		money(price),
+		string.format("%.1f", price / Economy.RunBenchmark(area)),
+		string.format("x%.1f", price / Economy.SlotUnlockPrice(slotId)),
+	})
 end
 emit()
 
@@ -266,7 +338,15 @@ emit("## 6. Boosts")
 emit()
 emit("Value V = cash the boost gives when used properly; coin price = (1 - NetGainShare) x V.")
 emit()
-header({ "Boost", "Robux", "Weight", "Area 1 value / price", "Area 4 value / price", "Area 8 value / price", "Value / price" })
+header({
+	"Boost",
+	"Robux",
+	"Weight",
+	"Area 1 value / price",
+	"Area 4 value / price",
+	"Area 8 value / price",
+	"Value / price",
+})
 for _, boost in Config.Boosts do
 	local cells: { any } = { boost.name, boost.robux, boost.weight }
 	local ratio = 0
@@ -286,7 +366,14 @@ emit("## 7. Vehicles")
 emit()
 header({ "Vehicle", "Area", "Robux", "Runner bonus", "Coin price at its area", "Coin price at area 8" })
 for _, v in Config.Vehicles do
-	row({ v.name, v.area, v.robux, Format.Percent(v.runnerBonus), money(Economy.VehicleCoinPrice(v.id, v.area)), money(Economy.VehicleCoinPrice(v.id, AREAS)) })
+	row({
+		v.name,
+		v.area,
+		v.robux,
+		Format.Percent(v.runnerBonus),
+		money(Economy.VehicleCoinPrice(v.id, v.area)),
+		money(Economy.VehicleCoinPrice(v.id, AREAS)),
+	})
 end
 emit()
 
@@ -300,7 +387,11 @@ for _, level in { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 49 } do
 		money(Economy.RunnerUpgradePrice("troops", level) :: number),
 		money(Economy.RunnerUpgradePrice("damage", level) :: number),
 		money(Economy.RunnerUpgradePrice("capacity", level) :: number),
-		Economy.RunnerUpgradeEffect("troops", level) .. ", " .. Economy.RunnerUpgradeEffect("damage", level) .. ", " .. Economy.RunnerUpgradeEffect("capacity", level),
+		Economy.RunnerUpgradeEffect("troops", level)
+			.. ", "
+			.. Economy.RunnerUpgradeEffect("damage", level)
+			.. ", "
+			.. Economy.RunnerUpgradeEffect("capacity", level),
 	})
 end
 emit()
@@ -361,12 +452,18 @@ local function pacing(efficiency: number): { { runs: number, seconds: number } }
 	for area = 1, AREAS do
 		local shopping: { { name: string, price: number, slotId: string? } } = {}
 		for _, slotDef in Config.Areas[area].slots do
-			table.insert(shopping, { name = slotDef.id, price = Economy.SlotUnlockPrice(slotDef.id), slotId = slotDef.id })
+			table.insert(
+				shopping,
+				{ name = slotDef.id, price = Economy.SlotUnlockPrice(slotDef.id), slotId = slotDef.id }
+			)
 		end
 		if area < AREAS then
 			for level = Economy.ReferenceUpgrades(area).troops, Economy.ReferenceUpgrades(area + 1).troops - 1 do
 				for _, kind in { "troops", "damage", "capacity" } do
-					table.insert(shopping, { name = kind .. level, price = Economy.RunnerUpgradePrice(kind, level) or 0 })
+					table.insert(
+						shopping,
+						{ name = kind .. level, price = Economy.RunnerUpgradePrice(kind, level) or 0 }
+					)
 				end
 			end
 		end
@@ -407,7 +504,14 @@ header({ "Area", "Runs @100%", "Time @100%", "Runs @75%", "Time @75%", "Total @7
 local cumulative = 0
 for area = 1, AREAS do
 	cumulative += partial[area].seconds
-	row({ area, full[area].runs, minutes(full[area].seconds), partial[area].runs, minutes(partial[area].seconds), string.format("%.1f h", cumulative / 3600) })
+	row({
+		area,
+		full[area].runs,
+		minutes(full[area].seconds),
+		partial[area].runs,
+		minutes(partial[area].seconds),
+		string.format("%.1f h", cumulative / 3600),
+	})
 end
 emit()
 

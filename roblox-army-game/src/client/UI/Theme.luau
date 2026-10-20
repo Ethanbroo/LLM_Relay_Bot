@@ -842,7 +842,14 @@ function Theme.Toast(text: string, kind: string?)
 	toast.Parent = toastList
 	Theme.Corner(toast, 12)
 	Theme.Stroke(toast, P.CardOutline, 2.5, true)
-	Theme.Label({ Text = text, MaxTextSize = 24, Size = UDim2.new(1, -16, 1, -6), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Parent = toast })
+	Theme.Label({
+		Text = text,
+		MaxTextSize = 24,
+		Size = UDim2.new(1, -16, 1, -6),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = toast,
+	})
 	Theme.Pop(toast)
 	task.delay(2.6, function()
 		Theme.Tween(toast, { BackgroundTransparency = 1 }, 0.3)
@@ -880,7 +887,14 @@ function Theme.FloatText(position: Vector3, text: string, color: Color3?)
 	anchor.Position = position
 	anchor.Parent = Workspace
 
-	local board = Theme.Billboard({ Parent = anchor, Adornee = anchor, Size = UDim2.fromOffset(180, 50), StudsOffset = Vector3.zero, AlwaysOnTop = true, MaxDistance = 120 })
+	local board = Theme.Billboard({
+		Parent = anchor,
+		Adornee = anchor,
+		Size = UDim2.fromOffset(180, 50),
+		StudsOffset = Vector3.zero,
+		AlwaysOnTop = true,
+		MaxDistance = 120,
+	})
 	local label = Theme.Label({ Text = text, TextColor3 = color or P.MoneyGreen, MaxTextSize = 34, Parent = board })
 	Theme.Tween(anchor, { Position = position + Vector3.new(0, 6, 0) }, 1.2)
 	task.delay(0.6, function()

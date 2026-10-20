@@ -49,57 +49,97 @@ local function openPanel()
 
 	type DevButton = { text: string, color: Color3, onClick: () -> () }
 	local buttons: { DevButton } = {
-		{ text = "+ $1,000", color = P.ButtonGreen, onClick = function()
-			run("DevGiveCash", 1000)
-		end },
-		{ text = "+ $100,000", color = P.ButtonGreen, onClick = function()
-			run("DevGiveCash", 100000)
-		end },
-		{ text = "+ $10,000,000", color = P.ButtonGreen, onClick = function()
-			run("DevGiveCash", 10000000)
-		end },
-		{ text = "Beat current barrier", color = P.ButtonRed, onClick = function()
-			run("DevBeatBarrier")
-		end },
-		{ text = "Wood chest", color = P.Wood, onClick = function()
-			local result = run("DevChest", "wood")
-			if result.ok and result.item then
+		{
+			text = "+ $1,000",
+			color = P.ButtonGreen,
+			onClick = function()
+				run("DevGiveCash", 1000)
+			end,
+		},
+		{
+			text = "+ $100,000",
+			color = P.ButtonGreen,
+			onClick = function()
+				run("DevGiveCash", 100000)
+			end,
+		},
+		{
+			text = "+ $10,000,000",
+			color = P.ButtonGreen,
+			onClick = function()
+				run("DevGiveCash", 10000000)
+			end,
+		},
+		{
+			text = "Beat current barrier",
+			color = P.ButtonRed,
+			onClick = function()
+				run("DevBeatBarrier")
+			end,
+		},
+		{
+			text = "Wood chest",
+			color = P.Wood,
+			onClick = function()
+				local result = run("DevChest", "wood")
+				if result.ok and result.item then
+					close()
+					require(Client.UI.ChestUI).Play("wood", result.item)
+				end
+			end,
+		},
+		{
+			text = "Gold chest",
+			color = P.Coin,
+			onClick = function()
+				local result = run("DevChest", "gold")
+				if result.ok and result.item then
+					close()
+					require(Client.UI.ChestUI).Play("gold", result.item)
+				end
+			end,
+		},
+		{
+			text = "2x cash 15 min",
+			color = P.OfferPurple,
+			onClick = function()
+				run("DevBoost", "x2_15")
+			end,
+		},
+		{
+			text = "Time skip 4h",
+			color = P.OfferPurple,
+			onClick = function()
+				run("DevBoost", "skip_4")
+			end,
+		},
+		{
+			text = "Start a run",
+			color = P.CardOrange,
+			onClick = function()
 				close()
-				require(Client.UI.ChestUI).Play("wood", result.item)
-			end
-		end },
-		{ text = "Gold chest", color = P.Coin, onClick = function()
-			local result = run("DevChest", "gold")
-			if result.ok and result.item then
+				local runner = registry.RunnerController
+				if runner and runner.OpenPrepare then
+					runner:OpenPrepare()
+				end
+			end,
+		},
+		{
+			text = "Reset my progress",
+			color = P.ButtonGreyDark,
+			onClick = function()
 				close()
-				require(Client.UI.ChestUI).Play("gold", result.item)
-			end
-		end },
-		{ text = "2x cash 15 min", color = P.OfferPurple, onClick = function()
-			run("DevBoost", "x2_15")
-		end },
-		{ text = "Time skip 4h", color = P.OfferPurple, onClick = function()
-			run("DevBoost", "skip_4")
-		end },
-		{ text = "Start a run", color = P.CardOrange, onClick = function()
-			close()
-			local runner = registry.RunnerController
-			if runner and runner.OpenPrepare then
-				runner:OpenPrepare()
-			end
-		end },
-		{ text = "Reset my progress", color = P.ButtonGreyDark, onClick = function()
-			close()
-			Theme.Confirm({
-				Title = "Reset progress?",
-				Body = "Wipes your test save back to a brand-new player.",
-				ConfirmText = "Reset",
-				ConfirmColor = P.ButtonRed,
-				OnConfirm = function()
-					run("DevReset")
-				end,
-			})
-		end },
+				Theme.Confirm({
+					Title = "Reset progress?",
+					Body = "Wipes your test save back to a brand-new player.",
+					ConfirmText = "Reset",
+					ConfirmColor = P.ButtonRed,
+					OnConfirm = function()
+						run("DevReset")
+					end,
+				})
+			end,
+		},
 	}
 	for index, spec in buttons do
 		Theme.Button({

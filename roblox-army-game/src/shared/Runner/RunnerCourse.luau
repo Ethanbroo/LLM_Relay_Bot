@@ -144,14 +144,24 @@ function RunnerCourse.Generate(area: number, level: number): Course
 	-- of a late "÷3", the 40% chance of a single-lane squad and the 2.2x reward of
 	-- a strong barricade only add variety; the big numbers live in RunnerDefs.
 	local function addN(rowIndex: number): Draft
-		local n = math.max(1, math.floor((RunnerDefs.ADD_BASE + RunnerDefs.ADD_PER_ROW * rowIndex) * troopScale * rng:Range(0.8, 1.25) + 0.5))
+		local n = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.ADD_BASE + RunnerDefs.ADD_PER_ROW * rowIndex) * troopScale * rng:Range(0.8, 1.25) + 0.5
+			)
+		)
 		return { op = "add", amount = n, label = "+" .. n, tone = "positive" }
 	end
 	local function mulN(): Draft
 		return { op = "mul", amount = 2, label = "x2", tone = "positive" }
 	end
 	local function subN(rowIndex: number): Draft
-		local n = math.max(1, math.floor((RunnerDefs.SUB_BASE + RunnerDefs.SUB_PER_ROW * rowIndex) * troopScale * rng:Range(0.8, 1.2) + 0.5))
+		local n = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.SUB_BASE + RunnerDefs.SUB_PER_ROW * rowIndex) * troopScale * rng:Range(0.8, 1.2) + 0.5
+			)
+		)
 		return { op = "sub", amount = n, label = "-" .. n, tone = "negative" }
 	end
 	local function divN(rowIndex: number): Draft
@@ -160,7 +170,9 @@ function RunnerCourse.Generate(area: number, level: number): Course
 	end
 	local function toll(rowIndex: number): Draft
 		local d = subN(rowIndex)
-		local cash = niceMoney(RunnerDefs.TOLL_CASH_BASE * (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex) * scale * rng:Range(0.85, 1.2))
+		local cash = niceMoney(
+			RunnerDefs.TOLL_CASH_BASE * (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex) * scale * rng:Range(0.85, 1.2)
+		)
 		d.cash = cash
 		d.label = d.label .. "  +" .. Format.Money(cash)
 		return d
@@ -244,7 +256,10 @@ function RunnerCourse.Generate(area: number, level: number): Course
 
 	local function squadDraft(rowIndex: number, sizeMult: number): Draft
 		local expectedTroops = RunnerDefs.EXPECTED_TROOPS_BASE + RunnerDefs.EXPECTED_TROOPS_PER_ROW * rowIndex
-		local enemies = math.max(1, math.floor(expectedTroops * RunnerDefs.SQUAD_SHARE * armyScale * sizeMult * rng:Range(0.85, 1.15) + 0.5))
+		local enemies = math.max(
+			1,
+			math.floor(expectedTroops * RunnerDefs.SQUAD_SHARE * armyScale * sizeMult * rng:Range(0.85, 1.15) + 0.5)
+		)
 		return {
 			label = enemies .. " SOLDIERS",
 			tone = "enemy",

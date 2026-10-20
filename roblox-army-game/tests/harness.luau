@@ -217,7 +217,10 @@ end
 
 function Harness.near(a: number, b: number, tolerance: number, message: string?)
 	if math.abs(a - b) > tolerance then
-		error(("%s: expected %s ~= %s (+/- %s)"):format(message or "near", tostring(a), tostring(b), tostring(tolerance)), 2)
+		error(
+			("%s: expected %s ~= %s (+/- %s)"):format(message or "near", tostring(a), tostring(b), tostring(tolerance)),
+			2
+		)
 	end
 end
 

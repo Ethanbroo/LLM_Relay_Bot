@@ -115,7 +115,10 @@ return function(H)
 				elseif row.kind == "squad" then
 					H.expect(#row.options == 1 or #row.options == 2, "squad lanes")
 					for _, opt in row.options do
-						H.expect((opt.enemies or 0) >= 1 and (opt.hp or 0) > 0 and (opt.reward or 0) > 0, "squad values")
+						H.expect(
+							(opt.enemies or 0) >= 1 and (opt.hp or 0) > 0 and (opt.reward or 0) > 0,
+							"squad values"
+						)
 					end
 					sensible = true -- one squad is unavoidable, or pick the smaller one
 				elseif row.kind == "barricade" then
@@ -143,7 +146,15 @@ return function(H)
 			H.expect(again.total == best.total, ("Resolve(best choices) %s ~= %s"):format(again.total, best.total))
 			for _ = 1, 200 do
 				local r = RunnerSim.Resolve(course, stats, randomChoices(course, rng))
-				H.expect(r.total <= best.total + 1e-6, ("random run %s beats best %s (area %d level %d)"):format(r.total, best.total, course.area, course.level))
+				H.expect(
+					r.total <= best.total + 1e-6,
+					("random run %s beats best %s (area %d level %d)"):format(
+						r.total,
+						best.total,
+						course.area,
+						course.level
+					)
+				)
 			end
 		end
 	end)
@@ -221,7 +232,11 @@ return function(H)
 		local rng = Rng.new(99)
 		for _, course in courses do
 			for _ = 1, 20 do
-				local r = RunnerSim.Resolve(course, { startTroops = 1, damage = 0, capacity = 50 }, randomChoices(course, rng))
+				local r = RunnerSim.Resolve(
+					course,
+					{ startTroops = 1, damage = 0, capacity = 50 },
+					randomChoices(course, rng)
+				)
 				H.expect(r.troops >= 1, "final troops")
 				for _, oc in r.outcomes do
 					H.expect(oc.troopsAfter >= 1 and oc.troopsBefore >= 1, "row troops")
@@ -294,7 +309,10 @@ return function(H)
 
 	H.test("Weapon gate at max tier still pays; firepower monotone", function()
 		H.expect(RunnerSim.Firepower(10, 10, 1, 1) == 100, "firepower")
-		H.expect(RunnerSim.Firepower(10, 10, 99, 1) == RunnerSim.Firepower(10, 10, RunnerDefs.MAX_WEAPON_TIER, 1), "tier clamp")
+		H.expect(
+			RunnerSim.Firepower(10, 10, 99, 1) == RunnerSim.Firepower(10, 10, RunnerDefs.MAX_WEAPON_TIER, 1),
+			"tier clamp"
+		)
 		local course = {
 			area = 1,
 			level = 1,
@@ -308,7 +326,9 @@ return function(H)
 				index = i,
 				kind = "gate",
 				distance = 70 + 45 * (i - 1),
-				options = { { lane = 1, x = 0, width = 11, op = "weapon", amount = 1, label = "WEAPON +1", tone = "weapon" } },
+				options = {
+					{ lane = 1, x = 0, width = 11, op = "weapon", amount = 1, label = "WEAPON +1", tone = "weapon" },
+				},
 			})
 		end
 		local r = RunnerSim.Resolve(course, { startTroops = 3, damage = 10, capacity = 60 }, {})
@@ -345,7 +365,10 @@ return function(H)
 					end
 				end
 			end
-			H.expect(killed / enemies >= 0.6, ("area %d: only %.0f%% of soldiers beaten"):format(area, 100 * killed / enemies))
+			H.expect(
+				killed / enemies >= 0.6,
+				("area %d: only %.0f%% of soldiers beaten"):format(area, 100 * killed / enemies)
+			)
 			H.expect(bossSum / 10 >= 50, ("area %d: enemy base only %.0f%%"):format(area, bossSum / 10))
 		end
 	end)

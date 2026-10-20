@@ -57,8 +57,7 @@ end
 function Layout.SlotFrontPosition(area: number, slotIndex: number): Vector3
 	local offset = Layout.SLOT_OFFSETS[slotIndex]
 	local towardsPathX = -math.sign(offset.X)
-	return Layout.SlotCenter(area, slotIndex)
-		+ Vector3.new(towardsPathX * (Layout.PLOT_SIZE / 2 - 6), 0, 0)
+	return Layout.SlotCenter(area, slotIndex) + Vector3.new(towardsPathX * (Layout.PLOT_SIZE / 2 - 6), 0, 0)
 end
 
 -- Where the "Hire me" tile / employee stands for a revenue section.

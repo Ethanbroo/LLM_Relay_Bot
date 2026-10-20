@@ -79,7 +79,8 @@ export type BenchmarkRun = { level: number, payout: number }
 export type BenchmarkDetails = { upgradeLevel: number, runs: { BenchmarkRun }, total: number }
 export type Upgrades = { troops: number, damage: number, capacity: number }
 export type RunnerStats = { startTroops: number, damage: number, capacity: number }
-export type SectionStats = { incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
+export type SectionStats =
+	{ incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
 
 type SlotInfo = { area: number, index: number, def: Config.SlotDef }
 

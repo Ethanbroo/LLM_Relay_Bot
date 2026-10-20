@@ -91,7 +91,12 @@ local function soldierPieces(kind: string): { PieceDef }
 		{ name = "Body", size = Vector3.new(1.15, 1.1, 0.7), offset = CFrame.new(0, 1.45, 0), color = body },
 		{ name = "Head", size = Vector3.new(0.8, 0.75, 0.75), offset = CFrame.new(0, 2.38, 0), color = head },
 		{ name = "Helmet", size = Vector3.new(1.0, 0.42, 1.0), offset = CFrame.new(0, 2.85, 0.02), color = dark },
-		{ name = "Rifle", size = Vector3.new(0.24, 0.3, 1.6), offset = CFrame.new(0.66, 1.45, -0.55), color = P.GatePost },
+		{
+			name = "Rifle",
+			size = Vector3.new(0.24, 0.3, 1.6),
+			offset = CFrame.new(0.66, 1.45, -0.55),
+			color = P.GatePost,
+		},
 	}
 end
 
@@ -188,7 +193,8 @@ function RunnerModels.CoinStack(parent: Instance, position: Vector3, coins: numb
 		RunnerModels.Part({
 			Name = "Cash",
 			Size = Vector3.new(1.6, 0.45, 0.9),
-			CFrame = CFrame.new(position + Vector3.new(1.3, 0.23 + (i - 1) * 0.47, 0)) * CFrame.Angles(0, math.rad((i % 2) * 12), 0),
+			CFrame = CFrame.new(position + Vector3.new(1.3, 0.23 + (i - 1) * 0.47, 0))
+				* CFrame.Angles(0, math.rad((i % 2) * 12), 0),
 			Color = if i % 2 == 0 then P.MoneyGreenDark else P.MoneyGreen,
 			Parent = model,
 		})

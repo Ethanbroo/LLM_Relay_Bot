@@ -73,7 +73,9 @@ local CAMERA_LOOK_AHEAD = 20
 local ENGAGE_RANGE = 18 -- [PROPOSAL] troops start shooting this far before a squad/barricade (visual only)
 -- Troops fire at the enemy base for at least RunnerDefs.BOSS_SECONDS (the
 -- sim also uses it: fraction destroyed = firepower x BOSS_SECONDS / hp).
-local BOSS_MIN_TIME = if type((RunnerDefs :: any).BOSS_SECONDS) == "number" then math.max(3, (RunnerDefs :: any).BOSS_SECONDS) else 3
+local BOSS_MIN_TIME = if type((RunnerDefs :: any).BOSS_SECONDS) == "number"
+	then math.max(3, (RunnerDefs :: any).BOSS_SECONDS)
+	else 3
 local BOSS_MAX_TIME = 30 -- [PROPOSAL]
 local STUCK_TIME = 6 -- [PROPOSAL] no forward progress for this long = give up the run
 local MODE_GRACE = 3 -- seconds we tolerate "not in Runner mode" before cleaning up
@@ -568,7 +570,8 @@ local function step(dt: number)
 		if s.held[Enum.KeyCode.D] or s.held[Enum.KeyCode.Right] or s.held[Enum.KeyCode.DPadRight] then
 			input += 1
 		end
-		s.targetLateral = math.clamp(s.targetLateral + math.clamp(input, -1, 1) * KEY_STEER_SPEED * dt, -LATERAL_LIMIT, LATERAL_LIMIT)
+		s.targetLateral =
+			math.clamp(s.targetLateral + math.clamp(input, -1, 1) * KEY_STEER_SPEED * dt, -LATERAL_LIMIT, LATERAL_LIMIT)
 		local speed = math.max(1, s.runSpeed)
 		local sideways = math.clamp((s.targetLateral - lateral) * STEER_GAIN, -speed * 0.9, speed * 0.9)
 		s.humanoid:Move(Vector3.new(sideways, 0, -speed).Unit, false)
@@ -578,7 +581,11 @@ local function step(dt: number)
 		while s.nextRow <= #rows do
 			local index = s.nextRow
 			local row = rows[index]
-			if (row.kind == "squad" or row.kind == "barricade") and not s.engaged[index] and distance >= row.distance - ENGAGE_RANGE then
+			if
+				(row.kind == "squad" or row.kind == "barricade")
+				and not s.engaged[index]
+				and distance >= row.distance - ENGAGE_RANGE
+			then
 				s.engaged[index] = true
 				if visuals then
 					visuals:Engage(index, laneAt(row, lateral))
@@ -704,7 +711,16 @@ local function connectInput(s: Session)
 				s.held[input.KeyCode] = nil
 			end
 			local drag = s.dragInput
-			if drag and (input == drag or (input.UserInputType == Enum.UserInputType.MouseButton1 and drag.UserInputType == Enum.UserInputType.MouseButton1)) then
+			if
+				drag
+				and (
+					input == drag
+					or (
+						input.UserInputType == Enum.UserInputType.MouseButton1
+						and drag.UserInputType == Enum.UserInputType.MouseButton1
+					)
+				)
+			then
 				s.dragInput = nil
 			end
 		end)

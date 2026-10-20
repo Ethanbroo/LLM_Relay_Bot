@@ -155,7 +155,13 @@ local function makeHpBar(adornee: BasePart, title: string, width: number, offset
 	}
 end
 
-local function makeTextBillboard(adornee: BasePart, text: string, color: Color3, offsetY: number, pill: Color3?): BillboardGui
+local function makeTextBillboard(
+	adornee: BasePart,
+	text: string,
+	color: Color3,
+	offsetY: number,
+	pill: Color3?
+): BillboardGui
 	local gui = Theme.Billboard({
 		Name = "Value",
 		Parent = adornee,
@@ -177,7 +183,15 @@ local function makeTextBillboard(adornee: BasePart, text: string, color: Color3,
 		Theme.Stroke(frame, P.CardOutline, 2, true)
 		holder = frame
 	end
-	Theme.Label({ Text = text, TextColor3 = color, MaxTextSize = 34, Size = UDim2.new(1, -8, 1, -4), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Parent = holder })
+	Theme.Label({
+		Text = text,
+		TextColor3 = color,
+		MaxTextSize = 34,
+		Size = UDim2.new(1, -8, 1, -4),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = holder,
+	})
 	return gui
 end
 
@@ -199,7 +213,13 @@ local function knockDown(model: Model, pivot: CFrame, duration: number)
 	for _, item in model:GetDescendants() do
 		if item:IsA("BasePart") then
 			local relative = pivot:ToObjectSpace(item.CFrame)
-			Theme.Tween(item, { CFrame = tilt * relative, Transparency = 1 }, duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			Theme.Tween(
+				item,
+				{ CFrame = tilt * relative, Transparency = 1 },
+				duration,
+				Enum.EasingStyle.Quad,
+				Enum.EasingDirection.In
+			)
 		end
 	end
 	task.delay(duration + 0.1, function()
@@ -212,7 +232,13 @@ local function crumble(model: Model, duration: number)
 		if item:IsA("BasePart") then
 			local push = Vector3.new(math.random(-30, 30) / 10, -2.5, -math.random(10, 40) / 10)
 			local spin = CFrame.Angles(math.random() * 2, math.random() * 2, math.random() * 2)
-			Theme.Tween(item, { CFrame = (item.CFrame + push) * spin, Transparency = 1 }, duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			Theme.Tween(
+				item,
+				{ CFrame = (item.CFrame + push) * spin, Transparency = 1 },
+				duration,
+				Enum.EasingStyle.Quad,
+				Enum.EasingDirection.In
+			)
 		end
 	end
 	task.delay(duration + 0.1, function()
@@ -390,7 +416,13 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				table.insert(targets, pos + Vector3.new(0, 1.5, 0))
 			end
 			local anchor = anchorPart(model, worldAt(row.distance, option.x, 4.5))
-			makeTextBillboard(anchor, if option.label ~= "" then option.label else tostring(count), P.White, 0.8, P.EnemyRed)
+			makeTextBillboard(
+				anchor,
+				if option.label ~= "" then option.label else tostring(count),
+				P.White,
+				0.8,
+				P.EnemyRed
+			)
 			table.insert(list, {
 				option = option,
 				centre = worldAt(row.distance, option.x, 0),
@@ -725,7 +757,12 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				Theme.FloatText(popAt, "+" .. Format.Money(cashDelta), P.MoneyGreen)
 			end
 			local offered = optionVisual.option.cash or 0
-			if outcome and offered > cashDelta + 0.01 and capacityNow > 0 and outcome.cashAfter >= capacityNow - 0.01 then
+			if
+				outcome
+				and offered > cashDelta + 0.01
+				and capacityNow > 0
+				and outcome.cashAfter >= capacityNow - 0.01
+			then
 				Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "CAPACITY FULL!", P.Coin)
 			end
 			Theme.Pop(moneyTag)
@@ -778,7 +815,10 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			Theme.FloatText(popAt + Vector3.new(0, 3, 0), "🔫 " .. weaponName(outcome.weaponTier) .. "!", P.Coin)
 		end
 		-- A weapon gate at the top tier pays cash instead ("Weapon already maxed").
-		local maxedWeapon = kind == "gate" and optionVisual.option.op == "weapon" and outcome ~= nil and outcome.weaponTier <= tier
+		local maxedWeapon = kind == "gate"
+			and optionVisual.option.op == "weapon"
+			and outcome ~= nil
+			and outcome.weaponTier <= tier
 		if maxedWeapon and outcome and outcome.note and outcome.note ~= "" then
 			Theme.FloatText(popAt + Vector3.new(0, 5, 0), outcome.note, P.Coin)
 		end
@@ -800,7 +840,11 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				Theme.FloatText(fortCentre + Vector3.new(0, 14, 10), "DESTROYED!", P.Coin)
 				crumble(fortModel, 1.0)
 			else
-				Theme.FloatText(fortCentre + Vector3.new(0, 14, 10), Format.Percent(math.floor(f * 100) / 100) .. " DESTROYED", P.White)
+				Theme.FloatText(
+					fortCentre + Vector3.new(0, 14, 10),
+					Format.Percent(math.floor(f * 100) / 100) .. " DESTROYED",
+					P.White
+				)
 			end
 		end)
 	end

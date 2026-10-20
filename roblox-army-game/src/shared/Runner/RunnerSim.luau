@@ -255,7 +255,14 @@ local function step(
 end
 
 -- Troop value, boss fraction and boss pay at the finish line.
-local function finish(course: Course, stats: CleanStats, scale: number, troops: number, tier: number, dmg: number): (number, number, number, number)
+local function finish(
+	course: Course,
+	stats: CleanStats,
+	scale: number,
+	troops: number,
+	tier: number,
+	dmg: number
+): (number, number, number, number)
 	local troopEach = Format.RoundCents(RunnerDefs.TROOP_VALUE * scale)
 	local troopsValue = Format.RoundCents(troops * troopEach)
 	local fp = RunnerSim.Firepower(troops, stats.damage, tier, dmg)

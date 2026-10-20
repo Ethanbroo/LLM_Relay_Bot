@@ -698,7 +698,9 @@ function RunnerUI.ShowSummary(props: {
 
 	local order = 0
 	local result = props.Result
-	local lines: { RunnerSim.Line } = if type(result) == "table" and type(result.lines) == "table" then result.lines else {}
+	local lines: { RunnerSim.Line } = if type(result) == "table" and type(result.lines) == "table"
+		then result.lines
+		else {}
 	for _, line in lines do
 		order += 1
 		local value = if type(line.value) == "number" then line.value else 0

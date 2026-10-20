@@ -227,7 +227,14 @@ end
 
 -- Centre of a box on a track, `fromDist`..`toDist` studs from the start,
 -- `lateral` studs right of the centre line, with its TOP at `topY`.
-local function boxCFrame(slot: number, fromDist: number, toDist: number, lateral: number, topY: number, height: number): CFrame
+local function boxCFrame(
+	slot: number,
+	fromDist: number,
+	toDist: number,
+	lateral: number,
+	topY: number,
+	height: number
+): CFrame
 	local mid = Layout.RunnerPoint(slot, (fromDist + toDist) / 2, lateral)
 	return CFrame.new(mid.X, topY - height / 2, mid.Z)
 end
@@ -331,8 +338,18 @@ local function buildTrack(slot: number, parent: Instance)
 		{ size = Vector3.new(1, 0, PLAZA_LENGTH), from = plazaFrom, to = plazaTo, lateral = -(halfP + 0.5) },
 		{ size = Vector3.new(1, 0, PLAZA_LENGTH), from = plazaFrom, to = plazaTo, lateral = halfP + 0.5 },
 		{ size = Vector3.new(PLAZA_WIDTH + 2, 0, 1), from = plazaTo, to = plazaTo + 1, lateral = 0 },
-		{ size = Vector3.new(frontPiece, 0, 1), from = plazaFrom - 1, to = plazaFrom, lateral = -(halfW + 2 + frontPiece / 2) },
-		{ size = Vector3.new(frontPiece, 0, 1), from = plazaFrom - 1, to = plazaFrom, lateral = halfW + 2 + frontPiece / 2 },
+		{
+			size = Vector3.new(frontPiece, 0, 1),
+			from = plazaFrom - 1,
+			to = plazaFrom,
+			lateral = -(halfW + 2 + frontPiece / 2),
+		},
+		{
+			size = Vector3.new(frontPiece, 0, 1),
+			from = plazaFrom - 1,
+			to = plazaFrom,
+			lateral = halfW + 2 + frontPiece / 2,
+		},
 	}
 	for _, w in walls do
 		makePart({
