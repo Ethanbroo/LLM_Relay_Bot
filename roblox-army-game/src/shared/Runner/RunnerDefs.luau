@@ -15,15 +15,25 @@
 		RunnerDefs.TRACK_WIDTH            = Layout.RUNNER_TRACK_WIDTH
 		RunnerDefs.ROW_COUNT, FIRST_ROW_DISTANCE, ROW_SPACING, BOSS_DISTANCE
 		RunnerDefs.LANES                  lane geometry per row kind: { gate, cash, squad1, squad2, barricade }
-		RunnerDefs.WEAPONS                weapon tiers 1..6: { name, short, damageMult, value }
+		RunnerDefs.WEAPONS                weapon tiers 1..6: { name, short, value, damage, fireRate,
+		                                  bulletSpeed, bulletStyle } (every troop AND the avatar fire it)
 		RunnerDefs.MAX_WEAPON_TIER
+		RunnerDefs.GUN_RANGE              studs a gun reaches = 1.5 rows ("an option and a half")
+		RunnerDefs.ENGAGE_SECONDS         seconds the squad shoots before reaching a squad / barricade
+		RunnerDefs.FORMATION_WIDTH        units per formation row (2 troops, the avatar, 2 troops)
+		RunnerDefs.FORMATION_SPACING_X, FORMATION_SPACING_Z   studs between units / rows (visual)
 		RunnerDefs.TROOP_VALUE, DAMAGE_GATE_AMOUNT, DAMAGE_GATE_VALUE, ...
-		RunnerDefs.BOSS_SECONDS, BARRICADE_TROOP_LOSS
+		RunnerDefs.BARRICADE_TROOP_LOSS
+		RunnerDefs.BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS, BOSS_HP_SHARE, BOSS_REWARD,
+		RunnerDefs.BOSS_REWARD_ARMY_EXP, RUN_OVERHEAD_SECONDS
+		RunnerDefs.BossKillInterval(units) seconds between boss kills for a squad of `units`
 		RunnerDefs.TroopScale(area)       growth of troop counts (gates, squads) by area
 		RunnerDefs.EnemyHpScale(area)     growth of one enemy soldier's hit points by area
 		RunnerDefs.ArmyScale(area)        growth of the reference army (squad sizes, barricade / base hp)
 		RunnerDefs.ReferenceLevel(area)   permanent upgrade level of the benchmark player
-		RunnerDefs.ExpectedFirepower(row) firepower of a good area-1 player at a row (enemy sizing)
+		RunnerDefs.BaseUnitDps()          damage per second of one un-upgraded unit with the Pistol
+		RunnerDefs.ExpectedFirepower(row) damage a good area-1 squad deals in one engagement at a row
+		                                  (enemy sizing)
 		RunnerDefs.LevelFactor(area, level) gentle growth of values with the run level
 		RunnerDefs.FirstLevelOfArea(area) runner level at which an area "starts" (benchmark L0)
 ]]
@@ -38,8 +48,11 @@ export type LaneDef = { x: number, width: number }
 export type WeaponDef = {
 	name: string, -- shown in the completion summary: "Weapon: Assault Rifle"
 	short: string, -- shown on gate panels: "RIFLE"
-	damageMult: number, -- firepower multiplier while holding this weapon
 	value: number, -- cash value (area 1 dollars) of reaching this tier in a run
+	damage: number, -- hit points one bullet takes off (at base damage 10)
+	fireRate: number, -- bullets per second per unit
+	bulletSpeed: number, -- studs per second (visual only)
+	bulletStyle: string, -- "pistol" | "rifle" | "smg" | "assault" | "minigun" | "rocket" (visual only)
 }
 
 local RunnerDefs = {}
@@ -57,10 +70,6 @@ RunnerDefs.FIRST_ROW_DISTANCE = 70 -- [PROPOSAL] studs from the start line to ro
 RunnerDefs.ROW_SPACING = 45 -- [PROPOSAL] studs between rows (row 18 is at 835)
 RunnerDefs.BOSS_DISTANCE = 870 -- [PROPOSAL] the enemy base stands here (track is 900 long)
 
--- Seconds a typical run takes on top of running: pre-run screen, countdown,
--- boss animation and the completion summary. Used by Economy.RunDurationSeconds.
-RunnerDefs.RUN_OVERHEAD_SECONDS = 16 -- [PROPOSAL]
-
 -------------------------------------------------------------------------------
 -- Lanes (x = lateral centre in studs, + = right of the centre line)
 -------------------------------------------------------------------------------
@@ -76,19 +85,84 @@ RunnerDefs.LANES = {
 -------------------------------------------------------------------------------
 -- Weapons collected during a run (gold gates, +1 tier each)
 -------------------------------------------------------------------------------
--- [PROPOSAL] Tier 1 is what every run starts with. `value` is the cash the
--- completion summary credits for reaching that tier (scaled by area like all
--- cash values). A weapon gate collected at the top tier still pays the Rocket
--- value ("MAX"), so a gold gate is never a wasted pick.
+-- [PROPOSAL] Tier 1 is what every run starts with. EVERY unit (the avatar and
+-- each troop) holds the same gun. `value` is the cash the completion summary
+-- credits for reaching that tier (scaled by area like all cash values). A
+-- weapon gate collected at the top tier still pays the Rocket value ("MAX"),
+-- so a gold gate is never a wasted pick.
+-- Damage per second of one unit = damage x fireRate (x the player's damage
+-- upgrades / base damage, x in-run damage gates). The tiers feel different
+-- (SMG: weak bullets, very fast; Rocket: huge hits, slow) but the DPS always
+-- rises with the tier: 20, 27, 35, 45, 60, 75 (x1, 1.35, 1.75, 2.25, 3, 3.75).
 RunnerDefs.WEAPONS = {
-	{ name = "Pistol", short = "PISTOL", damageMult = 1.0, value = 0 },
-	{ name = "Rifle", short = "RIFLE", damageMult = 1.35, value = 8 },
-	{ name = "SMG", short = "SMG", damageMult = 1.75, value = 12 },
-	{ name = "Assault Rifle", short = "ASSAULT", damageMult = 2.25, value = 18 },
-	{ name = "Minigun", short = "MINIGUN", damageMult = 2.9, value = 25 },
-	{ name = "Rocket", short = "ROCKET", damageMult = 3.7, value = 35 },
+	{
+		name = "Pistol",
+		short = "PISTOL",
+		value = 0,
+		damage = 10,
+		fireRate = 2,
+		bulletSpeed = 120,
+		bulletStyle = "pistol",
+	},
+	{
+		name = "Rifle",
+		short = "RIFLE",
+		value = 8,
+		damage = 18,
+		fireRate = 1.5,
+		bulletSpeed = 180,
+		bulletStyle = "rifle",
+	},
+	{
+		name = "SMG",
+		short = "SMG",
+		value = 12,
+		damage = 5,
+		fireRate = 7,
+		bulletSpeed = 140,
+		bulletStyle = "smg",
+	},
+	{
+		name = "Assault Rifle",
+		short = "ASSAULT",
+		value = 18,
+		damage = 9,
+		fireRate = 5,
+		bulletSpeed = 170,
+		bulletStyle = "assault",
+	},
+	{
+		name = "Minigun",
+		short = "MINIGUN",
+		value = 25,
+		damage = 6,
+		fireRate = 10,
+		bulletSpeed = 160,
+		bulletStyle = "minigun",
+	},
+	{
+		name = "Rocket",
+		short = "ROCKET",
+		value = 35,
+		damage = 150,
+		fireRate = 0.5,
+		bulletSpeed = 70,
+		bulletStyle = "rocket",
+	},
 } :: { WeaponDef }
 RunnerDefs.MAX_WEAPON_TIER = #RunnerDefs.WEAPONS
+
+-- [REQUIREMENT] Guns shoot "a distance of an option and a half": 1.5 rows.
+RunnerDefs.GUN_RANGE = 1.5 * RunnerDefs.ROW_SPACING -- 67.5 studs
+-- The squad starts shooting a squad / barricade when it is GUN_RANGE away and
+-- keeps shooting until it reaches it: that is the damage window of a fight.
+RunnerDefs.ENGAGE_SECONDS = RunnerDefs.GUN_RANGE / RunnerDefs.RUN_SPEED -- 2.8125 s
+
+-- [REQUIREMENT] Troops stand next to the player, 5 per row (2 left, the
+-- avatar in the middle, 2 right); extra rows form behind. Visual only.
+RunnerDefs.FORMATION_WIDTH = 5
+RunnerDefs.FORMATION_SPACING_X = 2.4 -- [PROPOSAL] studs between units in a row
+RunnerDefs.FORMATION_SPACING_Z = 2.8 -- [PROPOSAL] studs between rows
 
 -------------------------------------------------------------------------------
 -- Payout values (area 1 dollars; multiplied by the area scale and level factor)
@@ -100,9 +174,12 @@ RunnerDefs.CASH_ROW_BASE = 9 -- [PROPOSAL] middle cash lane of the first cash ro
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
 RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trade troops for cash)
-RunnerDefs.ENEMY_REWARD = 0.5 -- [PROPOSAL] $ per enemy soldier defeated
+RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars)
 RunnerDefs.BARRICADE_REWARD = 7 -- [PROPOSAL] $ for destroying a weak barricade (strong pays ~2.2x)
-RunnerDefs.BOSS_REWARD = 60 -- [PROPOSAL] $ for destroying 100% of the enemy base
+-- [PROPOSAL] $ for beating the boss, x the area cash scale x ArmyScale(area)^BOSS_REWARD_ARMY_EXP
+-- (bigger armies guard more loot), so beating it is worth ~20-30% of a best-case run in every area.
+RunnerDefs.BOSS_REWARD = 38
+RunnerDefs.BOSS_REWARD_ARMY_EXP = 0.5
 
 -------------------------------------------------------------------------------
 -- Troop maths gates (the original + x - ÷ modifiers, applied to TROOP COUNT)
@@ -123,16 +200,43 @@ RunnerDefs.SUB_PER_ROW = 0.2 -- [PROPOSAL]
 RunnerDefs.EXPECTED_TROOPS_BASE = 3
 RunnerDefs.EXPECTED_TROOPS_PER_ROW = 2.2
 RunnerDefs.EXPECTED_POWER_PER_ROW = 0.04
-RunnerDefs.ENEMY_HP = 30 -- [PROPOSAL] hit points of one enemy soldier in area 1
+-- [PROPOSAL] Hit points of one enemy soldier in area 1: one un-upgraded
+-- Pistol unit deals 20 x 2.8125 = 56 damage per engagement, so a soldier
+-- needs about 3 units (same balance as before guns had a fire rate).
+RunnerDefs.ENEMY_HP = 170
 RunnerDefs.SQUAD_SHARE = 0.35 -- [PROPOSAL] soldiers per expected troop (normal squad)
 RunnerDefs.SQUAD_SMALL = 0.6 -- [PROPOSAL] size of the small squad in a 2-squad row
 RunnerDefs.SQUAD_BIG = 1.45 -- [PROPOSAL] size of the big squad (pays more, costs more)
-RunnerDefs.SQUAD_FINAL = 1.25 -- [PROPOSAL] size of the last squad before the enemy base
+RunnerDefs.SQUAD_FINAL = 1.25 -- [PROPOSAL] size of the last squad before the castle
 RunnerDefs.BARRICADE_WEAK = 0.75 -- [PROPOSAL] weak barricade hp = 75% of expected firepower
 RunnerDefs.BARRICADE_STRONG = 1.7 -- [PROPOSAL] strong barricade hp = 170% of expected firepower
 RunnerDefs.BARRICADE_TROOP_LOSS = 0.25 -- failed barricade costs 25% of troops (min 1 left)
-RunnerDefs.BOSS_HP = 5000 -- [PROPOSAL] enemy base hit points in area 1
-RunnerDefs.BOSS_SECONDS = 5 -- [PROPOSAL] seconds the squad shoots at the enemy base
+
+-------------------------------------------------------------------------------
+-- The boss at the castle (end of the track) [REQUIREMENT]
+-------------------------------------------------------------------------------
+-- The boss walks out of the castle and kills one unit every kill interval
+-- (troops first, the avatar last) while every unit still alive shoots it.
+-- Its HP is BOSS_HP_SHARE of the most damage ANY lane path of the course can
+-- deal to it (RunnerSim.BossHp), so only the best lanes beat it.
+RunnerDefs.BOSS_KILL_INTERVAL = 0.55 -- [PROPOSAL] seconds between boss kills
+RunnerDefs.BOSS_MAX_FIGHT_SECONDS = 12 -- [PROPOSAL] huge armies: the fight never lasts longer
+RunnerDefs.BOSS_HP_SHARE = 0.999 -- [PROPOSAL] only paths within 0.1% of the best win
+
+-- Seconds a typical run takes on top of running: pre-run screen, countdown,
+-- the completion summary (~11 s) and the boss fight (at most
+-- BOSS_MAX_FIGHT_SECONDS; best-lane fights take ~11-12 s). Used by
+-- Economy.RunDurationSeconds.
+RunnerDefs.RUN_OVERHEAD_SECONDS = 11 + RunnerDefs.BOSS_MAX_FIGHT_SECONDS -- [PROPOSAL] 23 s
+
+-- Seconds between boss kills for a squad of `units`:
+-- min(BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS / units).
+function RunnerDefs.BossKillInterval(units: number): number
+	if units <= 0 then
+		return RunnerDefs.BOSS_KILL_INTERVAL
+	end
+	return math.min(RunnerDefs.BOSS_KILL_INTERVAL, RunnerDefs.BOSS_MAX_FIGHT_SECONDS / units)
+end
 
 -------------------------------------------------------------------------------
 -- Scaling helpers
@@ -162,8 +266,8 @@ end
 -- [PROPOSAL] How much bigger the reference player's army is than in area 1.
 -- Starting troops (base + troop upgrades) count ARMY_START_WEIGHT times
 -- (they get doubled by the x2 gates), plus ARMY_GATE_TROOPS troops picked up
--- from gates (which grow with TroopScale). Squad sizes and barricade / enemy
--- base hit points grow with this so fights stay fights in every area.
+-- from gates (which grow with TroopScale). Squad sizes and barricade hit
+-- points grow with this so fights stay fights in every area.
 RunnerDefs.ARMY_START_WEIGHT = 3
 RunnerDefs.ARMY_GATE_TROOPS = 30
 function RunnerDefs.ArmyScale(area: number): number
@@ -173,10 +277,20 @@ function RunnerDefs.ArmyScale(area: number): number
 	return (w * start + g * RunnerDefs.TroopScale(area)) / (w * r.BaseTroops + g)
 end
 
--- Firepower a good area-1 player has when reaching row `rowIndex`.
+-- Damage per second of one un-upgraded unit holding the Pistol.
+function RunnerDefs.BaseUnitDps(): number
+	local pistol = RunnerDefs.WEAPONS[1]
+	return pistol.damage * pistol.fireRate
+end
+
+-- Damage a good area-1 squad deals in one engagement (ENGAGE_SECONDS of
+-- shooting) when reaching row `rowIndex`.
 function RunnerDefs.ExpectedFirepower(rowIndex: number): number
 	local troops = RunnerDefs.EXPECTED_TROOPS_BASE + RunnerDefs.EXPECTED_TROOPS_PER_ROW * rowIndex
-	return troops * EconomyDefs.Runner.BaseDamage * (1 + RunnerDefs.EXPECTED_POWER_PER_ROW * rowIndex)
+	return troops
+		* RunnerDefs.BaseUnitDps()
+		* RunnerDefs.ENGAGE_SECONDS
+		* (1 + RunnerDefs.EXPECTED_POWER_PER_ROW * rowIndex)
 end
 
 -- Runner level at which an area "starts": the 10 benchmark runs of `area` are

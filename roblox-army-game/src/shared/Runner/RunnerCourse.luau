@@ -2,7 +2,7 @@
 --[[
 	RunnerCourse
 	Builds the army-runner course for an (area, level) pair. The course is pure
-	data (rows of gates, cash, enemies and a final enemy base); the RUNNER
+	data (rows of gates, cash, enemies and a boss at the castle); the RUNNER
 	system turns it into parts on the client and RunnerSim scores it on the
 	server. The same (area, level) always produces exactly the same course
 	(seeded Shared/Rng, never math.random), so server, client and the economy
@@ -27,7 +27,10 @@
 		            `reward` = $ per soldier defeated. Tone "enemy".
 		"barricade" 2 lanes (weak / strong). `hp` = barricade hit points,
 		            `reward` = $ for destroying it. Tone "enemy".
-	The course ends with the enemy base (`boss`): hp and reward for 100%.
+	The course ends with the castle boss (`boss`): distance and the cash
+	reward for beating it. `boss.hp` is always 0: the boss HP depends on the
+	player's stats and comes from RunnerSim.BossHp(course, stats).
+	Every cash value (stacks, tolls, rewards) is a whole number of dollars.
 
 	Every row has at least one sensible option (a blue/gold gate, any cash
 	lane, the smaller squad, the weaker barricade).
@@ -45,7 +48,7 @@ export type Option = {
 	width: number, -- studs
 	op: string?, -- gate: "add" | "mul" | "sub" | "div" | "weapon" | "damage"
 	amount: number?, -- +N troops, xN, -N, /N, +tiers, +damage fraction (0.2 = +20%)
-	label: string, -- what the gate panel shows: "+5", "x2", "-3", "÷2", "WEAPON +1", "+20% DMG", "$12.50"
+	label: string, -- what the gate panel shows: "+5", "x2", "-3", "÷2", "WEAPON +1", "+20% DMG", "$12"
 	tone: string, -- "positive" (blue) | "negative" (red) | "weapon" (gold) | "cash" | "enemy"
 	cash: number?, -- cash row (or toll gate): value of the cash stack in this lane
 	enemies: number?, -- squad row: number of enemy soldiers
@@ -61,7 +64,7 @@ export type Course = {
 	seed: number,
 	length: number,
 	rows: { Row },
-	boss: { distance: number, hp: number, reward: number },
+	boss: { distance: number, hp: number, reward: number }, -- hp = 0 (see RunnerSim.BossHp)
 }
 
 -- An option before it is given a lane (lane/x/width are filled in later).
@@ -91,15 +94,9 @@ function RunnerCourse.ValueScale(area: number, level: number): number
 	return EconomyDefs.AreaScale ^ (a - 1) * RunnerDefs.LevelFactor(a, level)
 end
 
--- Round a cash amount to a "nice" value: quarters below $20, halves below
--- $200, whole dollars above. Always a whole number of cents.
+-- Round a cash amount to whole dollars (owner request: no cents), at least $1.
 local function niceMoney(v: number): number
-	if v < 20 then
-		return Format.RoundCents(math.max(0.25, math.floor(v * 4 + 0.5) / 4))
-	elseif v < 200 then
-		return Format.RoundCents(math.floor(v * 2 + 0.5) / 2)
-	end
-	return math.floor(v + 0.5)
+	return math.max(1, Format.RoundWhole(v))
 end
 
 local function addLanes(laneKey: string, drafts: { Draft }, rng: Rng.Rng, shuffle: boolean): { Option }
@@ -264,8 +261,8 @@ function RunnerCourse.Generate(area: number, level: number): Course
 			label = enemies .. " SOLDIERS",
 			tone = "enemy",
 			enemies = enemies,
-			hp = Format.RoundCents(RunnerDefs.ENEMY_HP * hpScale),
-			reward = Format.RoundCents(RunnerDefs.ENEMY_REWARD * scale),
+			hp = math.max(1, Format.RoundWhole(RunnerDefs.ENEMY_HP * hpScale)),
+			reward = niceMoney(RunnerDefs.ENEMY_REWARD * scale),
 		}
 	end
 
@@ -300,7 +297,7 @@ function RunnerCourse.Generate(area: number, level: number): Course
 	-- Course blueprint ------------------------------------------------------------
 	-- [PROPOSAL] 18 rows. Row 1 is always a troop gate; rows 2-16 come in blocks
 	-- of three that are shuffled for variety; rows 17-18 are a final squad and a
-	-- last upgrade/troop gate before the enemy base.
+	-- last upgrade/troop gate before the castle boss.
 	local kinds: { string } = { "troop" }
 	local blocks = {
 		{ "cash", "troop", "squad" },
@@ -357,8 +354,8 @@ function RunnerCourse.Generate(area: number, level: number): Course
 
 	local boss = {
 		distance = RunnerDefs.BOSS_DISTANCE,
-		hp = math.floor(RunnerDefs.BOSS_HP * hpScale * armyScale + 0.5),
-		reward = niceMoney(RunnerDefs.BOSS_REWARD * scale),
+		hp = 0, -- not used: the boss HP comes from RunnerSim.BossHp(course, stats)
+		reward = niceMoney(RunnerDefs.BOSS_REWARD * scale * armyScale ^ RunnerDefs.BOSS_REWARD_ARMY_EXP),
 	}
 
 	return {

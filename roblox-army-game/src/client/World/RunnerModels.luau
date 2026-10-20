@@ -8,19 +8,26 @@
 	Public API:
 		RunnerModels.Part(props) -> Part
 			props: { Name?, Size, CFrame, Color, Parent, Transparency?, Material?, Shape? }
-		RunnerModels.Soldier(kind, parent, pivot) -> Rig
-			kind = "troop" (green helmet + body + rifle) | "enemy" (red uniform)
-			Rig = { model: Model, parts: { BasePart }, offsets: { CFrame }, pivot: CFrame }
+		RunnerModels.Soldier(kind, parent, pivot, gunTier?) -> Rig
+			kind = "troop" (green helmet + body + arms holding a gun) | "enemy" (red uniform)
+			Rig = { model, parts, offsets, pivot, gunParts, gunTier }
 			Move a rig fast with RunnerModels.RigCFrames(rig, pivot, out) + workspace:BulkMoveTo.
+		RunnerModels.SetRigGun(rig, tier)     -- swap the gun the rig holds (RunnerGuns model, troop scale)
+		RunnerModels.RigMuzzle(rig, pivot) -> Vector3  -- world position of the rig's muzzle at `pivot`
+		RunnerModels.TROOP_GRIP: CFrame       -- where a soldier's right hand holds the gun (rig space)
+		RunnerModels.GUN_SCALE: number        -- troop guns are this x the avatar's gun
 		RunnerModels.RigCFrames(rig, pivot, outParts, outCFrames)  -- appends part/CFrame pairs
 		RunnerModels.CoinStack(parent, position, coins) -> Model     -- flat gold coins + green cash bricks
 		RunnerModels.Sandbags(parent, centre, width) -> Model         -- barricade wall
-		RunnerModels.Fort(parent, centre) -> (Model, { Vector3 })     -- enemy base + points to shoot at
+		RunnerModels.Fort(parent, centre) -> (Model, { Vector3 }, Model)
+			castle at the end of the track + points to shoot at + its gate door
+			(the boss walks out through the door; RunnerVisuals slides it open)
 		RunnerModels.SurfaceLabel(part, face, text, maxTextSize?) -> TextLabel
 			big white text with a dark outline drawn on one face of a part.
 
 	Coordinates: every builder places its model with the "front" facing +Z,
-	i.e. towards the runner, who travels towards -Z.
+	i.e. towards the runner, who travels towards -Z. Soldier rigs are built
+	facing -Z (the run direction); enemies are rotated 180 degrees.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,15 +35,19 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 
+local RunnerGuns = require(script.Parent.RunnerGuns)
+
 local P = Config.Palette
 
 local RunnerModels = {}
 
 export type Rig = {
 	model: Model,
-	parts: { BasePart },
+	parts: { BasePart }, -- body parts first, then the gun parts
 	offsets: { CFrame },
 	pivot: CFrame, -- where the rig was built (feet, facing its front)
+	gunParts: number, -- how many entries at the end of `parts` are the gun
+	gunTier: number, -- 0 = no gun
 }
 
 type PartProps = {
@@ -79,6 +90,10 @@ end
 -- Each entry: name, size, offset, colour key.
 type PieceDef = { name: string, size: Vector3, offset: CFrame, color: Color3 }
 
+-- [PROPOSAL] Right hand position of a soldier holding its gun forward.
+RunnerModels.TROOP_GRIP = CFrame.new(0.62, 1.55, -0.95)
+RunnerModels.GUN_SCALE = 0.62 -- soldiers are ~3 studs tall, the avatar ~5
+
 local function soldierPieces(kind: string): { PieceDef }
 	local isEnemy = kind == "enemy"
 	local body = if isEnemy then P.EnemyRed else P.TroopGreen
@@ -91,16 +106,23 @@ local function soldierPieces(kind: string): { PieceDef }
 		{ name = "Body", size = Vector3.new(1.15, 1.1, 0.7), offset = CFrame.new(0, 1.45, 0), color = body },
 		{ name = "Head", size = Vector3.new(0.8, 0.75, 0.75), offset = CFrame.new(0, 2.38, 0), color = head },
 		{ name = "Helmet", size = Vector3.new(1.0, 0.42, 1.0), offset = CFrame.new(0, 2.85, 0.02), color = dark },
+		-- Both arms reach forward to hold the gun (the right one at TROOP_GRIP).
 		{
-			name = "Rifle",
-			size = Vector3.new(0.24, 0.3, 1.6),
-			offset = CFrame.new(0.66, 1.45, -0.55),
-			color = P.GatePost,
+			name = "RightArm",
+			size = Vector3.new(0.3, 0.3, 0.95),
+			offset = CFrame.new(0.66, 1.68, -0.5),
+			color = body,
+		},
+		{
+			name = "LeftArm",
+			size = Vector3.new(0.3, 0.3, 1.05),
+			offset = CFrame.new(0.15, 1.62, -0.62) * CFrame.Angles(0, math.rad(-28), 0),
+			color = body,
 		},
 	}
 end
 
-function RunnerModels.Soldier(kind: string, parent: Instance, pivot: CFrame): Rig
+function RunnerModels.Soldier(kind: string, parent: Instance, pivot: CFrame, gunTier: number?): Rig
 	local model = Instance.new("Model")
 	model.Name = if kind == "enemy" then "Enemy" else "Troop"
 	local parts: { BasePart } = {}
@@ -119,7 +141,49 @@ function RunnerModels.Soldier(kind: string, parent: Instance, pivot: CFrame): Ri
 	end
 	model.WorldPivot = pivot
 	model.Parent = parent
-	return { model = model, parts = parts, offsets = offsets, pivot = pivot }
+	local rig: Rig = { model = model, parts = parts, offsets = offsets, pivot = pivot, gunParts = 0, gunTier = 0 }
+	-- Enemies always carry a rifle; troops the weapon tier of the run.
+	RunnerModels.SetRigGun(rig, gunTier or (if kind == "enemy" then 2 else 1))
+	return rig
+end
+
+-- Replaces the gun the rig holds. The new parts are placed at the rig's
+-- build pivot; the next RigCFrames call moves them with the rest.
+function RunnerModels.SetRigGun(rig: Rig, tier: number)
+	if rig.gunTier == tier and rig.gunParts > 0 then
+		return
+	end
+	for _ = 1, rig.gunParts do
+		local part = table.remove(rig.parts)
+		table.remove(rig.offsets)
+		if part then
+			part:Destroy()
+		end
+	end
+	rig.gunParts = 0
+	rig.gunTier = tier
+	local current = rig.model.WorldPivot
+	for _, piece in RunnerGuns.Pieces(tier, RunnerModels.GUN_SCALE) do
+		local offset = RunnerModels.TROOP_GRIP * piece.offset
+		local part = RunnerModels.Part({
+			Name = "Gun" .. piece.name,
+			Size = piece.size,
+			CFrame = current * offset,
+			Color = piece.color,
+			Material = piece.material,
+			Shape = piece.shape,
+			Parent = rig.model,
+		})
+		part.CastShadow = false
+		table.insert(rig.parts, part)
+		table.insert(rig.offsets, offset)
+		rig.gunParts += 1
+	end
+end
+
+function RunnerModels.RigMuzzle(rig: Rig, pivot: CFrame): Vector3
+	local tier = math.max(1, rig.gunTier)
+	return (pivot * RunnerModels.TROOP_GRIP * RunnerGuns.MuzzleOffset(tier, RunnerModels.GUN_SCALE)).Position
 end
 
 -- Appends the rig's parts and their target CFrames to the two lists, ready
@@ -253,8 +317,8 @@ end
 -------------------------------------------------------------------------------
 -- Enemy base (boss)
 -------------------------------------------------------------------------------
--- Returns the model and a few points on its front to aim bullets at.
-function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3 })
+-- Returns the model, a few points on its front to aim bullets at and the door.
+function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3 }, Model)
 	local model = Instance.new("Model")
 	model.Name = "EnemyBase"
 	local width, height, depth = 30, 10, 14
@@ -283,13 +347,23 @@ function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3
 		block("TowerTop", Vector3.new(7, 1.4, 7), Vector3.new(x, height + 6.7, 2), P.WallYellow)
 		block("Window", Vector3.new(2, 2, 0.3), Vector3.new(x, height + 2, 5.1), P.Shade)
 	end
-	-- Gate door + flag.
-	block("Door", Vector3.new(8, 7, 0.4), Vector3.new(0, 3.5, depth / 2 + 0.2), P.GateIron)
+	-- Dark gateway (big enough for the boss to walk out of) behind an iron
+	-- door with bars. The door is its own model so it can sink into the ground.
+	block("Gateway", Vector3.new(11, 9.6, 0.2), Vector3.new(0, 4.8, depth / 2 + 0.05), P.Shade)
+	local door = Instance.new("Model")
+	door.Name = "Door"
+	block("Door", Vector3.new(10.6, 9.4, 0.4), Vector3.new(0, 4.7, depth / 2 + 0.3), P.GateIron).Parent = door
+	for i = -2, 2 do
+		block("DoorBar", Vector3.new(0.35, 9.2, 0.2), Vector3.new(i * 2, 4.7, depth / 2 + 0.55), P.GatePost).Parent =
+			door
+	end
+	door.Parent = model
+	-- Flag on the roof.
 	block("Pole", Vector3.new(0.4, 9, 0.4), Vector3.new(0, height + 4.5, 0), P.GatePost)
 	block("Flag", Vector3.new(4.5, 2.6, 0.2), Vector3.new(2.45, height + 7.4, 0), P.EnemyRed)
 
 	-- Big "ENEMY BASE" sign above the door, facing the runner (+Z = Back face).
-	local sign = block("Sign", Vector3.new(16, 3, 0.4), Vector3.new(0, 8.2, depth / 2 + 0.3), P.PillBlack)
+	local sign = block("Sign", Vector3.new(16, 3, 0.4), Vector3.new(0, height + 3.4, depth / 2 + 0.3), P.PillBlack)
 	RunnerModels.SurfaceLabel(sign, Enum.NormalId.Back, "ENEMY BASE", 100)
 
 	model.Parent = parent
@@ -303,7 +377,7 @@ function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3
 		Vector3.new(centre.X + width / 2 + 2, y + 9, front - 3),
 		Vector3.new(centre.X, y + 2.5, front),
 	}
-	return model, targets
+	return model, targets, door
 end
 
 return RunnerModels

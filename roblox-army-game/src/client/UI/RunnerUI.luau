@@ -7,7 +7,17 @@
 		RunnerUI.ShowHud(level) -> Hud
 			Hud.SetLevel(level)          -- black "Level N" banner (top centre)
 			Hud.SetProgress(fraction)    -- thin progress bar under the banner
+			Hud.SetStats(stats: HudStats) -- live squad panel in the TOP-LEFT corner
+			Hud.SetStatsVisible(visible) -- hidden on the pre-run screen (the cards show the stats)
+			Hud.PopCash()                -- bounce the money tag (cash picked up)
 			Hud.Destroy()
+			HudStats = { troops, weaponName, weaponTier, maxTier, dps, cash, capacity }
+			  Panel (owner request: stats in a corner, not above the head):
+			  🪖 troops · 🔫 weapon (tier) · 💥 squad damage per second ·
+			  💰 lime-green money tag "carried / capacity" (reference image 2).
+
+		RunnerUI.ShowMessage(title, subtitle?, color?, duration?) -> close()
+			big centre message ("BOSS DEFEATED!", "DEFEATED BY THE BOSS").
 
 		RunnerUI.ShowPrepare({
 			Data = PlayerData, Stats = { startTroops, damage, capacity },
@@ -28,8 +38,10 @@
 			Boosted = boolean, Upgrades = { troops, damage, capacity },
 			OnCollect = function() end,
 		}) -> close()
-		  "RUN COMPLETE!" panel. A sub-heading "COLLECTED THIS RUN" lists every
-		  result line (what you picked up during this run and its cash value),
+		  "RUN COMPLETE!" panel with a boss status pill ("Boss defeated!" /
+		  "Defeated by the boss"). A sub-heading "COLLECTED THIS RUN" lists every
+		  result line (what you picked up during this run and its cash value,
+		  whole dollars),
 		  then the TOTAL actually paid. A second sub-heading "PERMANENT UPGRADES"
 		  shows the bought starting stats, kept clearly apart (brief requirement).
 		  The panel deliberately has no Context, so HUD's Theme.CloseModals("Base")
@@ -37,7 +49,7 @@
 
 	Screen-size scaling uses Theme.ResponsiveScale on plain holder frames only
 	(one UIScale per object, shared with Theme.Pop / button press animations).
-	The HUD banner sits below Roblox's top bar (Theme.TopInset()).
+	The HUD banner and the stats panel sit below Roblox's top bar (Theme.TopInset()).
 ]]
 
 local Players = game:GetService("Players")
@@ -144,13 +156,31 @@ end
 -------------------------------------------------------------------------------
 -- HUD: "Level N" banner + progress bar
 -------------------------------------------------------------------------------
+export type HudStats = {
+	troops: number,
+	weaponName: string,
+	weaponTier: number,
+	maxTier: number,
+	dps: number,
+	cash: number,
+	capacity: number,
+}
+
 export type Hud = {
 	SetLevel: (level: number) -> (),
 	SetProgress: (fraction: number) -> (),
+	SetStats: (stats: HudStats) -> (),
+	SetStatsVisible: (visible: boolean) -> (),
+	PopCash: () -> (),
 	Destroy: () -> (),
 }
 
+local function wholeText(n: number): string
+	return (Format.Money(math.max(0, math.floor(n + 0.5))):gsub("^%$", ""))
+end
+
 function RunnerUI.ShowHud(level: number): Hud
+	local gui = getGui()
 	local root = Instance.new("Frame")
 	root.Name = "RunnerHud"
 	root.BackgroundTransparency = 1
@@ -158,7 +188,7 @@ function RunnerUI.ShowHud(level: number): Hud
 	-- RunnerUI ignores the GUI inset: start below Roblox's top bar.
 	root.Position = UDim2.new(0.5, 0, 0, Theme.TopInset() + 6)
 	root.Size = UDim2.fromOffset(300, 80)
-	root.Parent = getGui()
+	root.Parent = gui
 	responsive(root)
 
 	local _, setBanner = Theme.Banner({
@@ -185,6 +215,73 @@ function RunnerUI.ShowHud(level: number): Hud
 	fill.Parent = bar
 	Theme.Corner(fill, 0.5)
 
+	---------------------------------------------------------------------------
+	-- TOP-LEFT squad panel (below Roblox's top bar)
+	---------------------------------------------------------------------------
+	local corner = Instance.new("Frame")
+	corner.Name = "RunnerStats"
+	corner.BackgroundTransparency = 1
+	corner.AnchorPoint = Vector2.new(0, 0)
+	corner.Position = UDim2.fromOffset(12, Theme.TopInset() + 8)
+	corner.Size = UDim2.fromOffset(232, 186)
+	corner.Visible = false
+	corner.Parent = gui
+	responsive(corner)
+
+	local card = Instance.new("Frame")
+	card.Name = "Card"
+	card.BackgroundColor3 = P.PillBlack
+	card.BackgroundTransparency = 0.18
+	card.Size = UDim2.fromScale(1, 1)
+	card.Parent = corner
+	Theme.Corner(card, 14)
+	Theme.Stroke(card, P.CardOutline, 2.5, true)
+	Theme.Padding(card, 8, 8)
+	Theme.List(card, "Vertical", 4, Enum.HorizontalAlignment.Left)
+
+	local function statRow(order: number, icon: string, size: number): TextLabel
+		local row = Instance.new("Frame")
+		row.Name = "Row" .. order
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, 0, 0, size)
+		row.LayoutOrder = order
+		row.Parent = card
+		Theme.Label({
+			Text = icon,
+			StrokeThickness = 0,
+			MaxTextSize = size - 4,
+			Size = UDim2.new(0, size, 1, 0),
+			Parent = row,
+		})
+		return Theme.Label({
+			Text = "",
+			MaxTextSize = size - 6,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, -(size + 6), 1, 0),
+			Position = UDim2.fromOffset(size + 6, 0),
+			Parent = row,
+		})
+	end
+	local troopsLabel = statRow(1, "🪖", 36)
+	local weaponLabel = statRow(2, "🔫", 30)
+	local dpsLabel = statRow(3, "💥", 30)
+	local moneyTag, setMoney = Theme.MoneyTag({
+		Name = "Cash",
+		Text = "$0",
+		MaxTextSize = 26,
+		Size = UDim2.new(1, 0, 0, 44),
+		LayoutOrder = 4,
+		Parent = card,
+	})
+	Theme.CoinIcon({
+		Size = UDim2.fromOffset(30, 30),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 6, 0.5, -2),
+		ZIndex = 4,
+		Parent = moneyTag,
+	})
+
+	local lastTroops = -1
 	return {
 		SetLevel = function(newLevel: number)
 			setBanner("Level " .. newLevel)
@@ -192,10 +289,91 @@ function RunnerUI.ShowHud(level: number): Hud
 		SetProgress = function(fraction: number)
 			fill.Size = UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
 		end,
+		SetStats = function(stats: HudStats)
+			local count = math.max(0, math.floor(stats.troops))
+			troopsLabel.Text = wholeText(count) .. (if count == 1 then " troop" else " troops")
+			if lastTroops >= 0 and count ~= lastTroops then
+				troopsLabel.TextColor3 = if count > lastTroops then P.MoneyGreen else P.ButtonRed
+				task.delay(0.35, function()
+					troopsLabel.TextColor3 = P.White
+				end)
+			end
+			lastTroops = count
+			weaponLabel.Text = ("%s  %d/%d"):format(stats.weaponName, stats.weaponTier, stats.maxTier)
+			dpsLabel.Text = wholeText(stats.dps) .. " DPS"
+			local full = stats.capacity > 0 and stats.cash >= stats.capacity - 0.5
+			if full then
+				setMoney("     " .. Format.Money(stats.cash) .. " FULL!")
+			else
+				setMoney("     " .. Format.Money(stats.cash) .. " / " .. Format.Money(stats.capacity))
+			end
+		end,
+		SetStatsVisible = function(visible: boolean)
+			if visible and not corner.Visible then
+				corner.Visible = true
+				Theme.Pop(card)
+			else
+				corner.Visible = visible
+			end
+		end,
+		PopCash = function()
+			Theme.Pop(moneyTag)
+		end,
 		Destroy = function()
 			root:Destroy()
+			corner:Destroy()
 		end,
 	}
+end
+
+-------------------------------------------------------------------------------
+-- Big centre message (boss result)
+-------------------------------------------------------------------------------
+function RunnerUI.ShowMessage(title: string, subtitle: string?, color: Color3?, duration: number?): () -> ()
+	local holder = Instance.new("Frame")
+	holder.Name = "RunnerMessage"
+	holder.BackgroundTransparency = 1
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.fromScale(0.5, 0.32)
+	holder.Size = UDim2.fromOffset(760, 150)
+	holder.Parent = getGui()
+	responsive(holder)
+	local inner = Instance.new("Frame")
+	inner.Name = "Inner"
+	inner.BackgroundTransparency = 1
+	inner.Size = UDim2.fromScale(1, 1)
+	inner.Parent = holder
+	Theme.Label({
+		Text = title,
+		TextColor3 = color or P.Coin,
+		MaxTextSize = 72,
+		StrokeThickness = 4,
+		Size = UDim2.new(1, 0, 0, 86),
+		Parent = inner,
+	})
+	if subtitle and subtitle ~= "" then
+		Theme.Label({
+			Text = subtitle,
+			MaxTextSize = 32,
+			StrokeThickness = 3,
+			Size = UDim2.new(1, 0, 0, 44),
+			Position = UDim2.fromOffset(0, 92),
+			Parent = inner,
+		})
+	end
+	Theme.Pop(inner)
+	local closed = false
+	local function close()
+		if closed then
+			return
+		end
+		closed = true
+		holder:Destroy()
+	end
+	if duration and duration > 0 then
+		task.delay(duration, close)
+	end
+	return close
 end
 
 -------------------------------------------------------------------------------
@@ -562,7 +740,7 @@ local LINE_ICONS: { [string]: string } = {
 	damage = "💥",
 	cash = "💰",
 	enemies = "🎯",
-	boss = "🏰",
+	boss = "👹",
 	bonus = "🚙",
 }
 
@@ -589,6 +767,8 @@ end
 local function moneyText(value: number): string
 	if value < 0 then
 		return Format.Money(value)
+	elseif value < 0.5 then
+		return Format.Money(0)
 	end
 	return "+" .. Format.Money(value)
 end
@@ -624,7 +804,7 @@ local function summaryRow(parent: Instance, order: number, icon: string, label: 
 	if value then
 		Theme.Label({
 			Text = moneyText(value),
-			TextColor3 = if value >= 0 then P.MoneyGreen else P.ButtonRed,
+			TextColor3 = if value < 0 then P.ButtonRed elseif value < 0.5 then P.White else P.MoneyGreen,
 			MaxTextSize = 24,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			Size = UDim2.new(0.38, -46, 1, -8),
@@ -653,7 +833,7 @@ function RunnerUI.ShowSummary(props: {
 		Name = "RunnerSummary",
 		Title = "RUN COMPLETE!",
 		Closable = false,
-		Size = UDim2.fromOffset(600, 640),
+		Size = UDim2.fromOffset(600, 660),
 	})
 	Theme.List(content, "Vertical", 8)
 
@@ -666,23 +846,45 @@ function RunnerUI.ShowSummary(props: {
 		Parent = content,
 	})
 
-	subHeading(content, 2, "COLLECTED THIS RUN (this run only)", P.MoneyGreen)
+	-- Boss result pill (owner request: a boss at the end of every run).
+	local result = props.Result
+	local bossOutcome = if type(result) == "table" and type(result.boss) == "table" then result.boss else nil
+	if bossOutcome then
+		local won = bossOutcome.victory == true
+		local pill = Instance.new("Frame")
+		pill.Name = "BossStatus"
+		pill.BackgroundColor3 = if won then P.ButtonGreenDark else P.ButtonRedDark
+		pill.Size = UDim2.new(1, 0, 0, 36)
+		pill.LayoutOrder = 2
+		pill.Parent = content
+		Theme.Corner(pill, 0.5)
+		Theme.Stroke(pill, P.CardOutline, 2, true)
+		Theme.Label({
+			Text = if won then "👑 Boss defeated!" else "💀 Defeated by the boss - pick the best lanes to beat it",
+			MaxTextSize = 24,
+			Size = UDim2.new(1, -16, 1, -4),
+			Position = UDim2.fromScale(0.5, 0.5),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Parent = pill,
+		})
+	end
+
+	subHeading(content, 3, "COLLECTED THIS RUN (this run only)", P.MoneyGreen)
 
 	local list = Instance.new("ScrollingFrame")
 	list.Name = "Lines"
 	list.BackgroundTransparency = 1
 	list.BorderSizePixel = 0
-	list.Size = UDim2.new(1, 0, 0, 232)
+	list.Size = UDim2.new(1, 0, 0, if bossOutcome then 200 else 232)
 	list.CanvasSize = UDim2.new()
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.ScrollingDirection = Enum.ScrollingDirection.Y
 	list.ScrollBarThickness = 6
-	list.LayoutOrder = 3
+	list.LayoutOrder = 4
 	list.Parent = content
 	Theme.List(list, "Vertical", 5)
 
 	local order = 0
-	local result = props.Result
 	local lines: { RunnerSim.Line } = if type(result) == "table" and type(result.lines) == "table"
 		then result.lines
 		else {}
@@ -711,7 +913,7 @@ function RunnerUI.ShowSummary(props: {
 	totalRow.BackgroundColor3 = P.PillBlack
 	totalRow.BackgroundTransparency = 0.1
 	totalRow.Size = UDim2.new(1, 0, 0, 60)
-	totalRow.LayoutOrder = 4
+	totalRow.LayoutOrder = 5
 	totalRow.Parent = content
 	Theme.Corner(totalRow, 14)
 	Theme.Stroke(totalRow, P.CardOutline, 2, true)
@@ -740,7 +942,7 @@ function RunnerUI.ShowSummary(props: {
 	})
 
 	-- PERMANENT upgrades, clearly separated from what was collected this run.
-	subHeading(content, 5, "PERMANENT UPGRADES (kept forever)", P.PriceGold)
+	subHeading(content, 6, "PERMANENT UPGRADES (kept forever)", P.PriceGold)
 	local upgrades = props.Upgrades
 	Theme.Label({
 		Text = ("🪖 Troops Lv %d   ·   💥 Damage Lv %d   ·   💰 Carry Lv %d"):format(
@@ -750,14 +952,14 @@ function RunnerUI.ShowSummary(props: {
 		),
 		MaxTextSize = 20,
 		Size = UDim2.new(1, 0, 0, 28),
-		LayoutOrder = 6,
+		LayoutOrder = 7,
 		Parent = content,
 	})
 
 	local buttonRow = Instance.new("Frame")
 	buttonRow.BackgroundTransparency = 1
 	buttonRow.Size = UDim2.new(1, 0, 0, 66)
-	buttonRow.LayoutOrder = 7
+	buttonRow.LayoutOrder = 8
 	buttonRow.Parent = content
 	Theme.Button({
 		Name = "Collect",

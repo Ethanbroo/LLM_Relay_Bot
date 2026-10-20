@@ -34,8 +34,8 @@
 		EquipmentDefs.ItemPerks(item): { PerkLine }      built-in + rolled perks with names/descriptions
 		EquipmentDefs.ItemStatsText(item): { string }    readable stat lines ("Damage 10.6", ...)
 		EquipmentDefs.ItemPower(item): number            single number for sorting / comparing in a slot
-		EquipmentDefs.UpgradeSpent(item): number         cash spent upgrading it from level 1
-		EquipmentDefs.ScrapValue(item): number           cash paid for scrapping it
+		EquipmentDefs.UpgradeSpent(item): number         cash spent upgrading it from level 1 (whole $)
+		EquipmentDefs.ScrapValue(item): number           cash paid for scrapping it (whole $, >= 1)
 		EquipmentDefs.DisplayStats(stats): CombatStats   stats with perk effects applied (UI ONLY;
 			COMBAT applies perks itself in CombatDefs.DeriveStats, so never feed this into combat)
 
@@ -51,6 +51,7 @@
 local Shared = script.Parent.Parent
 local Config = require(Shared.Config)
 local Economy = require(Shared.Economy)
+local Format = require(Shared.Format)
 local Rng = require(Shared.Rng)
 local Types = require(Shared.Types)
 
@@ -603,7 +604,7 @@ function EquipmentDefs.UpgradeSpent(item: any): number
 	for level = 1, clean.level - 1 do
 		total += Economy.EquipmentUpgradePrice(clean.rarity, level) or 0
 	end
-	return round2(total)
+	return Format.RoundWhole(total) -- whole dollars (every upgrade price is whole)
 end
 
 function EquipmentDefs.ScrapValue(item: any): number
@@ -614,7 +615,7 @@ function EquipmentDefs.ScrapValue(item: any): number
 	local share = EquipmentDefs.SCRAP_RARITY_SHARE[clean.rarity] or EquipmentDefs.SCRAP_RARITY_SHARE[1]
 	local value = share * Economy.RunBenchmark(1)
 		+ EquipmentDefs.SCRAP_UPGRADE_REFUND * EquipmentDefs.UpgradeSpent(clean)
-	return math.max(0.01, round2(value))
+	return math.max(1, Format.RoundWhole(value)) -- whole dollars, at least $1
 end
 
 -------------------------------------------------------------------------------

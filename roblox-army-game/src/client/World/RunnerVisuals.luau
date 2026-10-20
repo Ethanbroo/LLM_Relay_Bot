@@ -6,26 +6,43 @@
 	white track floor; this module adds everything ON the track:
 
 	  * gate rows   - translucent blue / red / gold panels between dark posts,
-	                  with huge white outlined labels ("+5", "x2", "-3", "÷2", "RIFLE")
-	  * cash rows   - stacks of gold coins + green cash bricks with value labels
-	  * enemy squads- red-uniform blocky soldiers with a count label
+	                  with huge white outlined labels ("+5", "x2", "-3", "÷2", "WEAPON +1")
+	  * cash rows   - stacks of gold coins + green cash bricks. Their VALUE labels
+	                  (and the cash label of a red toll gate) stay hidden until the
+	                  previous row has been crossed (owner request: the far-away
+	                  values cluttered the view); row 1's are visible from the start
+	  * enemy squads- red-uniform soldiers with rifles and a count label
 	  * barricades  - sandbag walls with an HP bar
-	  * boss        - the enemy base (fort) with an HP bar
-	  * your squad  - up to 40 green toy soldiers following the avatar in a
-	                  sunflower "blob" formation, a lime-green money tag showing the
-	                  carried cash and a troop-count pill (reference image 2)
-	  * effects     - pop text, gate flashes, little yellow bullets, falling enemies
+	  * the castle  - at the end of the track; the BOSS (RunnerBoss) walks out of it
+	  * your squad  - up to 40 green toy soldiers standing NEXT TO the avatar in
+	                  rows of RunnerDefs.FORMATION_WIDTH (front row: 2 troops, the
+	                  avatar, 2 troops; more rows behind), each holding the same gun
+	  * guns        - the avatar holds the server's "RunnerGun" Tool; we weld the
+	                  part-built gun of the current weapon tier (RunnerGuns) to its
+	                  Handle. Everyone fires that gun at its fireRate (visual cap 4/s
+	                  per unit, <= 90 bullets alive) up to RunnerDefs.GUN_RANGE
+	  * effects     - pop text, gate flashes, hit flashes, falling enemies, confetti
+
+	The OUTCOME of every fight comes from RunnerSim (RunnerController passes it
+	in); this module only shows it: enemies fall / barricade HP drains while the
+	squad closes the last GUN_RANGE studs (= RunnerDefs.ENGAGE_SECONDS), and the
+	boss fight follows the BossOutcome exactly (RunnerSim.BossHpAt / AliveAt).
 
 	Public API:
-		local visuals = RunnerVisuals.new(course, slot)
-		visuals.fortDistance: number      -- distance (studs from start) of the fort's front
-		visuals.stopDistance: number      -- where the avatar stops to fight the fort
-		visuals:SetSquad(troops, cash, capacity, weaponTier)
+		local visuals = RunnerVisuals.new(course, slot, character)
+		visuals.fortDistance: number      -- distance (studs from start) of the castle's front
+		visuals.stopDistance: number      -- where the avatar stops to fight the boss
+		visuals:SetSquad(troops, weaponTier)   -- troops to draw (true count; drawn capped at 40) + gun
 		visuals:Update(dt, root: BasePart?, moving: boolean)   -- call every frame
-		visuals:Engage(rowIndex, lane)    -- troops start shooting at that row's targets
-		visuals:RowCrossed(rowIndex, lane, outcome?, capacity)  -- play the row's effect
-		visuals:StartBossFight(duration, fraction)  -- shoot the fort, drain its HP bar
-		visuals:Destroy()                 -- removes every instance it created
+		visuals:Engage(rowIndex, lane, fight: Fight?)   -- shoot that row's option (lane may change)
+		visuals:RowCrossed(rowIndex, lane, outcome?, capacity, fight: Fight?)  -- play the row's result
+		visuals:StartBossFight(outcome: BossOutcome, callbacks) -> number (seconds until onDone)
+			callbacks = { onProgress(alive, hp), onResolved(victory), onDone() }
+		visuals:BossFocus() -> Vector3?   -- boss chest (camera framing)
+		visuals:Destroy()                 -- removes every instance it created, restores the avatar pose
+
+		Fight = { enemies: number, kills: number, share: number, destroyed: boolean }
+			squads: kills of enemies; barricades: share = fraction of its HP taken off
 
 	This module never talks to the server; RunnerController feeds it.
 ]]
@@ -43,13 +60,17 @@ local RunnerSim = require(Shared.Runner.RunnerSim)
 
 local Client = script.Parent.Parent
 local Theme = require(Client.UI.Theme)
+local RunnerBoss = require(script.Parent.RunnerBoss)
+local RunnerGuns = require(script.Parent.RunnerGuns)
 local RunnerModels = require(script.Parent.RunnerModels)
 
 type Course = RunnerCourse.Course
 type Option = RunnerCourse.Option
 type Row = RunnerCourse.Row
 type RowOutcome = RunnerSim.RowOutcome
+type BossOutcome = RunnerSim.BossOutcome
 type Rig = RunnerModels.Rig
+type Boss = RunnerBoss.Boss
 
 local P = Config.Palette
 
@@ -58,37 +79,22 @@ local P = Config.Palette
 -------------------------------------------------------------------------------
 local MAX_TROOP_MODELS = 40 -- [REQUIREMENT ARCH §0.10] cap rendered troops
 local MAX_ENEMY_MODELS = 12 -- per squad lane [PROPOSAL]
+local MAX_VISUAL_RATE = 4 -- [PROPOSAL] bullets per second per unit drawn (performance cap)
 local GATE_HEIGHT = 7
 local POST_HEIGHT = 8.4
-local BULLET_SPEED = 140
-local BULLET_POOL = 36
-local FIRE_INTERVAL = 0.07
-local ENGAGE_TIME = 1.1
 local FORT_DEPTH = 14
+local BOSS_DOOR_TIME = 0.7 -- [PROPOSAL] castle door sinks
+local BOSS_WALK_TIME = 2.2 -- [PROPOSAL] boss walks out of the gate
+local BOSS_OUTRO_TIME = 2.8 -- [PROPOSAL] victory / defeat moment before the summary
+local BOSS_STAND = 9 -- boss stops this many studs in front of the castle
+local SQUAD_GAP = 30 -- the avatar stops this many studs in front of the castle
+local DEATH_TIME = 0.45
 local HIDDEN = CFrame.new(0, -500, 0)
 
--- Weapon names for the troop pill (from ECON's RunnerDefs.WEAPONS).
-local FALLBACK_WEAPONS = { "Pistol", "Rifle", "SMG", "Assault Rifle", "Minigun", "Rocket" }
-local function loadWeaponNames(): { string }
-	local names: { string } = {}
-	local list = (RunnerDefs :: any).WEAPONS
-	if type(list) == "table" then
-		for i, entry in list :: { any } do
-			if type(entry) == "string" then
-				names[i] = entry
-			elseif type(entry) == "table" and type(entry.name) == "string" then
-				names[i] = entry.name
-			end
-		end
-	end
-	return if #names > 0 then names else FALLBACK_WEAPONS
-end
-local WEAPON_NAMES = loadWeaponNames()
-
-local function weaponName(tier: number): string
-	local index = math.clamp(math.floor(tier), 1, #WEAPON_NAMES)
-	return WEAPON_NAMES[index] or "Pistol"
-end
+local GUN_RANGE = RunnerDefs.GUN_RANGE
+local FORMATION_WIDTH = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+local SPACING_X = RunnerDefs.FORMATION_SPACING_X
+local SPACING_Z = RunnerDefs.FORMATION_SPACING_Z
 
 local function toneColor(option: Option): Color3
 	local tone = option.tone
@@ -107,20 +113,41 @@ local function toneColor(option: Option): Color3
 	return P.GatePositive
 end
 
+-- Formation slot of troop i (1-based; the avatar is the centre of row 0).
+-- Row 0 holds FORMATION_WIDTH - 1 troops (closest to the avatar first), every
+-- later row FORMATION_WIDTH (centre first). Returns (column, row): column in
+-- units of SPACING_X (+ = right), row in units of SPACING_Z behind the avatar.
+local function slotOf(i: number): (number, number)
+	local half = math.floor(FORMATION_WIDTH / 2)
+	local front = FORMATION_WIDTH - 1
+	if i <= front then
+		local k = math.ceil(i / 2)
+		return if i % 2 == 1 then -k else k, 0
+	end
+	local j = i - front - 1 -- 0-based in the back rows
+	local row = 1 + math.floor(j / FORMATION_WIDTH)
+	local index = j % FORMATION_WIDTH -- 0 = centre, then left/right pairs
+	if index == 0 then
+		return 0, row
+	end
+	local k = math.min(half, math.ceil(index / 2))
+	return if index % 2 == 1 then -k else k, row
+end
+
 -------------------------------------------------------------------------------
 -- Small UI helpers (billboards over world objects)
 -------------------------------------------------------------------------------
 type HpBar = { set: (fraction: number, duration: number?) -> (), gui: BillboardGui }
 
-local function makeHpBar(adornee: BasePart, title: string, width: number, offsetY: number, alwaysOnTop: boolean): HpBar
+local function makeHpBar(adornee: BasePart, title: string, width: number, offsetY: number): HpBar
 	local gui = Theme.Billboard({
 		Name = "HpBar",
 		Parent = adornee,
 		Adornee = adornee,
 		Size = UDim2.fromOffset(width, 54),
 		StudsOffset = Vector3.new(0, offsetY, 0),
-		AlwaysOnTop = alwaysOnTop,
-		MaxDistance = if alwaysOnTop then 400 else 160,
+		AlwaysOnTop = false,
+		MaxDistance = 160,
 	})
 	Theme.Label({
 		Text = title,
@@ -174,6 +201,7 @@ local function makeTextBillboard(
 	local holder: Instance = gui
 	if pill then
 		local frame = Instance.new("Frame")
+		frame.Name = "Pill"
 		frame.BackgroundColor3 = pill
 		frame.Size = UDim2.fromScale(0.8, 1)
 		frame.Position = UDim2.fromScale(0.5, 0)
@@ -184,6 +212,7 @@ local function makeTextBillboard(
 		holder = frame
 	end
 	Theme.Label({
+		Name = "Text",
 		Text = text,
 		TextColor3 = color,
 		MaxTextSize = 34,
@@ -207,23 +236,20 @@ local function anchorPart(parent: Instance, position: Vector3): Part
 	})
 end
 
--- Tip a model over and fade it out (enemy falls, barricade crumbles).
-local function knockDown(model: Model, pivot: CFrame, duration: number)
-	local tilt = pivot * CFrame.Angles(-math.rad(85), 0, 0)
-	for _, item in model:GetDescendants() do
-		if item:IsA("BasePart") then
-			local relative = pivot:ToObjectSpace(item.CFrame)
-			Theme.Tween(
-				item,
-				{ CFrame = tilt * relative, Transparency = 1 },
-				duration,
-				Enum.EasingStyle.Quad,
-				Enum.EasingDirection.In
-			)
-		end
+-- An enemy soldier falls (from wherever it is now) and fades out.
+local function killRig(rig: Rig, duration: number)
+	local down = rig.pivot * CFrame.Angles(math.rad(85), 0, 0)
+	for i, part in rig.parts do
+		Theme.Tween(
+			part,
+			{ CFrame = down * rig.offsets[i], Transparency = 1 },
+			duration,
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
 	end
 	task.delay(duration + 0.1, function()
-		model:Destroy()
+		rig.model:Destroy()
 	end)
 end
 
@@ -246,53 +272,120 @@ local function crumble(model: Model, duration: number)
 	end)
 end
 
-local function sunflowerOffset(i: number): Vector3
-	-- Golden-angle spiral: each new troop lands in the next gap of the blob,
-	-- biased a little behind the avatar (+Z is behind when running -Z).
-	local angle = i * 2.39996
-	local radius = 2.1 + 1.0 * math.sqrt(i)
-	return Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius * 0.8 + 1.2)
+local function flyAway(model: Model, offset: Vector3, duration: number)
+	for _, item in model:GetDescendants() do
+		if item:IsA("BasePart") then
+			Theme.Tween(item, { CFrame = item.CFrame + offset, Transparency = 1 }, duration)
+		end
+	end
+	task.delay(duration + 0.1, function()
+		model:Destroy()
+	end)
+end
+
+-- Text of a gate panel without the toll cash ("-4  +$20" -> "-4"); the cash
+-- part gets its own label that is revealed later.
+local function gateText(option: Option): string
+	local text = option.label
+	if (option.cash or 0) > 0 then
+		local stripped = text:gsub("%s*%+%$.*$", "")
+		if stripped ~= "" then
+			text = stripped
+		end
+	end
+	if option.tone == "weapon" and option.op == "weapon" then
+		text = "🔫 " .. text
+	end
+	return text
+end
+
+-- Soldiers shown as killed (of the `shown` models) for `kills` of `enemies`.
+local function shownKills(fight: Fight?, shown: number): number
+	if not fight or shown <= 0 or fight.enemies <= 0 or fight.kills <= 0 then
+		return 0
+	end
+	if fight.kills >= fight.enemies then
+		return shown
+	end
+	local k = math.clamp(math.floor(fight.kills / fight.enemies * shown + 0.5), 1, shown)
+	if k >= shown then
+		k = shown - 1 -- some survived: keep at least one standing
+	end
+	return k
 end
 
 -------------------------------------------------------------------------------
--- The visuals object
+-- Types
 -------------------------------------------------------------------------------
+export type Fight = { enemies: number, kills: number, share: number, destroyed: boolean }
+
+export type BossCallbacks = {
+	onProgress: (alive: number, hp: number) -> (),
+	onResolved: (victory: boolean) -> (),
+	onDone: () -> (),
+}
+
+type EnemyRig = { rig: Rig, fall: number, target: number }
+
 type OptionVisual = {
 	option: Option,
 	centre: Vector3,
 	panel: Part?,
 	label: TextLabel?,
 	model: Model?,
-	enemies: { Rig },
+	enemies: { EnemyRig },
 	targets: { Vector3 },
 	hp: HpBar?,
 	anchor: Part?,
+	cashLabel: BillboardGui?, -- hidden until the previous row is crossed
 }
 
-type RowVisual = { row: Row, options: { OptionVisual } }
+type RowVisual = { row: Row, options: { OptionVisual }, revealed: boolean, crossed: boolean }
 
-type Bullet = { part: Part, from: Vector3, to: Vector3, t: number, duration: number, active: boolean }
+type Engagement = { lane: number, fight: Fight? }
+
+type BossShot = { time: number, killIndex: number }
+
+type BossFight = {
+	outcome: BossOutcome,
+	callbacks: BossCallbacks,
+	clock: number, -- seconds since StartBossFight
+	fightStart: number, -- clock value when the fight itself starts (t = 0)
+	shots: { BossShot },
+	nextShot: number,
+	resolved: boolean,
+	done: boolean,
+}
 
 export type Visuals = {
 	fortDistance: number,
 	stopDistance: number,
-	SetSquad: (self: Visuals, troops: number, cash: number, capacity: number, weaponTier: number) -> (),
+	SetSquad: (self: Visuals, troops: number, weaponTier: number) -> (),
 	Update: (self: Visuals, dt: number, root: BasePart?, moving: boolean) -> (),
-	Engage: (self: Visuals, rowIndex: number, lane: number) -> (),
-	RowCrossed: (self: Visuals, rowIndex: number, lane: number, outcome: RowOutcome?, capacity: number) -> (),
-	StartBossFight: (self: Visuals, duration: number, fraction: number) -> (),
+	Engage: (self: Visuals, rowIndex: number, lane: number, fight: Fight?) -> (),
+	RowCrossed: (
+		self: Visuals,
+		rowIndex: number,
+		lane: number,
+		outcome: RowOutcome?,
+		capacity: number,
+		fight: Fight?
+	) -> (),
+	StartBossFight: (self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks) -> number,
+	BossFocus: (self: Visuals) -> Vector3?,
 	Destroy: (self: Visuals) -> (),
 }
 
 local RunnerVisuals = {}
 
-function RunnerVisuals.new(course: Course, slot: number): Visuals
+function RunnerVisuals.new(course: Course, slot: number, character: Model): Visuals
 	local folder = Instance.new("Folder")
 	folder.Name = "ArmyRunnerVisuals"
 
 	local floorY = Layout.FLOOR_Y
 	local halfTrack = Layout.RUNNER_TRACK_WIDTH / 2
 	local centreX = Layout.RunnerPoint(slot, 0, 0).X
+	local startZ = Layout.RunnerPoint(slot, 0, 0).Z
 	local destroyed = false
 
 	local function worldAt(distance: number, lateral: number, height: number?): Vector3
@@ -327,18 +420,23 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				Parent = rowFolder,
 			})
 			panel.CastShadow = false
-			local text = option.label
-			if option.tone == "weapon" and option.op == "weapon" then
-				text = "🔫 " .. text
-			end
 			-- The runner travels -Z, so the face it sees is the +Z face = Back.
-			local label = RunnerModels.SurfaceLabel(panel, Enum.NormalId.Back, text, 160)
+			local label = RunnerModels.SurfaceLabel(panel, Enum.NormalId.Back, gateText(option), 160)
 			addEdge(option.x - width / 2)
 			addEdge(option.x + width / 2)
-			-- A red "toll" gate also carries cash: show a small stack behind it.
+			-- A red "toll" gate also carries cash: a small stack behind it whose
+			-- value label stays hidden until the previous row is crossed.
 			local tollCash: Model? = nil
-			if (option.cash or 0) > 0 then
-				tollCash = RunnerModels.CoinStack(rowFolder, worldAt(row.distance + 2.5, option.x, 0), 4)
+			local cashLabel: BillboardGui? = nil
+			local cash = option.cash or 0
+			if cash > 0 then
+				local base = worldAt(row.distance + 2.5, option.x, 0)
+				local stack = RunnerModels.CoinStack(rowFolder, base, 4)
+				tollCash = stack
+				local anchor = anchorPart(stack, base + Vector3.new(0, 3.2, 0))
+				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6, P.PillBlack)
+				gui.Enabled = false
+				cashLabel = gui
 			end
 			table.insert(list, {
 				option = option,
@@ -350,6 +448,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				targets = {},
 				hp = nil,
 				anchor = nil,
+				cashLabel = cashLabel,
 			})
 		end
 		for _, x in edges do
@@ -376,7 +475,8 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			local base = worldAt(row.distance, option.x, 0)
 			local model = RunnerModels.CoinStack(rowFolder, base, coins)
 			local anchor = anchorPart(model, base + Vector3.new(0, 3.6, 0))
-			makeTextBillboard(anchor, option.label ~= "" and option.label or Format.Money(cash), P.PriceGold, 1.2, nil)
+			local gui = makeTextBillboard(anchor, Format.Money(cash), P.PriceGold, 1.2, nil)
+			gui.Enabled = false -- revealed when the previous row is crossed
 			table.insert(list, {
 				option = option,
 				centre = base,
@@ -387,6 +487,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				targets = {},
 				hp = nil,
 				anchor = anchor,
+				cashLabel = gui,
 			})
 		end
 		return list
@@ -399,8 +500,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			local shown = math.min(count, MAX_ENEMY_MODELS)
 			local width = math.max(4, option.width - 1)
 			local perRow = math.max(1, math.min(shown, math.floor(width / 1.7)))
-			local rigs: { Rig } = {}
-			local targets: { Vector3 } = {}
+			local rigs: { EnemyRig } = {}
 			local model = Instance.new("Model")
 			model.Name = "EnemySquad"
 			model.Parent = rowFolder
@@ -412,8 +512,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				-- Enemies face the runner (+Z): rotate 180 degrees.
 				local pivot = CFrame.new(pos) * CFrame.Angles(0, math.pi, 0)
 				local rig = RunnerModels.Soldier("enemy", model, pivot)
-				table.insert(rigs, rig)
-				table.insert(targets, pos + Vector3.new(0, 1.5, 0))
+				table.insert(rigs, { rig = rig, fall = 0, target = 0 })
 			end
 			local anchor = anchorPart(model, worldAt(row.distance, option.x, 4.5))
 			makeTextBillboard(
@@ -430,9 +529,10 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				label = nil,
 				model = model,
 				enemies = rigs,
-				targets = targets,
+				targets = {},
 				hp = nil,
 				anchor = anchor,
+				cashLabel = nil,
 			})
 		end
 		return list
@@ -445,7 +545,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			local width = math.max(4, option.width - 0.4)
 			local model = RunnerModels.Sandbags(rowFolder, centre, width)
 			local anchor = anchorPart(model, centre + Vector3.new(0, 4.4, 0))
-			local hp = makeHpBar(anchor, "HP " .. Format.Short(option.hp or 0), 150, 1.4, false)
+			local hp = makeHpBar(anchor, "HP " .. Format.Short(math.floor((option.hp or 0) + 0.5)), 150, 1.4)
 			hp.set(1)
 			local targets = {
 				centre + Vector3.new(-width / 4, 1.5, 0.7),
@@ -462,6 +562,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 				targets = targets,
 				hp = hp,
 				anchor = anchor,
+				cashLabel = nil,
 			})
 		end
 		return list
@@ -472,9 +573,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 		rowFolder.Name = ("Row%02d_%s"):format(index, row.kind)
 		rowFolder.Parent = folder
 		local options: { OptionVisual }
-		if row.kind == "gate" then
-			options = buildGateRow(row, rowFolder)
-		elseif row.kind == "cash" then
+		if row.kind == "cash" then
 			options = buildCashRow(row, rowFolder)
 		elseif row.kind == "squad" then
 			options = buildSquadRow(row, rowFolder)
@@ -483,24 +582,41 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 		else
 			options = buildGateRow(row, rowFolder)
 		end
-		rowVisuals[index] = { row = row, options = options }
+		rowVisuals[index] = { row = row, options = options, revealed = false, crossed = false }
 	end
 
+	-- Show a row's cash values (owner request: only once the row before it is crossed).
+	local function reveal(index: number)
+		local rowVisual = rowVisuals[index]
+		if not rowVisual or rowVisual.revealed then
+			return
+		end
+		rowVisual.revealed = true
+		for _, ov in rowVisual.options do
+			local gui = ov.cashLabel
+			if gui then
+				gui.Enabled = true
+				local holder = gui:FindFirstChildWhichIsA("GuiObject")
+				if holder then
+					Theme.Pop(holder)
+				end
+			end
+		end
+	end
+	reveal(1)
+
 	---------------------------------------------------------------------------
-	-- Boss fort. It stands on the server's finish plaza (which starts at the
-	-- end of the track), never closer than the course's boss distance, so the
-	-- run always lasts at least RunnerSim.MinDuration. [PROPOSAL]
+	-- The castle. It stands on the server's finish plaza (which starts at the
+	-- end of the track), never closer than the course's boss distance.
 	---------------------------------------------------------------------------
 	local trackEnd = Layout.RUNNER_TRACK_LENGTH
 	local fortDistance = math.clamp(course.boss.distance, trackEnd + 6, trackEnd + 30)
 	local fortCentre = worldAt(fortDistance + FORT_DEPTH / 2, 0, 0)
-	local fortModel, fortTargets = RunnerModels.Fort(folder, fortCentre)
-	local fortAnchor = anchorPart(fortModel, fortCentre + Vector3.new(0, 19, 0))
-	local fortHp = makeHpBar(fortAnchor, "ENEMY BASE  HP " .. Format.Short(course.boss.hp), 260, 0, true)
-	fortHp.set(1)
+	local fortModel, _fortTargets, fortDoor = RunnerModels.Fort(folder, fortCentre)
+	local stopDistance = math.max(course.boss.distance + 2, fortDistance - SQUAD_GAP)
 
 	---------------------------------------------------------------------------
-	-- Your squad (pooled toy soldiers + money tag)
+	-- Your squad (pooled toy soldiers in formation)
 	---------------------------------------------------------------------------
 	local squadFolder = Instance.new("Folder")
 	squadFolder.Name = "Squad"
@@ -508,108 +624,375 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 	local rigs: { Rig } = {}
 	local positions: { Vector3 } = {}
 	local active: { boolean } = {}
+	local dying: { number? } = {} -- seconds since the troop died (death animation)
 	for i = 1, MAX_TROOP_MODELS do
-		rigs[i] = RunnerModels.Soldier("troop", squadFolder, HIDDEN)
+		rigs[i] = RunnerModels.Soldier("troop", squadFolder, HIDDEN, 1)
 		positions[i] = HIDDEN.Position
 		active[i] = false
+		dying[i] = nil
 	end
 
-	local tagGui = Instance.new("BillboardGui")
-	tagGui.Name = "SquadTag"
-	tagGui.Size = UDim2.fromOffset(170, 96)
-	tagGui.StudsOffset = Vector3.new(0, 6.2, 0)
-	tagGui.AlwaysOnTop = true
-	tagGui.LightInfluence = 0
-	tagGui.MaxDistance = 400
-	tagGui.ResetOnSpawn = false
-	tagGui.Parent = folder
-	local moneyTag, setMoney = Theme.MoneyTag({
-		Text = Format.Money(0),
-		Size = UDim2.fromOffset(150, 46),
-		Position = UDim2.fromScale(0.5, 0),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Parent = tagGui,
-	})
-	local countPill = Instance.new("Frame")
-	countPill.Name = "Count"
-	countPill.BackgroundColor3 = P.PillBlack
-	countPill.BackgroundTransparency = 0.15
-	countPill.Size = UDim2.fromOffset(170, 34)
-	countPill.Position = UDim2.new(0.5, 0, 0, 52)
-	countPill.AnchorPoint = Vector2.new(0.5, 0)
-	countPill.Parent = tagGui
-	Theme.Corner(countPill, 0.5)
-	local countLabel = Theme.Label({
-		Text = "🪖 0",
-		MaxTextSize = 22,
-		Size = UDim2.new(1, -10, 1, -4),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Parent = countPill,
-	})
-
-	local troops = 0
-	local cash = 0
-	local capacity = 0
+	local troops = 0 -- soldiers to draw next to the avatar (the run's troops - 1)
 	local tier = 1
 	local bobClock = 0
+	local lastRoot: BasePart? = nil
 
 	---------------------------------------------------------------------------
-	-- Bullets
+	-- Guns and bullets
 	---------------------------------------------------------------------------
-	local bullets: { Bullet } = {}
-	for i = 1, BULLET_POOL do
-		local part = RunnerModels.Part({
-			Name = "Bullet",
-			Size = Vector3.new(0.22, 0.22, 0.9),
-			CFrame = HIDDEN,
-			Color = P.Coin,
-			Material = Enum.Material.Neon,
-			Parent = folder,
-		})
-		part.CastShadow = false
-		bullets[i] = { part = part, from = Vector3.zero, to = Vector3.zero, t = 0, duration = 0, active = false }
+	local pool = RunnerGuns.newPool(folder)
+	local avatarGun: Model? = nil
+	local avatarGunTier = 0
+	local avatarGunHandle: BasePart? = nil
+	local fireClocks: { number } = {}
+	for i = 0, MAX_TROOP_MODELS do
+		fireClocks[i + 1] = math.random() -- random phase so units do not fire in sync
 	end
-	local nextBullet = 1
+	local shotCounter = 0
 
-	local function fireBullet(from: Vector3, to: Vector3)
-		local bullet = bullets[nextBullet]
-		nextBullet = nextBullet % BULLET_POOL + 1
-		bullet.from = from
-		bullet.to = to
-		bullet.t = 0
-		bullet.duration = math.max(0.05, (to - from).Magnitude / BULLET_SPEED)
-		bullet.active = true
+	local function currentHandle(): BasePart?
+		local tool = character:FindFirstChild("RunnerGun")
+		local handle = tool and tool:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			return handle
+		end
+		return nil
 	end
 
-	local engageTargets: { Vector3 } = {}
-	local engageUntil = 0
-	local fireClock = 0
+	local function refreshAvatarGun()
+		local handle = currentHandle()
+		if not handle then
+			return
+		end
+		local gun = avatarGun
+		if gun and gun.Parent == handle and avatarGunTier == tier then
+			return
+		end
+		if gun then
+			gun:Destroy()
+		end
+		avatarGun = RunnerGuns.AttachToHandle(handle, tier)
+		avatarGunTier = tier
+		avatarGunHandle = handle
+	end
+
+	local function avatarMuzzle(root: BasePart): Vector3
+		local handle = avatarGunHandle
+		if handle and handle.Parent and avatarGun and avatarGun.Parent == handle then
+			return (handle.CFrame * RunnerGuns.MuzzleOffset(tier)).Position
+		end
+		return (root.CFrame * CFrame.new(1, 0.4, -1.8)).Position
+	end
+
+	---------------------------------------------------------------------------
+	-- Engagements (rows being shot at) and the boss fight
+	---------------------------------------------------------------------------
+	local engaged: { [number]: Engagement } = {}
+	local boss: Boss? = nil
+	local fight: BossFight? = nil
+	local knockMotor: Motor6D? = nil
+	local knockOriginal: CFrame? = nil
+	local knockT = 0
+	local knockTarget: CFrame? = nil
+
+	local function aliveTroops(): number
+		-- Units drawn next to the avatar (the avatar itself is unit 1 in the boss fight).
+		local f = fight
+		if f and f.clock >= f.fightStart then
+			local t = f.clock - f.fightStart
+			return math.max(0, RunnerSim.AliveAt(f.outcome, t) - 1)
+		end
+		return troops
+	end
+
+	-- Avatar knocked down by the boss: VISUAL ONLY. The body is rotated on the
+	-- client through the root joint's C0 (never Humanoid.Health, no physics).
+	local function knockDownAvatar()
+		if knockMotor then
+			return
+		end
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not root or not root:IsA("BasePart") then
+			return
+		end
+		for _, item in character:GetDescendants() do
+			if item:IsA("Motor6D") and item.Part0 == root then
+				knockMotor = item
+				knockOriginal = item.C0
+				local drop = math.max(0, root.Position.Y - floorY - 0.8)
+				knockTarget = CFrame.new(0, -drop, 0) * CFrame.Angles(math.rad(88), 0, 0) * item.C0
+				knockT = 0
+				break
+			end
+		end
+	end
+
+	local function restoreAvatar()
+		local motor = knockMotor
+		local original = knockOriginal
+		knockMotor = nil
+		knockOriginal = nil
+		knockTarget = nil
+		if motor and original and motor.Parent then
+			motor.C0 = original
+		end
+	end
 
 	---------------------------------------------------------------------------
 	-- Methods
 	---------------------------------------------------------------------------
 	local self = {} :: Visuals
 	self.fortDistance = fortDistance
-	self.stopDistance = fortDistance - 14
+	self.stopDistance = stopDistance
 
-	local function refreshTag()
-		setMoney(Format.Money(cash))
-		local full = capacity > 0 and cash >= capacity - 0.001
-		local text = ("🪖 %d  ·  %s"):format(troops, weaponName(tier))
-		if full then
-			text = "🪖 " .. troops .. "  ·  BAG FULL!"
+	function self.SetSquad(_self: Visuals, newTroops: number, newTier: number)
+		-- `newTroops` is the run's troop count INCLUDING the avatar (RunnerSim
+		-- counts the avatar as 1 of the troops), so we draw troops - 1 soldiers.
+		troops = math.max(0, math.floor(newTroops) - 1)
+		local clean = math.clamp(math.floor(newTier), 1, RunnerDefs.MAX_WEAPON_TIER)
+		if clean ~= tier then
+			tier = clean
+			for _, rig in rigs do
+				RunnerModels.SetRigGun(rig, tier)
+			end
 		end
-		countLabel.Text = text
-		countLabel.TextColor3 = if full then P.Coin else P.White
 	end
 
-	function self.SetSquad(_self: Visuals, newTroops: number, newCash: number, newCapacity: number, newTier: number)
-		troops = math.max(0, math.floor(newTroops))
-		cash = math.max(0, newCash)
-		capacity = newCapacity
-		tier = newTier
-		refreshTag()
+	-- Points to shoot at right now (nearest engaged row, or the boss).
+	local function currentTargets(): ({ Vector3 }, boolean)
+		local b = boss
+		local f = fight
+		if b and f and f.clock >= f.fightStart and not f.resolved then
+			return b:AimPoints(), true
+		end
+		local best: number? = nil
+		for index in engaged do
+			if best == nil or index < best then
+				best = index
+			end
+		end
+		if best == nil then
+			return {}, false
+		end
+		local e = engaged[best]
+		local rowVisual = rowVisuals[best]
+		local ov = rowVisual and rowVisual.options[e.lane]
+		if not ov then
+			return {}, false
+		end
+		if #ov.enemies > 0 then
+			local list: { Vector3 } = {}
+			for _, enemy in ov.enemies do
+				if enemy.target < 0.5 then
+					table.insert(list, enemy.rig.pivot.Position + Vector3.new(0, 1.6, 0))
+				end
+			end
+			if #list == 0 then
+				for _, enemy in ov.enemies do
+					table.insert(list, enemy.rig.pivot.Position + Vector3.new(0, 0.6, 0))
+				end
+			end
+			return list, false
+		end
+		return ov.targets, false
+	end
+
+	local function shoot(dt: number, root: BasePart, shown: number)
+		local targets, atBoss = currentTargets()
+		if #targets == 0 then
+			return
+		end
+		local weapon = RunnerGuns.Weapon(tier)
+		local interval = 1 / math.max(0.1, math.min(weapon.fireRate, MAX_VISUAL_RATE))
+		local avatarDown = knockMotor ~= nil
+		for unit = 0, shown do
+			local index = unit + 1
+			local c = fireClocks[index] + dt / interval
+			if c < 1 then
+				fireClocks[index] = c
+				continue
+			end
+			fireClocks[index] = math.min(c - 1, 0.99)
+			if unit == 0 and avatarDown then
+				continue
+			end
+			local from: Vector3
+			if unit == 0 then
+				from = avatarMuzzle(root)
+			else
+				from = RunnerModels.RigMuzzle(rigs[unit], CFrame.new(positions[unit]))
+			end
+			shotCounter += 1
+			local to = targets[(shotCounter % #targets) + 1]
+				+ Vector3.new(math.random(-8, 8) / 10, math.random(-6, 6) / 10, 0)
+			local offset = to - from
+			local impact = true
+			if offset.Magnitude > GUN_RANGE then
+				to = from + offset.Unit * GUN_RANGE -- out of range: the bullet fades out
+				impact = false
+			end
+			if pool:Fire(from, to, tier, impact) and impact and atBoss then
+				local b = boss
+				if b then
+					b:Hit()
+				end
+			end
+		end
+	end
+
+	-- Enemies of engaged squads fall over while the squad closes in; the
+	-- barricade HP bar drains. Progress = share of the last GUN_RANGE studs run.
+	local function updateEngagements(dt: number, distance: number, parts: { BasePart }, cframes: { CFrame })
+		for index, e in engaged do
+			local rowVisual = rowVisuals[index]
+			if not rowVisual then
+				continue
+			end
+			local row = rowVisual.row
+			local progress = math.clamp((distance - (row.distance - GUN_RANGE)) / GUN_RANGE, 0, 1)
+			for lane, ov in rowVisual.options do
+				local targeted = lane == e.lane
+				if #ov.enemies > 0 then
+					local down = if targeted then math.floor(shownKills(e.fight, #ov.enemies) * progress + 1e-6) else 0
+					for i, enemy in ov.enemies do
+						enemy.target = if i <= down then 1 else 0
+						if math.abs(enemy.fall - enemy.target) > 0.001 then
+							local speed = if enemy.target > enemy.fall then 5 else 3
+							local step = math.clamp(enemy.target - enemy.fall, -speed * dt, speed * dt)
+							enemy.fall += step
+							RunnerModels.RigCFrames(
+								enemy.rig,
+								enemy.rig.pivot * CFrame.Angles(math.rad(85) * enemy.fall, 0, 0),
+								parts,
+								cframes
+							)
+						end
+					end
+				end
+				local hp = ov.hp
+				if hp then
+					local share = if targeted and e.fight then e.fight.share else 0
+					hp.set(1 - math.clamp(share, 0, 1) * (if targeted then progress else 0))
+				end
+			end
+		end
+	end
+
+	-- Boss fight timeline (see StartBossFight).
+	local function updateBoss(dt: number, root: BasePart?)
+		local f = fight
+		local b = boss
+		if not f or not b then
+			return
+		end
+		f.clock += dt
+		local outcome = f.outcome
+		local t = f.clock - f.fightStart
+		if t >= 0 then
+			local tc = math.min(t, outcome.duration)
+			b:SetHp(RunnerSim.BossHpAt(outcome, tc))
+			if not f.resolved then
+				f.callbacks.onProgress(RunnerSim.AliveAt(outcome, tc), RunnerSim.BossHpAt(outcome, tc))
+			end
+			-- Boss shots: one per kill, timed to land when the unit dies.
+			while f.nextShot <= #f.shots and t >= f.shots[f.nextShot].time do
+				local shot = f.shots[f.nextShot]
+				f.nextShot += 1
+				local muzzle = b:Attack()
+				local unitsBefore = outcome.units - (shot.killIndex - 1)
+				local troopIndex = unitsBefore - 1 -- 0 = the avatar
+				local target: Vector3
+				if troopIndex <= 0 or not root then
+					target = if root then root.Position else b:Chest()
+				elseif troopIndex <= MAX_TROOP_MODELS then
+					target = positions[troopIndex] + Vector3.new(0, 1.4, 0)
+				else
+					-- A troop beyond the drawn 40: aim at the back of the formation.
+					target = positions[math.min(MAX_TROOP_MODELS, math.max(1, aliveTroops()))] + Vector3.new(0, 1.4, 2)
+				end
+				pool:Fire(muzzle, target, RunnerDefs.MAX_WEAPON_TIER, true)
+				pool:Flash(muzzle, 3, P.EnemyRed, 0.2)
+			end
+			if t >= outcome.duration and not f.resolved then
+				f.resolved = true
+				local victory = outcome.victory
+				if victory then
+					b:Die()
+					local chest = b:Chest()
+					for i = 0, 5 do
+						task.delay(i * 0.18, function()
+							if not destroyed then
+								pool:Flash(
+									chest + Vector3.new(math.random(-30, 30) / 10, math.random(-30, 30) / 10, 0),
+									6 + i,
+									if i % 2 == 0 then P.CardOrange else P.Coin,
+									0.4
+								)
+							end
+						end)
+					end
+					-- Confetti + coins burst.
+					local colors = { P.Coin, P.MoneyGreen, P.CardPink, P.CardBlue, P.CardOrange, P.White }
+					for i = 1, 36 do
+						local piece = RunnerModels.Part({
+							Name = "Confetti",
+							Size = Vector3.new(0.5, 0.08, 0.35),
+							CFrame = CFrame.new(chest + Vector3.new(0, 3, 0)),
+							Color = colors[(i % #colors) + 1],
+							Parent = folder,
+						})
+						local goal = chest
+							+ Vector3.new(
+								math.random(-140, 140) / 10,
+								math.random(-40, 60) / 10,
+								math.random(-60, 160) / 10
+							)
+						Theme.Tween(piece, {
+							CFrame = CFrame.new(goal) * CFrame.Angles(math.random() * 6, math.random() * 6, 0),
+							Transparency = 1,
+						}, 1.6 + math.random() * 0.6)
+						task.delay(2.4, function()
+							piece:Destroy()
+						end)
+					end
+					for i = 1, 12 do
+						local coin = RunnerModels.Part({
+							Name = "CoinBurst",
+							Shape = Enum.PartType.Cylinder,
+							Size = Vector3.new(0.3, 1.6, 1.6),
+							CFrame = CFrame.new(chest) * CFrame.Angles(0, 0, math.rad(90)),
+							Color = P.Coin,
+							Parent = folder,
+						})
+						local goal = (if root then root.Position else chest)
+							+ Vector3.new(math.random(-60, 60) / 10, 4 + math.random() * 3, math.random(-20, 20) / 10)
+						task.delay(i * 0.05, function()
+							if coin.Parent then
+								Theme.Tween(coin, { CFrame = CFrame.new(goal), Transparency = 0.2 }, 0.7)
+							end
+						end)
+						task.delay(1.4, function()
+							if coin.Parent then
+								Theme.Tween(coin, { Transparency = 1 }, 0.3)
+							end
+						end)
+						task.delay(1.8, function()
+							coin:Destroy()
+						end)
+					end
+					Theme.FloatText(chest + Vector3.new(0, 6, 4), "BOSS DEFEATED!", P.Coin)
+				else
+					knockDownAvatar()
+					b:Roar()
+				end
+				f.callbacks.onResolved(victory)
+			end
+		end
+		if f.resolved and not f.done and t >= outcome.duration + BOSS_OUTRO_TIME then
+			f.done = true
+			f.callbacks.onDone()
+		end
+		b:Update(dt)
 	end
 
 	function self.Update(_self: Visuals, dt: number, root: BasePart?, moving: boolean)
@@ -619,83 +1002,90 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 		bobClock += dt
 		local parts: { BasePart } = {}
 		local cframes: { CFrame } = {}
-		local shown = math.min(troops, MAX_TROOP_MODELS)
-		local alpha = 1 - math.exp(-dt * 12)
+		local shown = math.min(aliveTroops(), MAX_TROOP_MODELS)
+		local alpha = 1 - math.exp(-dt * 10)
 		if root then
-			if tagGui.Adornee ~= root then
-				tagGui.Adornee = root
-			end
+			lastRoot = root
+			refreshAvatarGun()
 			local rootPosition = root.CFrame.Position
 			local base = Vector3.new(rootPosition.X, floorY, rootPosition.Z)
 			for i = 1, MAX_TROOP_MODELS do
 				local rig = rigs[i]
 				if i <= shown then
-					if not active[i] then
+					if not active[i] or dying[i] then
+						if not active[i] then
+							positions[i] = base -- new troops pop out of the avatar
+						end
 						active[i] = true
-						positions[i] = base -- new troops pop out of the avatar
+						dying[i] = nil
 					end
-					local target = base + sunflowerOffset(i)
-					local x = math.clamp(target.X, centreX - halfTrack + 0.8, centreX + halfTrack - 0.8)
-					target = Vector3.new(x, floorY, target.Z)
+					local col, line = slotOf(i)
+					local x = math.clamp(base.X + col * SPACING_X, centreX - halfTrack + 0.8, centreX + halfTrack - 0.8)
+					local target = Vector3.new(x, floorY, base.Z + line * SPACING_Z)
 					positions[i] = positions[i]:Lerp(target, alpha)
 					local bob = if moving then math.abs(math.sin(bobClock * 13 + i * 0.7)) * 0.35 else 0
 					RunnerModels.RigCFrames(rig, CFrame.new(positions[i] + Vector3.new(0, bob, 0)), parts, cframes)
 				elseif active[i] then
-					active[i] = false
-					RunnerModels.RigCFrames(rig, HIDDEN, parts, cframes)
+					-- Died: fall backwards and sink, then hide.
+					local d = (dying[i] or 0) + dt
+					if d >= DEATH_TIME then
+						active[i] = false
+						dying[i] = nil
+						RunnerModels.RigCFrames(rig, HIDDEN, parts, cframes)
+					else
+						dying[i] = d
+						local a = d / DEATH_TIME
+						local pivot = CFrame.new(positions[i] - Vector3.new(0, a * 1.2, 0))
+							* CFrame.Angles(math.rad(85) * math.min(1, a * 1.6), 0, 0)
+						RunnerModels.RigCFrames(rig, pivot, parts, cframes)
+					end
 				end
 			end
-		end
-
-		-- Shooting at the current targets.
-		if os.clock() < engageUntil and #engageTargets > 0 and shown > 0 then
-			fireClock += dt
-			while fireClock >= FIRE_INTERVAL do
-				fireClock -= FIRE_INTERVAL
-				local shooter = math.random(1, shown)
-				local from = positions[shooter] + Vector3.new(0.66, 1.5, -1.2)
-				local to = engageTargets[math.random(1, #engageTargets)]
-				fireBullet(from, to + Vector3.new(math.random(-10, 10) / 10, math.random(-5, 5) / 10, 0))
-			end
-		else
-			fireClock = 0
-		end
-
-		for _, bullet in bullets do
-			if bullet.active then
-				bullet.t += dt
-				local a = bullet.t / bullet.duration
-				table.insert(parts, bullet.part)
-				if a >= 1 then
-					bullet.active = false
-					table.insert(cframes, HIDDEN)
-				else
-					local pos = bullet.from:Lerp(bullet.to, a)
-					table.insert(cframes, CFrame.lookAt(pos, bullet.to))
-				end
-			end
+			local distance = startZ - rootPosition.Z
+			updateEngagements(dt, distance, parts, cframes)
+			shoot(dt, root, shown)
 		end
 
 		if #parts > 0 then
 			Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 		end
+		pool:Update(dt)
+		updateBoss(dt, root)
+
+		-- Avatar knock-down pose (defeat).
+		local motor = knockMotor
+		local original = knockOriginal
+		local goal = knockTarget
+		if motor and original and goal and knockT < 1 then
+			knockT = math.min(1, knockT + dt / 0.5)
+			local eased = 1 - (1 - knockT) * (1 - knockT)
+			motor.C0 = original:Lerp(goal, eased)
+		end
 	end
 
-	function self.Engage(_self: Visuals, rowIndex: number, lane: number)
+	function self.Engage(_self: Visuals, rowIndex: number, lane: number, newFight: Fight?)
 		local rowVisual = rowVisuals[rowIndex]
-		local optionVisual = rowVisual and rowVisual.options[lane]
-		if not optionVisual or #optionVisual.targets == 0 then
+		if not rowVisual or rowVisual.crossed or not rowVisual.options[lane] then
 			return
 		end
-		engageTargets = optionVisual.targets
-		engageUntil = os.clock() + ENGAGE_TIME
+		engaged[rowIndex] = { lane = lane, fight = newFight }
 	end
 
-	function self.RowCrossed(_self: Visuals, rowIndex: number, lane: number, outcome: RowOutcome?, capacityNow: number)
+	function self.RowCrossed(
+		_self: Visuals,
+		rowIndex: number,
+		lane: number,
+		outcome: RowOutcome?,
+		capacityNow: number,
+		rowFight: Fight?
+	)
 		local rowVisual = rowVisuals[rowIndex]
 		if not rowVisual or destroyed then
 			return
 		end
+		rowVisual.crossed = true
+		engaged[rowIndex] = nil
+		reveal(rowIndex + 1) -- the next row's cash values appear now
 		local optionVisual = rowVisual.options[lane]
 		if not optionVisual then
 			return
@@ -704,6 +1094,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 		local popAt = optionVisual.centre + Vector3.new(0, 7, -2)
 		local troopDelta = if outcome then outcome.troopsAfter - outcome.troopsBefore else 0
 		local cashDelta = if outcome then outcome.cashAfter - outcome.cashBefore else 0
+		local tierBefore = tier
 
 		if kind == "gate" then
 			local panel = optionVisual.panel
@@ -722,14 +1113,7 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			end
 			local tollCash = optionVisual.model
 			if tollCash then
-				for _, item in tollCash:GetDescendants() do
-					if item:IsA("BasePart") then
-						Theme.Tween(item, { CFrame = item.CFrame + Vector3.new(0, 6, 4), Transparency = 1 }, 0.4)
-					end
-				end
-				task.delay(0.5, function()
-					tollCash:Destroy()
-				end)
+				flyAway(tollCash, Vector3.new(0, 6, 4), 0.4)
 				optionVisual.model = nil
 				if cashDelta > 0.001 then
 					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(cashDelta), P.MoneyGreen)
@@ -738,70 +1122,80 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			-- Weapon gates get their own "🔫 Rifle!" pop below instead.
 			if optionVisual.option.op ~= "weapon" then
 				local good = toneColor(optionVisual.option) ~= P.GateNegative
-				Theme.FloatText(popAt, optionVisual.option.label, if good then P.MoneyGreen else P.ButtonRed)
+				Theme.FloatText(popAt, gateText(optionVisual.option), if good then P.MoneyGreen else P.ButtonRed)
 			end
 		elseif kind == "cash" then
 			local model = optionVisual.model
 			if model then
-				for _, item in model:GetDescendants() do
-					if item:IsA("BasePart") then
-						Theme.Tween(item, { CFrame = item.CFrame + Vector3.new(0, 6, 4), Transparency = 1 }, 0.4)
-					end
-				end
-				task.delay(0.5, function()
-					model:Destroy()
-				end)
+				flyAway(model, Vector3.new(0, 6, 4), 0.4)
 				optionVisual.model = nil
 			end
 			if cashDelta > 0.001 then
 				Theme.FloatText(popAt, "+" .. Format.Money(cashDelta), P.MoneyGreen)
 			end
 			local offered = optionVisual.option.cash or 0
-			if
-				outcome
-				and offered > cashDelta + 0.01
-				and capacityNow > 0
-				and outcome.cashAfter >= capacityNow - 0.01
-			then
+			if outcome and offered > cashDelta + 0.5 and capacityNow > 0 and outcome.cashAfter >= capacityNow - 0.5 then
 				Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "CAPACITY FULL!", P.Coin)
 			end
-			Theme.Pop(moneyTag)
 		elseif kind == "squad" then
-			local wiped = outcome ~= nil and outcome.troopsAfter <= 0
-			if not wiped then
-				for i, rig in optionVisual.enemies do
-					task.delay(i * 0.03, function()
-						if rig.model.Parent then
-							knockDown(rig.model, rig.pivot, 0.45)
-						end
-					end)
-				end
-				optionVisual.enemies = {}
-				if optionVisual.anchor then
-					optionVisual.anchor:Destroy()
-					optionVisual.anchor = nil
+			for laneIndex, ov in rowVisual.options do
+				if laneIndex ~= lane then
+					-- Not fought: stand back up.
+					for _, enemy in ov.enemies do
+						enemy.fall, enemy.target = 0, 0
+						local parts: { BasePart } = {}
+						local cframes: { CFrame } = {}
+						RunnerModels.RigCFrames(enemy.rig, enemy.rig.pivot, parts, cframes)
+						Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+					end
 				end
 			end
+			local killed = shownKills(rowFight, #optionVisual.enemies)
+			local root = lastRoot
+			for i, enemy in optionVisual.enemies do
+				local rig = enemy.rig
+				if i <= killed then
+					task.delay(i * 0.02, function()
+						if rig.model.Parent then
+							killRig(rig, 0.35)
+						end
+					end)
+				else
+					-- Survivors charge into your squad (each costs one troop).
+					local towards = if root then root.Position - rig.pivot.Position else Vector3.new(0, 0, 6)
+					flyAway(rig.model, Vector3.new(towards.X, 0, towards.Z) * 0.8, 0.35)
+				end
+			end
+			optionVisual.enemies = {}
+			if optionVisual.anchor then
+				optionVisual.anchor:Destroy()
+				optionVisual.anchor = nil
+			end
+			if rowFight and rowFight.kills > 0 then
+				Theme.FloatText(popAt + Vector3.new(0, 2, 0), "💥 " .. rowFight.kills .. " down!", P.Coin)
+			end
 		elseif kind == "barricade" then
-			local broken = outcome == nil or outcome.destroyed == true
+			local broken = if outcome then outcome.destroyed == true else (rowFight ~= nil and rowFight.destroyed)
 			local hp = optionVisual.hp
 			if broken then
 				if hp then
-					hp.set(0, 0.25)
+					hp.set(0, 0.15)
 				end
 				local model = optionVisual.model
 				if model then
-					task.delay(0.2, function()
+					task.delay(0.1, function()
 						if model.Parent then
 							crumble(model, 0.6)
 						end
 					end)
 					optionVisual.model = nil
 				end
+				pool:Flash(optionVisual.centre + Vector3.new(0, 2, 0), 6, P.CardOrange, 0.35)
 				Theme.FloatText(popAt, "SMASHED!", P.Coin)
 			else
 				if hp then
-					hp.set(0.35, 0.3)
+					local share = if rowFight then rowFight.share else 0
+					hp.set(1 - math.clamp(share, 0, 1), 0.15)
 				end
 				Theme.FloatText(popAt, "TOO STRONG!", P.ButtonRed)
 			end
@@ -811,42 +1205,90 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			local text = if troopDelta > 0 then "+" .. troopDelta .. " 🪖" else tostring(troopDelta) .. " 🪖"
 			Theme.FloatText(popAt + Vector3.new(0, -2, 0), text, if troopDelta > 0 then P.MoneyGreen else P.ButtonRed)
 		end
-		if outcome and outcome.weaponTier > tier then
-			Theme.FloatText(popAt + Vector3.new(0, 3, 0), "🔫 " .. weaponName(outcome.weaponTier) .. "!", P.Coin)
+		if outcome and outcome.weaponTier > tierBefore then
+			Theme.FloatText(
+				popAt + Vector3.new(0, 3, 0),
+				"🔫 " .. RunnerGuns.Weapon(outcome.weaponTier).name .. "!",
+				P.Coin
+			)
 		end
 		-- A weapon gate at the top tier pays cash instead ("Weapon already maxed").
 		local maxedWeapon = kind == "gate"
 			and optionVisual.option.op == "weapon"
 			and outcome ~= nil
-			and outcome.weaponTier <= tier
+			and outcome.weaponTier <= tierBefore
 		if maxedWeapon and outcome and outcome.note and outcome.note ~= "" then
 			Theme.FloatText(popAt + Vector3.new(0, 5, 0), outcome.note, P.Coin)
 		end
 	end
 
-	function self.StartBossFight(_self: Visuals, duration: number, fraction: number)
-		if destroyed then
-			return
+	-- Plays the boss fight exactly as RunnerSim's BossOutcome says:
+	--   0 .. door + walk         castle door sinks, the boss walks out of the gate
+	--   fight t = 0 .. duration  everyone shoots it, its bar follows BossHpAt(t);
+	--                            each kill k lands at k x interval (troops from the
+	--                            back rows first, the avatar last)
+	--   then BOSS_OUTRO_TIME     victory (boss falls, confetti, coins) or defeat
+	--                            (avatar knocked down, boss roars), then onDone()
+	function self.StartBossFight(_self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks): number
+		if destroyed or fight then
+			return 0
 		end
-		engageTargets = fortTargets
-		engageUntil = os.clock() + duration
-		local f = math.clamp(fraction, 0, 1)
-		fortHp.set(1 - f, duration)
-		task.delay(duration, function()
-			if destroyed then
-				return
-			end
-			if f >= 0.999 then
-				Theme.FloatText(fortCentre + Vector3.new(0, 14, 10), "DESTROYED!", P.Coin)
-				crumble(fortModel, 1.0)
-			else
-				Theme.FloatText(
-					fortCentre + Vector3.new(0, 14, 10),
-					Format.Percent(math.floor(f * 100) / 100) .. " DESTROYED",
-					P.White
+		engaged = {}
+		-- Door sinks into the ground.
+		for _, item in fortDoor:GetDescendants() do
+			if item:IsA("BasePart") then
+				Theme.Tween(
+					item,
+					{ CFrame = item.CFrame - Vector3.new(0, 9.6, 0) },
+					BOSS_DOOR_TIME,
+					Enum.EasingStyle.Quad
 				)
 			end
+		end
+		local function bossPivot(distance: number): CFrame
+			local p = worldAt(distance, 0, 0)
+			return CFrame.lookAt(p, p + Vector3.new(0, 0, 1)) -- faces the runner (+Z)
+		end
+		local b = RunnerBoss.new(folder, bossPivot(fortDistance + 3), outcome.hp)
+		boss = b
+		task.delay(BOSS_DOOR_TIME * 0.6, function()
+			if boss == b then
+				b:WalkTo(bossPivot(fortDistance - BOSS_STAND), BOSS_WALK_TIME)
+			end
 		end)
+
+		-- One boss shot per kill, fired so it lands when the unit dies.
+		local shots: { BossShot } = {}
+		local speed = RunnerGuns.Weapon(RunnerDefs.MAX_WEAPON_TIER).bulletSpeed
+		local travel = math.clamp((SQUAD_GAP - BOSS_STAND) / math.max(10, speed), 0.1, 0.6)
+		local lastTime = -math.huge
+		for k = 1, outcome.killed do
+			local landing = k * outcome.interval
+			local fire = math.max(0, landing - travel)
+			-- Huge armies kill very fast: draw at most ~6 shots per second.
+			if fire - lastTime >= 0.16 or k == outcome.killed then
+				table.insert(shots, { time = fire, killIndex = k })
+				lastTime = fire
+			end
+		end
+		local intro = BOSS_DOOR_TIME * 0.6 + BOSS_WALK_TIME
+		fight = {
+			outcome = outcome,
+			callbacks = callbacks,
+			clock = 0,
+			fightStart = intro,
+			shots = shots,
+			nextShot = 1,
+			resolved = false,
+			done = false,
+		}
+		Theme.FloatText(worldAt(fortDistance - 2, 0, 14), "👹 THE BOSS!", P.ButtonRed)
+		return intro + outcome.duration + BOSS_OUTRO_TIME
+	end
+
+	function self.BossFocus(_self: Visuals): Vector3?
+		local b = boss
+		return if b then b:Chest() else nil
 	end
 
 	function self.Destroy(_self: Visuals)
@@ -854,10 +1296,23 @@ function RunnerVisuals.new(course: Course, slot: number): Visuals
 			return
 		end
 		destroyed = true
+		restoreAvatar()
+		local gun = avatarGun
+		avatarGun = nil
+		if gun then
+			gun:Destroy()
+		end
+		local b = boss
+		boss = nil
+		fight = nil
+		if b then
+			b:Destroy()
+		end
+		pool:Destroy()
+		fortModel:Destroy()
 		folder:Destroy()
 	end
 
-	refreshTag()
 	folder.Parent = Workspace
 	return self
 end

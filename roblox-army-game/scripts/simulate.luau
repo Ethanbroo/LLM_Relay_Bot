@@ -12,6 +12,7 @@
 	Sections of the report:
 		1. 10-run benchmark per area (R, B10, the 10 best-case runs)
 		2. Fight check (does the reference player win fights? do upgrades matter?)
+		   + the castle boss (HP, reward, survivors) and how much a non-perfect run earns
 		3. Slot prices, gate prices and area totals (both benchmark modes)
 		4. Revenue sections (income, stock, payback, upgrades)
 		5. Employees (R$ 200 or 20 runs of cash)
@@ -82,12 +83,13 @@ emit(string.format("* Reference upgrade levels per area: %d", Config.Benchmark.R
 emit(string.format("* Area cash scale: x%.2f per area", EconomyDefs.AreaScale))
 emit(
 	string.format(
-		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %d s menus)",
+		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %d s menus and boss fight)",
 		T,
 		RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED,
 		RunnerDefs.RUN_OVERHEAD_SECONDS
 	)
 )
+emit("* Money is whole dollars everywhere (no cents).")
 emit()
 
 -------------------------------------------------------------------------------
@@ -133,7 +135,7 @@ header({
 	"Area",
 	"Ref payout",
 	"No-upgrade payout",
-	"Ref boss %",
+	"Ref boss wins",
 	"Ref soldiers killed",
 	"Ref barricades",
 	"Weapon/damage gates taken",
@@ -152,6 +154,9 @@ for area = 1, AREAS do
 		capHit = capHit or RunnerSim.LastSearch.capHit
 		refSum += best.total
 		weakSum += RunnerSim.BestCase(course, weak).total
+		if best.boss.victory then
+			bossSum += 1
+		end
 		for _, oc in best.outcomes do
 			local opt = course.rows[oc.row].options[oc.lane]
 			if oc.kind == "squad" and opt.enemies then
@@ -166,8 +171,6 @@ for area = 1, AREAS do
 		for _, line in best.lines do
 			if line.kind == "enemies" then
 				killed += tonumber(line.label:match("x (%d+)")) or 0
-			elseif line.kind == "boss" then
-				bossSum += tonumber(line.label:match("(%d+)%%")) or 0
 			elseif line.kind == "weapon" or line.kind == "damage" then
 				gold += 1
 			end
@@ -178,7 +181,7 @@ for area = 1, AREAS do
 		area,
 		money(refSum / 10),
 		money(weakSum / 10),
-		string.format("%.0f%%", bossSum / 10),
+		string.format("%d / 10", bossSum),
 		string.format("%.0f%%", 100 * killed / math.max(1, total)),
 		string.format("%d / %d", destroyed, barricades),
 		string.format("%.1f per run", gold / 10),
@@ -187,6 +190,131 @@ for area = 1, AREAS do
 end
 emit()
 emit(string.format("Largest search frontier: %d, state cap hit: %s", maxFrontier, tostring(capHit)))
+emit()
+
+emit("### 2.1 The castle boss")
+emit()
+emit("Every unit (the avatar and each troop) fires the same gun; guns reach")
+emit(
+	string.format(
+		"%.1f studs (1.5 rows), so a squad shoots a squad / barricade for %.2f s before reaching it.",
+		RunnerDefs.GUN_RANGE,
+		RunnerDefs.ENGAGE_SECONDS
+	)
+)
+emit(
+	string.format(
+		"The boss kills one unit every min(%.2f s, %d s / units) (troops first, the avatar last).",
+		RunnerDefs.BOSS_KILL_INTERVAL,
+		RunnerDefs.BOSS_MAX_FIGHT_SECONDS
+	)
+)
+emit(
+	string.format(
+		"Boss HP = %.1f%% of the most damage ANY lane path can deal, so only the best lanes win.",
+		RunnerDefs.BOSS_HP_SHARE * 100
+	)
+)
+emit("Reference player, best-case play on the 10 benchmark courses:")
+emit()
+header({
+	"Area",
+	"Boss HP (first course)",
+	"Boss HP range",
+	"Boss reward (avg)",
+	"Reward / best run",
+	"Units at castle",
+	"Survivors",
+	"Fight length",
+})
+for area = 1, AREAS do
+	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local first = RunnerDefs.FirstLevelOfArea(area)
+	local lo, hi, firstHp = math.huge, 0, 0
+	local reward, share, units, survivors, duration = 0, 0, 0, 0, 0
+	for i = 0, 9 do
+		local course = RunnerCourse.Generate(area, first + i)
+		local best = RunnerSim.BestCase(course, stats)
+		local hp = best.boss.hp
+		if i == 0 then
+			firstHp = hp
+		end
+		lo, hi = math.min(lo, hp), math.max(hi, hp)
+		reward += course.boss.reward
+		share += course.boss.reward / best.total
+		units += best.boss.units
+		survivors += best.boss.survivors
+		duration += best.boss.duration
+	end
+	row({
+		area,
+		Format.Short(firstHp),
+		Format.Short(lo) .. " - " .. Format.Short(hi),
+		money(reward / 10),
+		string.format("%.0f%%", share * 10),
+		string.format("%.0f", units / 10),
+		string.format("%.1f", survivors / 10),
+		string.format("%.1f s", duration / 10),
+	})
+end
+emit()
+
+emit("### 2.2 Perfect play is needed for the boss")
+emit()
+emit('Reference player on the 10 benchmark courses. "One mistake" = the best path with a')
+emit('single row switched to another lane (every row tried). "Random" = 200 random lane')
+emit("choices per course. Payout as a share of the best case.")
+emit()
+header({
+	"Area",
+	"One mistake: boss beaten",
+	"One mistake: median payout",
+	"Random: boss beaten",
+	"Random: median payout",
+})
+local rng = H.load("shared/Rng").new(1234)
+for area = 1, AREAS do
+	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local first = RunnerDefs.FirstLevelOfArea(area)
+	local one, oneWins, random, randomWins = {}, 0, {}, 0
+	for i = 0, 9 do
+		local course = RunnerCourse.Generate(area, first + i)
+		local best, choices = RunnerSim.BestCase(course, stats)
+		for r, courseRow in course.rows do
+			if #courseRow.options > 1 then
+				local c = table.clone(choices)
+				c[r] = choices[r] % #courseRow.options + 1
+				local res = RunnerSim.Resolve(course, stats, c)
+				table.insert(one, res.total / best.total)
+				if res.boss.victory then
+					oneWins += 1
+				end
+			end
+		end
+		for _ = 1, 200 do
+			local c = {}
+			for r, courseRow in course.rows do
+				c[r] = rng:Int(1, #courseRow.options)
+			end
+			local res = RunnerSim.Resolve(course, stats, c)
+			table.insert(random, res.total / best.total)
+			if res.boss.victory then
+				randomWins += 1
+			end
+		end
+	end
+	table.sort(one)
+	table.sort(random)
+	row({
+		area,
+		string.format("%d / %d", oneWins, #one),
+		string.format("%.0f%%", 100 * one[math.max(1, #one // 2)]),
+		string.format("%d / %d", randomWins, #random),
+		string.format("%.0f%%", 100 * random[math.max(1, #random // 2)]),
+	})
+end
+emit()
+emit("(One-mistake runs that still beat the boss switched a cash lane, which never changes the army.)")
 emit()
 
 -------------------------------------------------------------------------------
@@ -369,7 +497,7 @@ emit()
 emit("A time skip pays `Economy.TimeSkipPayout(sections, seconds)`: per owned shop,")
 emit("sales = floor(seconds / sale interval); with an employee every sale is paid, without one")
 emit("only min(sales, stock). Price = (1 - NetGainShare) x min(reference V, preview), rounded")
-emit("down to cents, so a cash time skip always returns at least +25% of what was paid.")
+emit("down to whole dollars, so a cash time skip always returns at least +25% of what was paid.")
 emit(
 	string.format(
 		"Random offers only show a time skip when the preview is >= %d%% of its reference;",
@@ -504,7 +632,8 @@ emit("area they buy its 4 slots, raise all 3 runner upgrades to the next referen
 emit("pay the gate. Income per run = efficiency x R(area) + passive income of every owned")
 emit("level-1 section for one run (sections assumed kept stocked at the same efficiency).")
 emit("The cheapest remaining purchase is bought as soon as it is affordable. Combat income")
-emit("and section upgrades are ignored (so real play is a bit faster).")
+emit("and section upgrades are ignored (so real play is a bit faster). Note: one wrong troop /")
+emit("weapon lane loses the boss (see 2.2), so 75% is a good but not perfect player.")
 emit()
 local function pacing(efficiency: number): { { runs: number, seconds: number } }
 	local results = {}

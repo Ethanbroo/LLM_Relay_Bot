@@ -22,7 +22,7 @@
 	Net actions (client -> server, see ARCHITECTURE §3):
 		RunnerPrepare()               -> { runId, course, level, area, slot, stats, runSpeed }
 		BuyRunnerUpgrade(kind)        -> { kind, level, stats }   kind = "troops" | "damage" | "capacity"
-		RunnerGo(runId)               -> { stats, runSpeed }
+		RunnerGo(runId)               -> { stats, runSpeed, bossHp }
 		RunnerFinish(runId, choices)  -> { result, paid, boosted, level }
 		RunnerLeave()                 -> {}
 
@@ -38,13 +38,25 @@
 		BuyRunnerUpgrade - permanent upgrades; allowed in Base mode, or in Runner
 		                 mode before the run has started.
 		RunnerGo       - locks the stats (plus the vehicle bonus) and the start time,
-		                 sets WalkSpeed = RUN_SPEED, starts watching the lanes.
-		RunnerFinish   - anti-cheat time + position checks (fails if the avatar
+		                 sets WalkSpeed = RUN_SPEED, starts watching the lanes and
+		                 puts the "RunnerGun" Tool in the avatar's hand (an invisible
+		                 Handle the client welds the weapon model to; the standard
+		                 tool-hold arm pose comes from the default Animate script).
+		                 bossHp = RunnerSim.BossHp(course, stats) for the client.
+		RunnerFinish   - sent by the client AFTER the boss fight (so the elapsed
+		                 time is always above RunnerSim.MinDuration, which only
+		                 counts the running part).
+		                 anti-cheat time + position checks (fails if the avatar
 		                 is missing), picks the lanes (client's if plausible, else
 		                 the ones the server saw), re-simulates, pays boostable
 		                 cash, raises runner.level. A repeated request gets the
 		                 same reply again (never pays twice).
 		RunnerLeave    - restores the avatar and returns to the base.
+
+	Every way a session ends (RunnerLeave, death / respawn / any mode change,
+	leaving the game, a failed teleport) goes through endSession, which stops
+	the lane watcher, restores the avatar and destroys the RunnerGun Tool.
+	Money: RunnerSim pays whole dollars; DataService:AddCash rounds as well.
 ]]
 
 local Players = game:GetService("Players")
@@ -94,6 +106,7 @@ local PLAZA_LENGTH = 80
 local PLAZA_WIDTH = 60
 local WALL_HEIGHT = 40
 local UPGRADE_KINDS = { troops = true, damage = true, capacity = true }
+local GUN_NAME = "RunnerGun" -- RunnerVisuals looks for this Tool in the character
 
 -- RUN_SPEED comes from ECON's RunnerDefs (fallback if the value is missing).
 local function loadRunSpeed(): number
@@ -118,6 +131,7 @@ type Session = {
 	started: boolean,
 	startTime: number,
 	stats: Stats?, -- locked at RunnerGo
+	bossHp: number?, -- RunnerSim.BossHp(course, stats), computed at RunnerGo
 	finished: boolean,
 	reply: { [string]: any }?, -- cached RunnerFinish reply (safe to resend)
 	sampler: RBXScriptConnection?, -- Heartbeat lane watcher (RunnerGo .. endSession / finish)
@@ -129,6 +143,8 @@ type Session = {
 	originalWalkSpeed: number,
 	originalJumpHeight: number,
 	originalJumpPower: number,
+	gun: Tool?, -- the RunnerGun in the avatar's hand (RunnerGo .. endSession)
+	gunWatch: RBXScriptConnection?,
 }
 
 local registry: { [string]: any } = {}
@@ -197,6 +213,67 @@ local function restoreHumanoid(session: Session)
 	end
 end
 
+-- The gun the avatar holds during the run: a Tool with an invisible Handle.
+-- Parenting a Tool to the character equips it (RightGrip weld + the default
+-- tool-hold arm pose). The client welds the part-built gun model to the Handle.
+local function destroyGun(session: Session)
+	local watch = session.gunWatch
+	session.gunWatch = nil
+	if watch then
+		watch:Disconnect()
+	end
+	local gun = session.gun
+	session.gun = nil
+	if gun then
+		gun:Destroy()
+	end
+end
+
+local function giveGun(player: Player, session: Session)
+	destroyGun(session)
+	local character = session.character
+	local humanoid = getHumanoid(character)
+	if not humanoid or not character.Parent then
+		return
+	end
+	-- Anything else in the hand goes back to the backpack first.
+	humanoid:UnequipTools()
+	local stale = character:FindFirstChild(GUN_NAME)
+	if stale then
+		stale:Destroy()
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = GUN_NAME
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	tool.ManualActivationOnly = true
+	tool.ToolTip = ""
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.4, 0.4, 1)
+	handle.Transparency = 1
+	handle.Massless = true
+	handle.CanCollide = false
+	handle.CanTouch = false
+	handle.CanQuery = false
+	handle.CastShadow = false
+	handle.Parent = tool
+	tool.Parent = character
+	session.gun = tool
+	-- If the tool ever lands in the backpack (unequipped), put it back in
+	-- the hand while the run lasts. (HUD hides the hotbar, so this is rare.)
+	session.gunWatch = tool.AncestryChanged:Connect(function()
+		task.defer(function()
+			if sessions[player] ~= session or session.gun ~= tool then
+				return
+			end
+			if tool.Parent and tool.Parent:IsA("Backpack") and session.character.Parent then
+				tool.Parent = session.character
+			end
+		end)
+	end)
+end
+
 local function stopSampling(session: Session)
 	local sampler = session.sampler
 	if sampler then
@@ -213,6 +290,7 @@ local function endSession(player: Player, notifyClient: boolean)
 	end
 	sessions[player] = nil
 	stopSampling(session)
+	destroyGun(session)
 	restoreHumanoid(session)
 	if notifyClient and player.Parent then
 		Net.Fire("Runner", player, "Ended", { runId = session.runId })
@@ -572,6 +650,7 @@ local function onPrepare(player: Player)
 		started = false,
 		startTime = 0,
 		stats = nil,
+		bossHp = nil,
 		finished = false,
 		reply = nil,
 		sampler = nil,
@@ -583,6 +662,8 @@ local function onPrepare(player: Player)
 		originalWalkSpeed = if humanoid.WalkSpeed > 0 then humanoid.WalkSpeed else StarterPlayer.CharacterWalkSpeed,
 		originalJumpHeight = if humanoid.JumpHeight > 0 then humanoid.JumpHeight else StarterPlayer.CharacterJumpHeight,
 		originalJumpPower = if humanoid.JumpPower > 0 then humanoid.JumpPower else StarterPlayer.CharacterJumpPower,
+		gun = nil,
+		gunWatch = nil,
 	}
 
 	-- Mode first (ModeService remembers where you stood in the base), then teleport.
@@ -654,7 +735,7 @@ local function onGo(player: Player, runId: any)
 	end
 	if session.started then
 		-- Repeated request (double input): answer the same thing again.
-		return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED })
+		return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED, bossHp = session.bossHp })
 	end
 	if not Mode or Mode:GetMode(player) ~= "Runner" then
 		return Net.Fail("This run has ended")
@@ -669,10 +750,15 @@ local function onGo(player: Player, runId: any)
 	end
 
 	local bonus = vehicleBonus(player)
-	session.stats = copyStats(currentStats(data), if bonus > 0 then bonus else nil)
+	local stats = copyStats(currentStats(data), if bonus > 0 then bonus else nil)
+	session.stats = stats
 	session.started = true
 	session.startTime = os.clock()
 	humanoid.WalkSpeed = RUN_SPEED
+	-- Boss max HP for this course + stats (memoized; RunnerFinish's Resolve reuses it).
+	local okHp, bossHp = pcall(RunnerSim.BossHp, session.course, stats)
+	session.bossHp = if okHp and isFiniteNumber(bossHp) then bossHp else nil
+	giveGun(player, session)
 
 	-- Watch which lane the avatar is really in as it crosses each row.
 	-- ASSUMPTION: this runs every Heartbeat (faster than the 30 Hz loop rule)
@@ -687,7 +773,7 @@ local function onGo(player: Player, runId: any)
 		end
 		sampleRows(session)
 	end)
-	return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED })
+	return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED, bossHp = session.bossHp })
 end
 
 -- Make sure the vehicle bonus shows up exactly once in the result.
@@ -702,7 +788,7 @@ local function ensureBonus(result: Result, bonus: number?)
 			return
 		end
 	end
-	local extra = Format.RoundCents(result.total * bonus)
+	local extra = Format.RoundWhole(result.total * bonus)
 	if extra <= 0 then
 		return
 	end
@@ -712,7 +798,7 @@ local function ensureBonus(result: Result, bonus: number?)
 		detail = "+" .. Format.Percent(bonus) .. " payout",
 		value = extra,
 	})
-	result.total = Format.RoundCents(result.total + extra)
+	result.total = Format.RoundWhole(result.total + extra)
 end
 
 local function onFinish(player: Player, runId: any, choices: any)
@@ -756,7 +842,7 @@ local function onFinish(player: Player, runId: any, choices: any)
 	local result = RunnerSim.Resolve(session.course, stats, clean)
 	ensureBonus(result, stats.payoutBonus)
 
-	local total = if isFiniteNumber(result.total) then math.max(0, result.total) else 0
+	local total = if isFiniteNumber(result.total) then math.max(0, Format.RoundWhole(result.total)) else 0
 	local paid = if total > 0 then Data:AddCash(player, total, { boostable = true, source = "runner" }) else 0
 
 	local runner = data.runner

@@ -40,7 +40,7 @@
 	                                             min(BoostValue, preview): value used for the price
 	Economy.TimeSkipCoinPrice(boostId, playerArea, preview): number
 	                                             (1 - NetGainShare) x TimeSkipValue, rounded DOWN
-	                                             to cents (never more than 0.8 x preview)
+	                                             to whole dollars (never more than 0.8 x preview)
 	Economy.TimeSkipWorthOffering(boostId, playerArea, preview): boolean
 	                                             random offers only show a time skip when the preview
 	                                             is >= TimeSkipOfferMinShare (25%) of its reference
@@ -65,7 +65,7 @@
 	* Employee cash price (question 4): Config.Employee.RunsEquivalent (20) x R,
 	  i.e. 20 best-case benchmark runs of the section's area ("SectionArea") or
 	  of the player's highest area ("PlayerArea").
-	* Sections: a full area of level-1 sections earns PassiveShare (32%) of the
+	* Sections: a full area of level-1 sections earns PassiveShare (36%) of the
 	  active runner rate R / RunDurationSeconds().
 	* Boost value V ("used properly", question 10): a 2x multiplier doubles your
 	  earnings while you play runs for its duration -> extra = minutes*60 /
@@ -81,7 +81,17 @@
 	* Combat: the barrier of area a is combat level 3a-1. A perfect clear of a
 	  combat level pays ~3 best-case runs of the area the level belongs to
 	  (geometric interpolation between areas, strictly increasing).
-	Every price is rounded to cents (Format.RoundCents).
+	Money is WHOLE dollars everywhere (owner request: no cents). Every price,
+	payout, income per sale and reward this module returns is a whole number:
+	  * plain prices (slots, gates, upgrades, vehicles, employees) are rounded
+	    to the nearest dollar (Format.RoundWhole), at least $1; the first three
+	    sections of an area are split with largest-remainder rounding so they
+	    still sum EXACTLY to B10, and each gate is at least ceil(5%) dearer;
+	  * the 80%-rule coin prices (boosts, time skips) are rounded DOWN, so
+	    value / price stays >= 1.25;
+	  * a section's incomePerSale is max(1, RoundWhole(x)) and its saleInterval
+	    is stretched by (rounded / x), so incomePerSecond is unchanged.
+	Rates per second (incomePerSecond, ReferencePassiveRate) stay fractional.
 ]]
 
 local Shared = script.Parent
@@ -111,7 +121,12 @@ Economy.SectionMaxLevel = EconomyDefs.Sections.MaxLevel
 Economy.RunnerUpgradeMaxLevel = EconomyDefs.Runner.MaxLevel
 
 local AREA_COUNT = #Config.Areas
-local round = Format.RoundCents
+local round = Format.RoundWhole
+
+-- A whole-dollar price of at least $1.
+local function price(value: number): number
+	return math.max(1, round(value))
+end
 
 -------------------------------------------------------------------------------
 -- Small helpers
@@ -205,8 +220,8 @@ function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
 	local capacity = upgradeLevel(u.capacity)
 	return {
 		startTroops = d.BaseTroops + troops * d.TroopsPerLevel,
-		damage = round(d.BaseDamage * (1 + d.DamagePerLevel * damage)),
-		capacity = round(baseCapacity(area) * (1 + d.CapacityPerLevel * capacity)),
+		damage = Format.RoundCents(d.BaseDamage * (1 + d.DamagePerLevel * damage)), -- a stat, not money
+		capacity = round(baseCapacity(area) * (1 + d.CapacityPerLevel * capacity)), -- whole dollars
 	}
 end
 
@@ -296,19 +311,51 @@ end
 -------------------------------------------------------------------------------
 -- Slots, gates, sections
 -------------------------------------------------------------------------------
--- The first three revenue slots of an area, and the sum of their income weights.
-local function firstThree(area: number): ({ [string]: boolean }, number)
+-- The first three revenue slots of an area (in slot order), and the sum of
+-- their income weights.
+local function firstThree(area: number): ({ [string]: boolean }, number, { Config.SlotDef })
 	local set: { [string]: boolean } = {}
+	local list: { Config.SlotDef } = {}
 	local weight = 0
-	local count = 0
 	for _, slotDef in Config.Areas[area].slots do
-		if slotDef.kind == "revenue" and count < 3 then
+		if slotDef.kind == "revenue" and #list < 3 then
 			set[slotDef.id] = true
+			table.insert(list, slotDef)
 			weight += slotDef.incomeWeight
-			count += 1
 		end
 	end
-	return set, weight
+	return set, weight, list
+end
+
+-- Split a whole-dollar `total` over `weights` with largest-remainder rounding:
+-- every share is whole and they sum EXACTLY to `total` (ties -> earlier index).
+local function splitWhole(total: number, weights: { number }): { number }
+	local sum = 0
+	for _, w in weights do
+		sum += math.max(0, w)
+	end
+	local out: { number } = {}
+	local order: { { index: number, frac: number } } = {}
+	local given = 0
+	for index, w in weights do
+		local exact = if sum > 0 then total * math.max(0, w) / sum else total / #weights
+		local whole = math.floor(exact + 1e-9)
+		out[index] = whole
+		given += whole
+		table.insert(order, { index = index, frac = exact - whole })
+	end
+	table.sort(order, function(a, b)
+		if math.abs(a.frac - b.frac) > 1e-9 then
+			return a.frac > b.frac
+		end
+		return a.index < b.index
+	end)
+	local left = math.floor(total - given + 0.5)
+	for i = 1, math.max(0, left) do
+		local entry = order[(i - 1) % #order + 1]
+		out[entry.index] += 1
+	end
+	return out
 end
 
 function Economy.SlotUnlockPrice(slotId: string): number
@@ -318,19 +365,31 @@ function Economy.SlotUnlockPrice(slotId: string): number
 	end
 	local b10 = Economy.TenRunBenchmark(info.area)
 	if info.def.kind ~= "revenue" then
-		return round(EconomyDefs.Slots.ArenaShare * b10)
+		return price(EconomyDefs.Slots.ArenaShare * b10)
 	end
-	local set, weightOfThree = firstThree(info.area)
+	local set, weightOfThree, three = firstThree(info.area)
 	local w = info.def.incomeWeight
 	if Config.Benchmark.Mode == "EachSection" then
 		if set[slotId] then
-			return round(b10)
+			return price(b10)
 		end
 		-- 4th revenue section: B10 per average weight of the first three.
-		return round(b10 * w / math.max(0.01, weightOfThree / 3))
+		return price(b10 * w / math.max(0.01, weightOfThree / 3))
 	end
-	-- "CombinedSections" (default): the first three cost B10 together.
-	return round(b10 * w / math.max(0.01, weightOfThree))
+	-- "CombinedSections" (default): the first three cost B10 together
+	-- (whole dollars that still add up to exactly B10).
+	if set[slotId] then
+		local weights: { number } = {}
+		local mine = 1
+		for index, slotDef in three do
+			weights[index] = slotDef.incomeWeight
+			if slotDef.id == slotId then
+				mine = index
+			end
+		end
+		return math.max(1, splitWhole(b10, weights)[mine])
+	end
+	return price(b10 * w / math.max(0.01, weightOfThree))
 end
 
 function Economy.GatePrice(area: number): number
@@ -339,12 +398,14 @@ function Economy.GatePrice(area: number): number
 	if cached then
 		return cached
 	end
-	local price = round(EconomyDefs.Slots.GateShare * Economy.TenRunBenchmark(a))
+	local gate = price(EconomyDefs.Slots.GateShare * Economy.TenRunBenchmark(a))
 	if a > 1 then
-		price = math.max(price, round(Economy.GatePrice(a - 1) * EconomyDefs.Slots.GateMinStep))
+		-- Rounded UP: always at least GateMinStep dearer than the gate before.
+		local previous = Economy.GatePrice(a - 1)
+		gate = math.max(gate, math.ceil(previous * EconomyDefs.Slots.GateMinStep - 1e-9), previous + 1)
 	end
-	gateCache[a] = price
-	return price
+	gateCache[a] = gate
+	return gate
 end
 
 function Economy.AreaUnlockTotal(area: number): number
@@ -353,7 +414,7 @@ function Economy.AreaUnlockTotal(area: number): number
 	for _, slotDef in Config.Areas[a].slots do
 		total += Economy.SlotUnlockPrice(slotDef.id)
 	end
-	return round(total + Economy.GatePrice(a))
+	return total + Economy.GatePrice(a)
 end
 
 local NO_INCOME: SectionStats = { incomePerSale = 0, saleInterval = 5, stockCapacity = 0, incomePerSecond = 0 }
@@ -375,7 +436,14 @@ function Economy.SectionStats(slotId: string, level: number): SectionStats
 	local levelOneRate = d.PassiveShare * activeRate * info.def.incomeWeight / math.max(0.01, areaWeight)
 	local interval = d.SaleInterval[info.index] or d.SaleInterval[#d.SaleInterval]
 	local stock = d.StockCapacity[info.index] or d.StockCapacity[#d.StockCapacity]
-	local perSale = math.max(0.01, round(levelOneRate * (1 + d.IncomePerLevel * (lvl - 1)) * interval))
+	-- Whole dollars per sale; the interval stretches by (rounded / exact) so
+	-- the income per second stays exactly the designed rate.
+	local rate = levelOneRate * (1 + d.IncomePerLevel * (lvl - 1))
+	local exact = rate * interval
+	local perSale = math.max(1, round(exact))
+	if exact > 0 then
+		interval = interval * perSale / exact
+	end
 	return {
 		incomePerSale = perSale,
 		saleInterval = interval,
@@ -394,7 +462,7 @@ function Economy.SectionUpgradePrice(slotId: string, currentLevel: number): numb
 	if lvl >= d.MaxLevel then
 		return nil
 	end
-	return round(Economy.SlotUnlockPrice(slotId) * d.UpgradeBaseShare * d.UpgradeGrowth ^ (lvl - 1))
+	return price(Economy.SlotUnlockPrice(slotId) * d.UpgradeBaseShare * d.UpgradeGrowth ^ (lvl - 1))
 end
 
 function Economy.ReferencePassiveRate(area: number): number
@@ -417,7 +485,7 @@ function Economy.EmployeeCashPrice(slotId: string, playerHighestArea: number): n
 	else
 		area = realArea(playerHighestArea)
 	end
-	return round(num(Config.Employee.RunsEquivalent, 20) * Economy.RunBenchmark(area))
+	return price(num(Config.Employee.RunsEquivalent, 20) * Economy.RunBenchmark(area))
 end
 
 -------------------------------------------------------------------------------
@@ -433,7 +501,7 @@ function Economy.RunnerUpgradePrice(kind: string, currentLevel: number): number?
 	if lvl >= d.MaxLevel then
 		return nil
 	end
-	return math.max(0.01, round(d.BasePriceShare * Economy.RunBenchmark(1) * d.PriceGrowth ^ lvl * factor))
+	return price(d.BasePriceShare * Economy.RunBenchmark(1) * d.PriceGrowth ^ lvl * factor)
 end
 
 -------------------------------------------------------------------------------
@@ -459,8 +527,9 @@ function Economy.BoostCoinPrice(boostId: string, playerArea: number): number
 	if not boostLookup[boostId] then
 		return math.huge -- unknown boost: can never be bought
 	end
+	-- Rounded DOWN (value / price >= 1.25), at least $1.
 	local share = 1 - num(Config.CoinRoute.NetGainShare, 0.2)
-	return math.max(0.01, round(share * Economy.BoostValue(boostId, playerArea)))
+	return math.max(1, math.floor(share * Economy.BoostValue(boostId, playerArea) + 1e-6))
 end
 
 -- What a time skip of `seconds` pays the given sections right now
@@ -495,12 +564,12 @@ function Economy.TimeSkipPayout(
 			stockUsed = sales
 		end
 		if sales > 0 then
-			local paid = round(sales * stats.incomePerSale)
+			local paid = sales * stats.incomePerSale -- whole: incomePerSale is whole
 			total += paid
 			perSlot[slotId] = { paid = paid, sales = sales, stockUsed = stockUsed }
 		end
 	end
-	return round(total), perSlot
+	return total, perSlot
 end
 
 -- [PROPOSAL] Value of a time skip for pricing: what it would pay right now
@@ -510,11 +579,12 @@ function Economy.TimeSkipValue(boostId: string, playerArea: number, preview: num
 	if not boost or boost.kind ~= "timeskip" then
 		return 0
 	end
-	return round(math.min(Economy.BoostValue(boostId, playerArea), math.max(0, num(preview, 0))))
+	-- Whole dollars, rounded down (never more than the preview pays).
+	return math.floor(math.min(Economy.BoostValue(boostId, playerArea), math.max(0, num(preview, 0))) + 1e-6)
 end
 
 -- [PROPOSAL] Cash price of a time skip = (1 - NetGainShare) x TimeSkipValue,
--- rounded DOWN to cents so it never exceeds 0.8 x what it pays. 0 = it pays
+-- rounded DOWN to whole dollars so it never exceeds 0.8 x what it pays. 0 = it pays
 -- (almost) nothing and must not be sold. Unknown / non-skip boost -> math.huge.
 function Economy.TimeSkipCoinPrice(boostId: string, playerArea: number, preview: number): number
 	local boost = boostLookup[boostId]
@@ -522,7 +592,7 @@ function Economy.TimeSkipCoinPrice(boostId: string, playerArea: number, preview:
 		return math.huge
 	end
 	local share = 1 - num(Config.CoinRoute.NetGainShare, 0.2)
-	return math.floor(share * Economy.TimeSkipValue(boostId, playerArea, preview) * 100 + 1e-6) / 100
+	return math.floor(share * Economy.TimeSkipValue(boostId, playerArea, preview) + 1e-6)
 end
 
 -- [PROPOSAL] A random offer only shows a time skip when it would pay at
@@ -545,7 +615,7 @@ function Economy.VehicleCoinPrice(vehicleId: string, playerArea: number): number
 		return math.huge -- unknown vehicle: can never be bought
 	end
 	local area = math.max(realArea(playerArea), realArea(vehicle.area))
-	return round(vehicle.priceFactor * Economy.GatePrice(area))
+	return price(vehicle.priceFactor * Economy.GatePrice(area))
 end
 
 -------------------------------------------------------------------------------
@@ -570,7 +640,7 @@ function Economy.CombatLevelReward(level: number): number
 	local lvl = math.max(1, math.floor(num(level, 1)))
 	-- Level L sits at "area position" x where the barrier level of area a maps to x = a.
 	local x = (lvl - c.BarrierLevelOffset) / c.BarrierLevelsPerArea
-	return math.max(0.01, round(c.RewardRuns * smoothBenchmark(x)))
+	return math.max(1, round(c.RewardRuns * smoothBenchmark(x)))
 end
 
 function Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): number?
@@ -581,7 +651,7 @@ function Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): nu
 		return nil
 	end
 	local factor = d.RarityFactor[r] or d.RarityFactor[#d.RarityFactor]
-	return math.max(0.01, round(d.BaseShare * Economy.RunBenchmark(1) * d.Growth ^ (lvl - 1) * factor))
+	return price(d.BaseShare * Economy.RunBenchmark(1) * d.Growth ^ (lvl - 1) * factor)
 end
 
 return Economy

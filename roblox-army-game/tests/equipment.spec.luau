@@ -241,6 +241,14 @@ return function(H)
 			EquipmentDefs.ScrapValue(upgraded) - EquipmentDefs.ScrapValue(fresh) < spent,
 			"scrap refunds only part"
 		)
+		for r = 1, RARITIES do
+			for _, level in { 1, 5, 12 } do
+				local item = { id = "w_rifle", rarity = r, level = math.min(level, Config.Rarities[r].maxLevel) }
+				local scrap, spent = EquipmentDefs.ScrapValue(item), EquipmentDefs.UpgradeSpent(item)
+				H.expect(scrap >= 1 and math.floor(scrap) == scrap, "scrap value is whole dollars: " .. scrap)
+				H.expect(math.floor(spent) == spent, "upgrade spent is whole dollars: " .. spent)
+			end
+		end
 		for r = 2, RARITIES do
 			H.expect(
 				EquipmentDefs.ScrapValue({ id = "a_vest", rarity = r, level = 1 })

@@ -36,6 +36,15 @@ return function(H)
 		return true
 	end
 
+	local function isWhole(n, what)
+		H.expect(type(n) == "number" and math.floor(n) == n, what .. " is not whole dollars: " .. tostring(n))
+	end
+
+	-- Damage the squad of a finished run could deal to a boss that never dies.
+	local function bossDamage(r)
+		return RunnerSim.BossDamagePotential(r.boss.units, r.unitDps)
+	end
+
 	local function randomChoices(course, rng)
 		local choices = {}
 		for i, row in course.rows do
@@ -81,7 +90,8 @@ return function(H)
 			H.expect(#course.rows == RunnerDefs.ROW_COUNT, "row count")
 			H.expect(course.length == RunnerDefs.TRACK_LENGTH, "length")
 			H.expect(course.boss.distance < course.length, "boss inside track")
-			H.expect(course.boss.hp > 0 and course.boss.reward > 0, "boss values")
+			H.expect(course.boss.hp == 0 and course.boss.reward > 0, "boss values (hp comes from RunnerSim.BossHp)")
+			isWhole(course.boss.reward, "boss reward")
 			local lastDistance = 0
 			local mulRows = 0
 			for i, row in course.rows do
@@ -94,6 +104,16 @@ return function(H)
 					H.expect(math.abs(opt.x) + opt.width / 2 <= RunnerDefs.TRACK_WIDTH / 2 + 1e-9, "lane inside track")
 					H.expect(tones[opt.tone], "tone " .. tostring(opt.tone))
 					H.expect(type(opt.label) == "string" and #opt.label > 0, "label")
+					H.expect(not opt.label:find("%$%d+%.%d"), "no cents on labels: " .. opt.label)
+					if opt.cash then
+						isWhole(opt.cash, "cash stack")
+					end
+					if opt.reward then
+						isWhole(opt.reward, "reward")
+					end
+					if opt.hp then
+						H.expect(math.floor(opt.hp) == opt.hp, "whole hp")
+					end
 					if opt.op == "mul" then
 						mulRows += 1
 					end
@@ -228,18 +248,18 @@ return function(H)
 		end
 	end)
 
-	H.test("Troops never drop below 1", function()
+	H.test("Troops never drop below 1 on the track; final troops = boss survivors", function()
 		local rng = Rng.new(99)
 		for _, course in courses do
-			for _ = 1, 20 do
-				local r = RunnerSim.Resolve(
-					course,
-					{ startTroops = 1, damage = 0, capacity = 50 },
-					randomChoices(course, rng)
-				)
-				H.expect(r.troops >= 1, "final troops")
-				for _, oc in r.outcomes do
-					H.expect(oc.troopsAfter >= 1 and oc.troopsBefore >= 1, "row troops")
+			for _, stats in { { startTroops = 1, damage = 0, capacity = 50 }, refStats(course.area) } do
+				for _ = 1, 20 do
+					local r = RunnerSim.Resolve(course, stats, randomChoices(course, rng))
+					H.expect(r.boss.units >= 1, "units at the castle")
+					H.expect(r.troops == r.boss.survivors, "final troops = survivors")
+					H.expect(if r.boss.victory then r.troops >= 1 else r.troops == 0, "victory keeps the avatar")
+					for _, oc in r.outcomes do
+						H.expect(oc.troopsAfter >= 1 and oc.troopsBefore >= 1, "row troops")
+					end
 				end
 			end
 		end
@@ -259,7 +279,7 @@ return function(H)
 		H.expect(RunnerSim.Resolve(course, stats, nil :: any).total == base.total, "nil choices")
 		-- Garbage stats do not crash and still give a valid run.
 		local r = RunnerSim.Resolve(course, { startTroops = 0 / 0, damage = -5, capacity = math.huge } :: any, ones)
-		H.expect(r.troops >= 1 and r.total == r.total and r.total >= 0, "garbage stats")
+		H.expect(r.boss.units >= 1 and r.total == r.total and r.total >= 0, "garbage stats")
 	end)
 
 	H.test("Summary lines add up and list every upgrade", function()
@@ -273,12 +293,15 @@ return function(H)
 					sum += line.value
 					kinds[line.kind] = true
 					H.expect(line.value >= 0, "line value >= 0")
+					isWhole(line.value, line.label)
+					H.expect(not (line.label .. line.detail):find("%$%d+%.%d"), "no cents: " .. line.detail)
 					H.expect(#line.label > 0 and type(line.detail) == "string", "line text")
 					if line.kind == "weapon" or line.kind == "damage" then
 						gold += 1
 					end
 				end
-				H.near(sum, r.total, 0.011, "sum of lines")
+				H.expect(sum == r.total, "sum of lines")
+				isWhole(r.total, "total")
 				for _, k in { "troops", "cash", "enemies", "boss" } do
 					H.expect(kinds[k], "missing line " .. k)
 				end
@@ -309,12 +332,13 @@ return function(H)
 				end
 				H.expect(line ~= nil, "troops line")
 				H.expect(line.label == "Troops at finish x " .. r.troops, "label: " .. line.label)
-				local delta = r.troops - stats.startTroops
+				local delta = r.boss.units - stats.startTroops
 				local sign = if delta >= 0 then "+" else "-"
-				local expected = ("started with %d from upgrades, %s%d this run"):format(
+				local expected = ("started with %d from upgrades, %s%d this run, %d lost to the boss"):format(
 					stats.startTroops,
 					sign,
-					math.abs(delta)
+					math.abs(delta),
+					r.boss.killed
 				)
 				H.expect(line.detail:find(expected, 1, true) ~= nil, "detail: " .. line.detail)
 				sawGain = sawGain or delta > 0
@@ -330,18 +354,41 @@ return function(H)
 		local bonusStats = table.clone(stats)
 		bonusStats.payoutBonus = 0.1
 		local boosted = RunnerSim.Resolve(course, bonusStats, choices)
-		H.near(boosted.total, best.total * 1.1, 0.02, "bonus total")
+		H.expect(boosted.total == best.total + math.floor(best.total * 0.1 + 0.5), "bonus total")
 		H.expect(boosted.lines[#boosted.lines].kind == "bonus", "bonus line")
+		isWhole(boosted.lines[#boosted.lines].value, "bonus")
 		local bestBoosted = RunnerSim.BestCase(course, bonusStats)
-		H.near(bestBoosted.total, boosted.total, 0.02, "best case with bonus")
+		H.expect(bestBoosted.total == boosted.total, "best case with bonus")
 	end)
 
-	H.test("Weapon gate at max tier still pays; firepower monotone", function()
-		H.expect(RunnerSim.Firepower(10, 10, 1, 1) == 100, "firepower")
-		H.expect(
-			RunnerSim.Firepower(10, 10, 99, 1) == RunnerSim.Firepower(10, 10, RunnerDefs.MAX_WEAPON_TIER, 1),
-			"tier clamp"
-		)
+	H.test("Weapons: DPS strictly rises with tier, tiers feel different, gun range", function()
+		local base = { startTroops = 3, damage = 10, capacity = 60 }
+		local previous = 0
+		for tier, w in RunnerDefs.WEAPONS do
+			H.expect(w.damage > 0 and w.fireRate > 0 and w.bulletSpeed > 0, "weapon numbers")
+			H.expect(type(w.bulletStyle) == "string" and type(w.short) == "string", "weapon visuals")
+			H.expect(w.damageMult == nil, "no second source of truth (damageMult removed)")
+			local dps = RunnerSim.UnitDps(base, tier, 1)
+			H.near(dps, w.damage * w.fireRate, 1e-9, "UnitDps at base damage")
+			H.expect(dps > previous, "DPS rises at tier " .. tier)
+			previous = dps
+		end
+		local W = RunnerDefs.WEAPONS
+		H.expect(W[3].damage < W[2].damage and W[3].fireRate > W[2].fireRate, "SMG: weak bullets, fast")
+		H.expect(W[6].damage > 5 * W[5].damage and W[6].fireRate < W[1].fireRate, "Rocket: huge hits, slow")
+		-- Old damageMult ratios kept roughly: 1, 1.35, 1.75, 2.25, 2.9, 3.7.
+		for tier, ratio in { 1, 1.35, 1.75, 2.25, 2.9, 3.7 } do
+			H.near(RunnerSim.UnitDps(base, tier, 1) / RunnerSim.UnitDps(base, 1, 1), ratio, 0.12, "ratio " .. tier)
+		end
+		-- Damage upgrades and in-run damage gates scale it linearly.
+		H.near(RunnerSim.UnitDps({ startTroops = 3, damage = 12, capacity = 0 }, 2, 1.4), 27 * 1.2 * 1.4, 1e-9, "scale")
+		H.expect(RunnerSim.UnitDps(base, 99, 1) == RunnerSim.UnitDps(base, RunnerDefs.MAX_WEAPON_TIER, 1), "clamp")
+		H.near(RunnerDefs.GUN_RANGE, 1.5 * RunnerDefs.ROW_SPACING, 1e-9, "an option and a half")
+		H.near(RunnerDefs.ENGAGE_SECONDS, RunnerDefs.GUN_RANGE / RunnerDefs.RUN_SPEED, 1e-9, "engage time")
+		H.expect(RunnerDefs.FORMATION_WIDTH == 5, "5 units per row")
+	end)
+
+	H.test("Weapon gate at max tier still pays", function()
 		local course = {
 			area = 1,
 			level = 1,
@@ -389,16 +436,193 @@ return function(H)
 				for _, line in best.lines do
 					if line.kind == "enemies" then
 						killed += tonumber(line.label:match("x (%d+)")) or 0
-					elseif line.kind == "boss" then
-						bossSum += tonumber(line.label:match("(%d+)%%")) or 0
 					end
+				end
+				if best.boss.victory then
+					bossSum += 1
 				end
 			end
 			H.expect(
 				killed / enemies >= 0.6,
 				("area %d: only %.0f%% of soldiers beaten"):format(area, 100 * killed / enemies)
 			)
-			H.expect(bossSum / 10 >= 50, ("area %d: enemy base only %.0f%%"):format(area, bossSum / 10))
+			H.expect(bossSum == 10, ("area %d: best lanes beat the boss only %d / 10"):format(area, bossSum))
+		end
+	end)
+	H.test("BossFight closed form: victory, defeat, survivors, duration", function()
+		-- 10 units, 10 DPS each, interval 0.55: D(k) = 5.5 (10k - k(k-1)/2), D(10) = 302.5.
+		H.near(RunnerDefs.BossKillInterval(10), 0.55, 1e-12, "interval")
+		H.near(RunnerSim.BossDamagePotential(10, 10), 302.5, 1e-9, "potential")
+		local win = RunnerSim.BossFight(10, 10, 300)
+		H.expect(win.victory and win.killed == 9 and win.survivors == 1, "barely won: only the avatar left")
+		H.near(win.duration, 9 * 0.55 + 3 / 10, 1e-9, "dies 0.3 s into the last interval")
+		H.expect(win.hpLeft == 0 and win.damageDealt == 300, "victory damage")
+		local quick = RunnerSim.BossFight(10, 10, 50)
+		H.expect(quick.victory and quick.killed == 0 and quick.survivors == 10, "quick win")
+		H.near(quick.duration, 0.5, 1e-9, "quick duration")
+		local lose = RunnerSim.BossFight(10, 10, 302.6)
+		H.expect(not lose.victory and lose.killed == 10 and lose.survivors == 0, "defeat kills everyone")
+		H.near(lose.duration, 5.5, 1e-9, "defeat lasts units x interval")
+		H.near(lose.damageDealt, 302.5, 1e-9, "damage dealt")
+		H.near(lose.hpLeft, 0.1, 1e-9, "hp left")
+		-- Big armies: the interval shrinks so the fight never lasts longer than the cap.
+		H.near(RunnerDefs.BossKillInterval(100), RunnerDefs.BOSS_MAX_FIGHT_SECONDS / 100, 1e-12, "interval(100)")
+		local big = RunnerSim.BossFight(100, 5, 1e9)
+		H.near(big.duration, RunnerDefs.BOSS_MAX_FIGHT_SECONDS, 1e-9, "capped fight")
+		-- No damage / no units -> defeat.
+		H.expect(not RunnerSim.BossFight(10, 0, 5).victory, "no damage")
+		H.expect(not RunnerSim.BossFight(0, 50, 5).victory, "no units")
+
+		-- Against a step-by-step simulation (dt = 1 ms) on random fights.
+		local rng = Rng.new(5)
+		for _ = 1, 60 do
+			local n = rng:Int(1, 60)
+			local u = rng:Range(1, 40)
+			local potential = RunnerSim.BossDamagePotential(n, u)
+			local hp = potential * rng:Range(0.05, 1.3)
+			local o = RunnerSim.BossFight(n, u, hp)
+			H.expect(o.victory == (potential >= hp), "victory iff potential >= hp")
+			local interval = RunnerDefs.BossKillInterval(n)
+			local t, left, alive, dt = 0, hp, n, 0.001
+			while alive > 0 and left > 0 do
+				left -= alive * u * dt
+				t += dt
+				if left > 0 and t + 1e-9 >= (n - alive + 1) * interval then
+					alive -= 1
+				end
+			end
+			if o.victory then
+				H.near(t, o.duration, 0.003, "victory time")
+				H.expect(math.abs(alive - o.survivors) <= 1, "survivors")
+			else
+				H.expect(alive == 0 and o.survivors == 0, "everyone dies")
+				H.near(o.duration, n * interval, 1e-9, "defeat time")
+			end
+			-- BossHpAt / AliveAt agree with the outcome.
+			H.near(RunnerSim.BossHpAt(o, 0), hp, 1e-9, "full hp at t=0")
+			H.near(RunnerSim.BossHpAt(o, o.duration), hp - o.damageDealt, 1e-6, "hp at the end")
+			H.near(RunnerSim.BossHpAt(o, o.duration + 5), o.hpLeft, 1e-9, "hp after the end")
+			H.expect(RunnerSim.AliveAt(o, 0) == n, "alive at t=0")
+			H.expect(RunnerSim.AliveAt(o, o.duration) == o.survivors, "alive at the end")
+			local prevHp, prevAlive = math.huge, math.huge
+			for i = 0, 40 do
+				local at = o.duration * i / 40
+				local h, a = RunnerSim.BossHpAt(o, at), RunnerSim.AliveAt(o, at)
+				H.expect(h <= prevHp + 1e-9 and a <= prevAlive, "hp and units only go down")
+				H.expect(a >= o.survivors and a <= n, "alive in range")
+				prevHp, prevAlive = h, a
+			end
+			-- A point inside interval k: alive = n - (k - 1).
+			if o.killed >= 2 then
+				H.expect(RunnerSim.AliveAt(o, 1.5 * interval) == n - 1, "one kill after 1.5 intervals")
+				local expectHp = hp - u * interval * n - u * (n - 1) * 0.5 * interval
+				H.near(RunnerSim.BossHpAt(o, 1.5 * interval), expectHp, 1e-6, "hp after 1.5 intervals")
+			end
+		end
+	end)
+
+	H.test("BossHp = BOSS_HP_SHARE x max boss damage over ALL lane paths (brute force)", function()
+		for area = 1, AREAS, 2 do
+			for _, level in { 2, 9 } do
+				local full = RunnerCourse.Generate(area, RunnerDefs.FirstLevelOfArea(area) + level)
+				local short = table.clone(full)
+				short.rows = table.move(full.rows, 1, 10, 1, {})
+				local stats = refStats(area)
+				local best = 0
+				local choices = {}
+				local function walk(i)
+					if i > #short.rows then
+						best = math.max(best, bossDamage(RunnerSim.Resolve(short, stats, choices)))
+						return
+					end
+					for lane = 1, #short.rows[i].options do
+						choices[i] = lane
+						walk(i + 1)
+					end
+				end
+				walk(1)
+				local hp = RunnerSim.BossHp(short, stats)
+				H.expect(hp == math.max(1, math.floor(RunnerDefs.BOSS_HP_SHARE * best)), "boss hp from the max path")
+				H.expect(RunnerSim.BossHp(short, stats) == hp, "memoized")
+				-- Capacity / payout bonus do not change it.
+				local other = table.clone(stats)
+				other.capacity, other.payoutBonus = 1, 0.5
+				H.expect(RunnerSim.BossHp(short, other) == hp, "capacity-independent")
+			end
+		end
+	end)
+
+	H.test("Best-case path beats the boss on every benchmark course in all areas", function()
+		for area = 1, AREAS do
+			local stats = refStats(area)
+			local first = RunnerDefs.FirstLevelOfArea(area)
+			for level = first, first + 9 do
+				local course = RunnerCourse.Generate(area, level)
+				local best, choices = RunnerSim.BestCase(course, stats)
+				H.expect(best.boss.victory, ("area %d level %d: best case loses to the boss"):format(area, level))
+				H.expect(best.troops >= 1, "the avatar survives")
+				H.expect(RunnerSim.Resolve(course, stats, choices).total == best.total, "Resolve(best) == BestCase")
+				local bossLine
+				for _, line in best.lines do
+					if line.kind == "boss" then
+						bossLine = line
+					end
+				end
+				H.expect(bossLine.label == "Boss defeated!" and bossLine.value == course.boss.reward, "boss line")
+				local share = bossLine.value / best.total
+				H.expect(share >= 0.12 and share <= 0.4, ("boss reward share %.2f"):format(share))
+			end
+		end
+	end)
+
+	H.test("Only (near) best paths beat the boss: 200 random paths per course", function()
+		local rng = Rng.new(2024)
+		for _, course in courses do
+			local stats = refStats(course.area)
+			local hp = RunnerSim.BossHp(course, stats)
+			local maxDamage = hp / RunnerDefs.BOSS_HP_SHARE
+			for _ = 1, 200 do
+				local r = RunnerSim.Resolve(course, stats, randomChoices(course, rng))
+				local damage = bossDamage(r)
+				H.expect(r.boss.hp == hp, "same boss hp")
+				H.expect(damage <= maxDamage + 1 + 1e-6, "no path beats the maximum")
+				if r.boss.victory then
+					H.expect(damage >= hp, "victory implies damage >= boss hp")
+				else
+					H.expect(damage < hp, "defeat implies damage < boss hp")
+					H.expect(r.troops == 0 and r.boss.killed == r.boss.units, "everyone dies")
+					for _, line in r.lines do
+						if line.kind == "boss" then
+							H.expect(line.value == 0 and line.label == "Defeated by the boss", "defeat line")
+							H.expect(line.detail:find("HP left") ~= nil, "hp left shown")
+						elseif line.kind == "troops" then
+							H.expect(line.value == 0, "no troop value on defeat")
+						end
+					end
+				end
+			end
+		end
+	end)
+
+	H.test("Whole dollars: every payout line and total in every area", function()
+		local rng = Rng.new(8)
+		for _, course in courses do
+			for _, bonus in { 0, 0.06, 0.135 } do
+				local stats = table.clone(refStats(course.area))
+				stats.payoutBonus = bonus
+				local best = RunnerSim.BestCase(course, stats)
+				for _, r in { best, RunnerSim.Resolve(course, stats, randomChoices(course, rng)) } do
+					isWhole(r.total, "total")
+					isWhole(r.carried, "carried")
+					isWhole(r.collected, "collected")
+					local sum = 0
+					for _, line in r.lines do
+						isWhole(line.value, line.label)
+						sum += line.value
+					end
+					H.expect(sum == r.total, "lines sum to the total")
+				end
+			end
 		end
 	end)
 end

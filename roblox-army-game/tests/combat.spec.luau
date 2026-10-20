@@ -101,24 +101,26 @@ return function(H)
 		H.expect(seen.Sniper or seen.Gunner or seen.Grenadier, "level 25 has dangerous types")
 	end)
 
-	H.test("combat: cash split 70/30 sums to the level reward", function()
+	H.test("combat: cash split 70/30 in whole dollars sums exactly to the level reward", function()
 		for _, mode in { "arena", "barrier" } do
 			for level = 1, 30 do
 				local plan = CombatDefs.LevelPlan(level, mode)
-				H.near(plan.reward, Economy.CombatLevelReward(level), 0.001, "reward from Economy")
+				H.expect(plan.reward == Economy.CombatLevelReward(level), "reward from Economy")
+				H.expect(math.floor(plan.reward) == plan.reward, "reward is whole dollars")
 				local enemyCash, pileCash = 0, 0
 				for _, wave in plan.waves do
 					for _, e in wave.enemies do
-						H.expect(e.cash >= 0, "no negative drops")
+						H.expect(e.cash >= 1 and math.floor(e.cash) == e.cash, "drop is a whole $ >= 1: " .. e.cash)
 						enemyCash += e.cash
 					end
 					H.expect(#wave.piles == CombatDefs.PILES_PER_WAVE, "piles per wave")
 					for _, v in wave.piles do
-						H.expect(v >= 0, "no negative piles")
+						H.expect(v >= 1 and math.floor(v) == v, "pile is a whole $ >= 1: " .. v)
 						pileCash += v
 					end
 				end
-				H.near(enemyCash + pileCash, plan.reward, 0.011, "perfect clear = reward")
+				H.expect(enemyCash + pileCash == plan.reward, "perfect clear = reward exactly")
+				H.expect(enemyCash == plan.enemyCash and pileCash == plan.pileCash, "plan totals match")
 				H.near(enemyCash / plan.reward, 0.7, 0.01, "70% from enemies")
 			end
 		end

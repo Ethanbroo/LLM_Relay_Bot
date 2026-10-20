@@ -21,7 +21,8 @@
 local EconomyDefs = {}
 
 -- [PROPOSAL] Every cash value on a runner course (troop value, cash stacks,
--- weapon values, enemy rewards) is multiplied by AreaScale^(area - 1).
+-- weapon values, enemy and boss rewards) is multiplied by AreaScale^(area - 1)
+-- and rounded to whole dollars (no cents anywhere).
 -- Prices are derived from the runner benchmark, so they follow automatically.
 EconomyDefs.AreaScale = 1.6
 
@@ -34,7 +35,7 @@ EconomyDefs.Runner = {
 	TroopsPerLevel = 1, -- [PROPOSAL] "+1 troop" per level
 	BaseDamage = 10, -- [PROPOSAL] damage of one troop at level 0
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
-	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area)
+	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	CapacityPerLevel = 0.06, -- [PROPOSAL] +6% of base capacity per level
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
@@ -67,7 +68,8 @@ EconomyDefs.Sections = {
 	-- [PROPOSAL] A full area of level-1 sections earns this share of the active
 	-- runner rate R(area) / RunDurationSeconds(). With CombinedSections prices a
 	-- level-1 section then repays its unlock price in ~40 minutes of stocked running.
-	PassiveShare = 0.32,
+	-- (Raised from 0.32 when the castle boss fight made a run ~7 s longer.)
+	PassiveShare = 0.36,
 	-- Seconds between sales, by slot index 1..4 (bigger shops sell less often but more per sale).
 	SaleInterval = { 4, 4.6, 5.2, 5.8 }, -- [PROPOSAL]
 	-- Sales before a manual restock is needed, by slot index (25-37 sales = about 2-3.5 minutes).

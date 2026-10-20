@@ -18,8 +18,9 @@ return function(H)
 		H.expect(n == n and n ~= math.huge and n > 0, what .. " = " .. tostring(n))
 	end
 
-	local function isCents(n: number, what: string)
-		H.near(n * 100, math.floor(n * 100 + 0.5), 1e-6, what .. " not rounded to cents")
+	-- Owner request: every price / payout is a whole number of dollars.
+	local function isWhole(n: number, what: string)
+		H.expect(type(n) == "number" and math.floor(n) == n, what .. " is not whole dollars: " .. tostring(n))
 	end
 
 	-- Runs `fn` with a temporary Config value, then restores it and the memo.
@@ -49,7 +50,9 @@ return function(H)
 			end
 			H.near(d.total, sum, 0.01, "B10 = sum")
 			H.near(Economy.TenRunBenchmark(area), d.total, 1e-9, "TenRunBenchmark")
-			H.near(Economy.RunBenchmark(area), d.total / 10, 0.006, "R = B10 / 10")
+			H.near(Economy.RunBenchmark(area), d.total / 10, 0.5, "R = B10 / 10 (whole dollars)")
+			isWhole(Economy.RunBenchmark(area), "R")
+			isWhole(d.total, "B10")
 			local R = Economy.RunBenchmark(area)
 			H.expect(R > previous, "R not increasing at area " .. area)
 			previous = R
@@ -86,7 +89,8 @@ return function(H)
 				for area = 1, AREAS do
 					local gate = Economy.GatePrice(area)
 					finitePositive(gate, "gate")
-					isCents(gate, "gate")
+					isWhole(gate, "gate")
+					isWhole(Economy.AreaUnlockTotal(area), "area total")
 					H.expect(gate > prevGate, mode .. ": gate not increasing at " .. area)
 					local total = Economy.AreaUnlockTotal(area)
 					H.expect(total > prevTotal, mode .. ": area total not increasing at " .. area)
@@ -104,18 +108,18 @@ return function(H)
 				for _, slotDef in Config.Areas[area].slots do
 					local price = Economy.SlotUnlockPrice(slotDef.id)
 					finitePositive(price, slotDef.id)
-					isCents(price, slotDef.id)
+					isWhole(price, slotDef.id)
 					if slotDef.kind == "revenue" and count < 3 then
 						sum += price
 						count += 1
 					end
 				end
-				H.near(sum, Economy.TenRunBenchmark(area), 0.03, "three sections = B10 in area " .. area)
+				H.expect(sum == Economy.TenRunBenchmark(area), "three sections = B10 exactly in area " .. area)
 			end
 			H.near(
 				Economy.SlotUnlockPrice(Config.ArenaSlotId),
 				EconomyDefs.Slots.ArenaShare * Economy.TenRunBenchmark(Config.ArenaArea),
-				0.01,
+				0.5,
 				"arena price"
 			)
 		end)
@@ -128,9 +132,10 @@ return function(H)
 				for _, slotDef in Config.Areas[area].slots do
 					local price = Economy.SlotUnlockPrice(slotDef.id)
 					finitePositive(price, slotDef.id)
+					isWhole(price, slotDef.id)
 					if slotDef.kind == "revenue" and count < 3 then
 						count += 1
-						H.near(price, Economy.TenRunBenchmark(area), 0.01, "section = B10")
+						H.expect(price == Economy.TenRunBenchmark(area), "section = B10")
 					end
 				end
 			end
@@ -155,27 +160,41 @@ return function(H)
 				for _, slotDef in Config.Areas[area].slots do
 					if slotDef.kind == "revenue" then
 						local s = Economy.SectionStats(slotDef.id, 1)
-						H.expect(s.saleInterval >= 4 and s.saleInterval <= 6, "sale interval")
+						-- Whole-dollar sales stretch the 4-5.8 s base interval by
+						-- (rounded / exact) <= 2 (only when a sale is worth < $1.50).
+						local baseInterval = EconomyDefs.Sections.SaleInterval[math.min(
+							tonumber(slotDef.id:match("s(%d+)$")) :: number,
+							#EconomyDefs.Sections.SaleInterval
+						)]
+						H.expect(
+							s.saleInterval >= baseInterval * 0.66 - 1e-9 and s.saleInterval <= baseInterval * 2 + 1e-9,
+							("%s sale interval %.2f"):format(slotDef.id, s.saleInterval)
+						)
 						H.expect(s.stockCapacity >= 25 and s.stockCapacity <= 40, "stock")
 						finitePositive(s.incomePerSale, "income per sale")
-						isCents(s.incomePerSale, "income per sale")
+						isWhole(s.incomePerSale, "income per sale")
+						H.expect(s.incomePerSale >= 1, "at least $1 per sale")
 						H.near(s.incomePerSecond, s.incomePerSale / s.saleInterval, 1e-9, "income per second")
 						local payback = Economy.SlotUnlockPrice(slotDef.id) / s.incomePerSecond / 60
 						H.expect(payback >= 25 and payback <= 45, ("%s payback %.1f min"):format(slotDef.id, payback))
 						passive += s.incomePerSecond
 						-- Upgrades: +20% income, +10% stock per level, nil at max.
+						-- (incomePerSecond is the exact design rate: rounding a sale to
+						-- whole dollars only stretches the interval)
 						local s10 = Economy.SectionStats(slotDef.id, Economy.SectionMaxLevel)
 						H.near(
-							s10.incomePerSale,
-							s.incomePerSale * (1 + 0.2 * (Economy.SectionMaxLevel - 1)),
-							0.02,
+							s10.incomePerSecond,
+							s.incomePerSecond * (1 + 0.2 * (Economy.SectionMaxLevel - 1)),
+							1e-9,
 							"level 10 income"
 						)
+						isWhole(s10.incomePerSale, "level 10 income per sale")
 						H.expect(s10.stockCapacity > s.stockCapacity, "level 10 stock")
 						local prev = 0
 						for level = 1, Economy.SectionMaxLevel - 1 do
 							local p = Economy.SectionUpgradePrice(slotDef.id, level)
 							finitePositive(p, "upgrade price")
+							isWhole(p :: number, "section upgrade price")
 							H.expect((p :: number) > prev, "upgrade price increasing")
 							prev = p :: number
 						end
@@ -183,7 +202,7 @@ return function(H)
 					end
 				end
 				local share = passive / (Economy.RunBenchmark(area) / T)
-				H.expect(share >= 0.25 and share <= 0.35, ("area %d passive share %.2f"):format(area, share))
+				H.expect(share >= 0.25 and share <= 0.4, ("area %d passive share %.2f"):format(area, share))
 			end
 		end)
 		-- Reference passive rate adds up all areas.
@@ -196,16 +215,17 @@ return function(H)
 			H.near(
 				Economy.EmployeeCashPrice(slotId, AREAS),
 				Config.Employee.RunsEquivalent * Economy.RunBenchmark(area),
-				0.01,
+				0.5,
 				"SectionArea"
 			)
+			isWhole(Economy.EmployeeCashPrice(slotId, AREAS), "employee price")
 		end
 		withConfig(Config.Employee, "PriceScalesWith", "PlayerArea", function()
-			H.near(Economy.EmployeeCashPrice("a1s1", 5), 20 * Economy.RunBenchmark(5), 0.01, "PlayerArea")
+			H.near(Economy.EmployeeCashPrice("a1s1", 5), 20 * Economy.RunBenchmark(5), 0.5, "PlayerArea")
 		end)
 	end)
 
-	H.test("Boosts: value / coin price = 1.25 and prices scale with area", function()
+	H.test("Boosts: value / coin price >= 1.25 (whole $, rounded down) and prices scale with area", function()
 		for _, boost in Config.Boosts do
 			local previous = 0
 			for area = 1, AREAS do
@@ -213,16 +233,19 @@ return function(H)
 				local price = Economy.BoostCoinPrice(boost.id, area)
 				finitePositive(value, "boost value")
 				finitePositive(price, "boost price")
-				isCents(price, "boost price")
-				H.near(value / price, 1 / (1 - Config.CoinRoute.NetGainShare), 0.005, boost.id .. " ratio")
+				isWhole(price, "boost price")
+				isWhole(value, "boost value")
+				H.expect(value / price >= 1 / (1 - Config.CoinRoute.NetGainShare) - 1e-9, boost.id .. " ratio >= 1.25")
+				H.near(value / price, 1 / (1 - Config.CoinRoute.NetGainShare), 0.005, boost.id .. " ratio ~ 1.25")
+				H.expect(price == math.floor((1 - Config.CoinRoute.NetGainShare) * value + 1e-6), "rounded down")
 				H.expect(price > previous, "boost price increases with area")
 				previous = price
 			end
 		end
 		-- Definitions.
 		local T = Economy.RunDurationSeconds()
-		H.near(Economy.BoostValue("x2_15", 2), 15 * 60 / T * Economy.RunBenchmark(2), 0.01, "2x value")
-		H.near(Economy.BoostValue("skip_4", 3), 4 * 3600 * Economy.ReferencePassiveRate(3), 0.01, "skip value")
+		H.near(Economy.BoostValue("x2_15", 2), 15 * 60 / T * Economy.RunBenchmark(2), 0.5, "2x value")
+		H.near(Economy.BoostValue("skip_4", 3), 4 * 3600 * Economy.ReferencePassiveRate(3), 0.5, "skip value")
 	end)
 
 	H.test("TimeSkipPayout: employee pays every sale, no employee stops at stock", function()
@@ -271,10 +294,10 @@ return function(H)
 		total, per = Economy.TimeSkipPayout(sections, 7 * 3600 + 17)
 		local sum = 0
 		for slotId, slot in per do
-			isCents(slot.paid, slotId .. " paid")
+			isWhole(slot.paid, slotId .. " paid")
 			sum += slot.paid
 		end
-		isCents(total, "total")
+		isWhole(total, "total")
 		H.near(total, sum, 1e-6, "total = sum of slots")
 		H.expect(sections.a1s1.stock == 10, "pure: input stock unchanged")
 	end)
@@ -314,14 +337,20 @@ return function(H)
 				for _, preview in previews do
 					local price = Economy.TimeSkipCoinPrice(boost.id, area, preview)
 					H.expect(price >= 0 and price == price, "price is a number")
-					isCents(price, "time skip price")
+					isWhole(price, "time skip price")
 					H.expect(
 						price <= share * preview + 1e-6,
 						("%s %g: %g > 0.8 x preview"):format(boost.id, preview, price)
 					)
 					H.expect(price <= Economy.BoostCoinPrice(boost.id, area) + 1e-6, "never above the reference price")
 					if preview >= 1 then
-						H.near(price, share * math.min(preview, Economy.BoostValue(boost.id, area)), 0.011, "0.8 V")
+						local value = Economy.TimeSkipValue(boost.id, area, preview)
+						isWhole(value, "time skip value")
+						H.expect(value == math.floor(math.min(preview, Economy.BoostValue(boost.id, area))), "value")
+						H.expect(price == math.floor(share * value + 1e-6), "0.8 V rounded down")
+						if price > 0 then
+							H.expect(value / price >= 1 / share - 1e-9, "value / price >= 1.25")
+						end
 					end
 				end
 			end
@@ -345,7 +374,7 @@ return function(H)
 			H.near(
 				Economy.VehicleCoinPrice(v.id, 1),
 				v.priceFactor * Economy.GatePrice(math.max(1, v.area)),
-				0.01,
+				0.5,
 				"definition"
 			)
 		end
@@ -357,7 +386,7 @@ return function(H)
 			for level = 0, Economy.RunnerUpgradeMaxLevel - 1 do
 				local p = Economy.RunnerUpgradePrice(kind, level)
 				finitePositive(p, kind .. " price")
-				isCents(p :: number, kind)
+				isWhole(p :: number, kind)
 				H.expect((p :: number) > previous, kind .. " price increasing")
 				previous = p :: number
 				H.expect(#Economy.RunnerUpgradeEffect(kind, level) > 0, "effect text")
@@ -365,12 +394,13 @@ return function(H)
 			H.expect(Economy.RunnerUpgradePrice(kind, Economy.RunnerUpgradeMaxLevel) == nil, "nil at max")
 			H.expect(Economy.RunnerUpgradeEffect(kind, Economy.RunnerUpgradeMaxLevel) == "MAX", "MAX text")
 		end
-		H.near(Economy.RunnerUpgradePrice("troops", 0) :: number, 0.4 * Economy.RunBenchmark(1), 0.01, "level 0 price")
+		H.near(Economy.RunnerUpgradePrice("troops", 0) :: number, 0.4 * Economy.RunBenchmark(1), 0.5, "level 0 price")
 		local base = Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, 1)
 		local one = Economy.RunnerStats({ troops = 1, damage = 1, capacity = 1 }, 1)
 		H.expect(base.startTroops == 3 and one.startTroops == 4, "+1 troop")
 		H.near(one.damage / base.damage, 1.04, 1e-6, "+4% damage")
-		H.near(one.capacity / base.capacity, 1.06, 0.001, "+6% capacity")
+		H.near(one.capacity / base.capacity, 1.06, 0.01, "+6% capacity (whole dollars)")
+		isWhole(one.capacity, "capacity")
 		-- Garbage upgrade levels are clamped.
 		local junk = Economy.RunnerStats({ troops = -5, damage = 0 / 0, capacity = 1e9 } :: any, 1)
 		H.expect(junk.startTroops == 3 and junk.damage == base.damage, "clamped")
@@ -381,9 +411,10 @@ return function(H)
 			H.near(
 				ref.capacity,
 				EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1),
-				0.02,
+				0.5,
 				"reference capacity"
 			)
+			isWhole(ref.capacity, "reference capacity")
 		end
 	end)
 
@@ -398,7 +429,7 @@ return function(H)
 			H.near(
 				Economy.CombatLevelReward(b),
 				EconomyDefs.Combat.RewardRuns * Economy.RunBenchmark(area),
-				0.02,
+				0.5,
 				"barrier reward"
 			)
 		end
@@ -406,7 +437,7 @@ return function(H)
 		for level = 1, 60 do
 			local r = Economy.CombatLevelReward(level)
 			finitePositive(r, "combat reward")
-			isCents(r, "combat reward")
+			isWhole(r, "combat reward")
 			H.expect(r > previous, "combat reward increasing at level " .. level)
 			previous = r
 		end
@@ -418,6 +449,7 @@ return function(H)
 			for level = 1, def.maxLevel - 1 do
 				local p = Economy.EquipmentUpgradePrice(rarity, level)
 				finitePositive(p, "equipment price")
+				isWhole(p :: number, "equipment price")
 				H.expect((p :: number) > previous, "equipment price increasing")
 				previous = p :: number
 			end
@@ -443,6 +475,52 @@ return function(H)
 			finitePositive(Economy.ReferencePassiveRate(area), "passive")
 			for _, v in Config.Vehicles do
 				finitePositive(Economy.VehicleCoinPrice(v.id, area), "vehicle")
+			end
+		end
+		-- Whole dollars everywhere (owner request: no cents).
+		for area = 1, AREAS do
+			for _, slotDef in Config.Areas[area].slots do
+				isWhole(Economy.SlotUnlockPrice(slotDef.id), slotDef.id .. " unlock")
+				isWhole(Economy.EmployeeCashPrice(slotDef.id, area), slotDef.id .. " employee")
+				for level = 1, Economy.SectionMaxLevel do
+					local st = Economy.SectionStats(slotDef.id, level)
+					if slotDef.kind == "revenue" then
+						isWhole(st.incomePerSale, slotDef.id .. " income per sale L" .. level)
+					end
+					local up = Economy.SectionUpgradePrice(slotDef.id, level)
+					if up then
+						isWhole(up, slotDef.id .. " upgrade L" .. level)
+					end
+				end
+			end
+			isWhole(Economy.GatePrice(area), "gate " .. area)
+			isWhole(Economy.AreaUnlockTotal(area), "area total " .. area)
+			isWhole(Economy.RunBenchmark(area), "R " .. area)
+			isWhole(Economy.TenRunBenchmark(area), "B10 " .. area)
+			for _, run in Economy.BenchmarkDetails(area).runs do
+				isWhole(run.payout, "benchmark run")
+			end
+			for _, v in Config.Vehicles do
+				isWhole(Economy.VehicleCoinPrice(v.id, area), v.id)
+			end
+			for _, boost in Config.Boosts do
+				isWhole(Economy.BoostValue(boost.id, area), boost.id .. " value")
+				isWhole(Economy.BoostCoinPrice(boost.id, area), boost.id .. " price")
+			end
+			local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+			isWhole(stats.capacity, "capacity")
+		end
+		for _, kind in { "troops", "damage", "capacity" } do
+			for level = 0, Economy.RunnerUpgradeMaxLevel - 1 do
+				isWhole(Economy.RunnerUpgradePrice(kind, level) :: number, kind .. " upgrade")
+			end
+		end
+		for level = 1, 80 do
+			isWhole(Economy.CombatLevelReward(level), "combat reward " .. level)
+		end
+		for rarity, def in Config.Rarities do
+			for level = 1, def.maxLevel - 1 do
+				isWhole(Economy.EquipmentUpgradePrice(rarity, level) :: number, "equipment upgrade")
 			end
 		end
 		-- Silly inputs do not crash and stay sane.

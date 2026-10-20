@@ -17,16 +17,25 @@
 	                d-pad) asks the server to start (RunnerGo).
 	  2. RUNNING  - default controls are disabled; every frame we call
 	                humanoid:Move() forward (-Z) and steer towards a target lane.
-	                When the avatar crosses a row we record the lane it is in and
-	                replay the run so far with RunnerSim.Resolve to show what
-	                happened (troops added/removed, cash, weapons, enemies).
-	  3. BOSS     - the avatar stops at the enemy base, troops fire for a few
-	                seconds while its HP bar drains, then we send our lane choices
-	                to the server (RunnerFinish). The server re-simulates and pays.
+	                The server put a "RunnerGun" Tool in the avatar's hand;
+	                RunnerVisuals welds the gun model of the current weapon to it.
+	                Squads / barricades within RunnerDefs.GUN_RANGE (1.5 rows) are
+	                shot at: we predict that row's fight with RunnerSim.Resolve
+	                (lanes so far + the lane we are in now) so enemies fall and HP
+	                drains exactly as the sim says. When the avatar crosses a row
+	                we record the lane it is in and replay the run so far.
+	                Live stats sit in the TOP-LEFT panel (RunnerUI HUD).
+	  3. BOSS     - the avatar stops before the castle; the boss walks out and
+	                the fight plays RunnerSim's BossOutcome exactly (its HP bar
+	                follows BossHpAt, a unit dies every interval: troops first,
+	                the avatar last). Then we send our lane choices to the
+	                server (RunnerFinish). The server re-simulates and pays.
 	  4. SUMMARY  - "RUN COMPLETE!" panel; COLLECT returns to the base.
 
-	Cleanup (camera, controls, jump, visuals, UI, input) happens on COLLECT,
-	Back, any failed request, death/respawn, or the server leaving Runner mode.
+	Cleanup (camera, controls, jump, visuals incl. guns / boss / bullets /
+	avatar pose, HUD panel, messages, input) happens on COLLECT, Back, any
+	failed request, death/respawn, or the server leaving Runner mode. The
+	server destroys the RunnerGun Tool when its session ends.
 
 	Portal pad: walking onto it starts OpenPrepare, but never while a Theme
 	dialog is open (Theme.IsModalOpen) - step off and back on after closing it.
@@ -43,6 +52,8 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Format = require(Shared.Format)
 local Layout = require(Shared.Layout)
 local Net = require(Shared.Net)
 local RunnerCourse = require(Shared.Runner.RunnerCourse)
@@ -61,9 +72,13 @@ type Row = RunnerCourse.Row
 type Stats = RunnerSim.Stats
 type Result = RunnerSim.Result
 type RowOutcome = RunnerSim.RowOutcome
+type BossOutcome = RunnerSim.BossOutcome
+type Option = RunnerCourse.Option
+type Fight = RunnerVisuals.Fight
 type PlayerData = Types.PlayerData
 
 local player = Players.LocalPlayer
+local P = Config.Palette
 
 -------------------------------------------------------------------------------
 -- Tunables
@@ -75,15 +90,11 @@ local STEER_GAIN = 7 -- [PROPOSAL] how hard the avatar chases the target lane
 local LATERAL_LIMIT = Layout.RUNNER_TRACK_WIDTH / 2 - 2
 local DRAG_START_PIXELS = 14 -- [PROPOSAL] drag this far to start the run
 local CAMERA_OFFSET = Vector3.new(0, 17, 22) -- high behind the runner (image 2)
-local BOSS_CAMERA_OFFSET = Vector3.new(0, 20, 30)
+local BOSS_CAMERA_OFFSET = Vector3.new(0, 26, 48) -- pulled back: 8 troop rows + the boss + its HP bar
 local CAMERA_LOOK_AHEAD = 20
-local ENGAGE_RANGE = 18 -- [PROPOSAL] troops start shooting this far before a squad/barricade (visual only)
--- Troops fire at the enemy base for at least RunnerDefs.BOSS_SECONDS (the
--- sim also uses it: fraction destroyed = firepower x BOSS_SECONDS / hp).
-local BOSS_MIN_TIME = if type((RunnerDefs :: any).BOSS_SECONDS) == "number"
-	then math.max(3, (RunnerDefs :: any).BOSS_SECONDS)
-	else 3
-local BOSS_MAX_TIME = 30 -- [PROPOSAL]
+local GUN_RANGE = RunnerDefs.GUN_RANGE -- guns reach 1.5 rows: squads/barricades are shot from here
+local FINISH_SLACK = 0.75 -- seconds past RunnerSim.MinDuration before we report the finish
+local BOSS_SAFETY = 4 -- [PROPOSAL] seconds past the planned boss fight before we finish anyway
 local STUCK_TIME = 6 -- [PROPOSAL] no forward progress for this long = give up the run
 local MODE_GRACE = 3 -- seconds we tolerate "not in Runner mode" before cleaning up
 local RENDER_NAME = "ArmyRunnerStep"
@@ -92,7 +103,7 @@ local DEFAULT_RUN_SPEED = 24
 -------------------------------------------------------------------------------
 -- State
 -------------------------------------------------------------------------------
-type Live = { troops: number, cash: number, tier: number }
+type Live = { troops: number, cash: number, tier: number, dmg: number }
 
 type Session = {
 	runId: string,
@@ -107,11 +118,12 @@ type Session = {
 	phase: string, -- "prepare" | "running" | "boss" | "finishing" | "summary" | "ended"
 	choices: { number },
 	nextRow: number,
-	engaged: { [number]: boolean },
+	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
 	live: Live,
 	targetLateral: number,
 	camLateral: number,
 	camOffset: Vector3,
+	camFocus: Vector3?,
 	startClock: number,
 	lastDistance: number,
 	lastProgressClock: number,
@@ -123,6 +135,7 @@ type Session = {
 	hud: RunnerUI.Hud?,
 	prepare: RunnerUI.Prepare?,
 	closeSummary: (() -> ())?,
+	closeMessage: (() -> ())?,
 	goPending: boolean,
 	buying: { [string]: boolean },
 	levelOverrides: { [string]: number },
@@ -250,20 +263,67 @@ local function laneAt(row: Row, lateral: number): number
 	return best
 end
 
--- Fraction of the enemy base destroyed (drives the HP bar at the end).
-local function bossFraction(course: Course, result: Result?): number
-	if not result then
-		return 0
+-- What a squad / barricade fight looks like for the visuals, from the
+-- row's RunnerSim outcome (same rule as RunnerSim: the squad shoots for
+-- RunnerDefs.ENGAGE_SECONDS with every unit's UnitDps). Visual only: the
+-- troops / cash / destroyed result itself always comes from the outcome.
+local function fightFor(stats: Stats, row: Row, option: Option?, outcome: RowOutcome?): Fight?
+	if not option or not outcome or (row.kind ~= "squad" and row.kind ~= "barricade") then
+		return nil
 	end
-	for _, line in result.lines do
-		if line.kind == "boss" then
-			if course.boss.reward > 0 then
-				return math.clamp(line.value / course.boss.reward, 0, 1)
-			end
-			return 1
+	local okDps, dps = pcall(RunnerSim.UnitDps, stats, outcome.weaponTier, outcome.damageMult)
+	local damage = outcome.troopsBefore * (if okDps then dps else 0) * RunnerDefs.ENGAGE_SECONDS
+	local hp = math.max(1e-6, numberOr(option.hp, 1))
+	if row.kind == "squad" then
+		local enemies = math.max(0, math.floor(numberOr(option.enemies, 0)))
+		local kills = math.min(enemies, math.floor(damage / hp + 1e-9))
+		return {
+			enemies = enemies,
+			kills = kills,
+			share = if enemies > 0 then kills / enemies else 1,
+			destroyed = kills >= enemies,
+		}
+	end
+	local destroyed = outcome.destroyed == true
+	return {
+		enemies = 0,
+		kills = 0,
+		share = if destroyed then 1 else math.clamp(damage / hp, 0, 1),
+		destroyed = destroyed,
+	}
+end
+
+local function optionAt(row: Row, lane: number): Option?
+	for index, option in row.options do
+		if (if type(option.lane) == "number" then option.lane else index) == lane then
+			return option
 		end
 	end
-	return if result.troops > 0 then 1 else 0
+	return row.options[lane]
+end
+
+local function unitDps(s: Session, tier: number, dmg: number): number
+	local ok, dps = pcall(RunnerSim.UnitDps, s.stats, tier, dmg)
+	return if ok and type(dps) == "number" then dps else 0
+end
+
+-- Top-left HUD panel: troops (true count), weapon, squad DPS, carried cash.
+local function updateHud(s: Session, troopsOverride: number?)
+	local hud = s.hud
+	if not hud then
+		return
+	end
+	local troops = troopsOverride or s.live.troops
+	local tier = math.clamp(math.floor(s.live.tier), 1, RunnerDefs.MAX_WEAPON_TIER)
+	hud.SetStats({
+		troops = troops,
+		weaponName = RunnerDefs.WEAPONS[tier].name,
+		weaponTier = tier,
+		maxTier = RunnerDefs.MAX_WEAPON_TIER,
+		dps = troops * unitDps(s, tier, s.live.dmg),
+		cash = s.live.cash,
+		capacity = s.stats.capacity,
+	})
 end
 
 -------------------------------------------------------------------------------
@@ -308,6 +368,12 @@ local function cleanup()
 		if s.closeSummary then
 			s.closeSummary()
 			s.closeSummary = nil
+		end
+	end)
+	try(function()
+		if s.closeMessage then
+			s.closeMessage()
+			s.closeMessage = nil
 		end
 	end)
 	try(function()
@@ -371,17 +437,61 @@ end
 local function crossRow(s: Session, index: number, lane: number)
 	s.choices[index] = lane
 	s.nextRow = index + 1
+	s.engageKeys[index] = nil
 	local result = safeResolve(s)
 	local outcome = if result then findOutcome(result, index) else nil
+	local row = s.course.rows[index]
 	local visuals = s.visuals
+	local cashBefore = s.live.cash
 	if visuals then
-		visuals:RowCrossed(index, lane, outcome, s.stats.capacity)
+		visuals:RowCrossed(index, lane, outcome, s.stats.capacity, fightFor(s.stats, row, optionAt(row, lane), outcome))
 	end
 	if outcome then
-		s.live = { troops = outcome.troopsAfter, cash = outcome.cashAfter, tier = outcome.weaponTier }
+		s.live = {
+			troops = outcome.troopsAfter,
+			cash = outcome.cashAfter,
+			tier = outcome.weaponTier,
+			dmg = outcome.damageMult,
+		}
 	end
 	if visuals then
-		visuals:SetSquad(s.live.troops, s.live.cash, s.stats.capacity, s.live.tier)
+		visuals:SetSquad(s.live.troops, s.live.tier)
+	end
+	updateHud(s)
+	if s.hud and s.live.cash > cashBefore + 0.5 then
+		s.hud.PopCash()
+	end
+end
+
+-- Squads / barricades within gun range: tell the visuals what the fight will
+-- look like if we stay in the lane we are in now. Re-predicted only when a
+-- relevant lane (or the last crossed row) changes.
+local function updateEngagements(s: Session, distance: number, lateral: number)
+	local visuals = s.visuals
+	if not visuals then
+		return
+	end
+	local rows = s.course.rows
+	local lanes: { number } = {}
+	local key = tostring(s.nextRow)
+	for index = s.nextRow, #rows do
+		local row = rows[index]
+		if distance < row.distance - GUN_RANGE then
+			break
+		end
+		local lane = laneAt(row, lateral)
+		lanes[index] = lane
+		key ..= ":" .. lane
+		if (row.kind == "squad" or row.kind == "barricade") and s.engageKeys[index] ~= key then
+			s.engageKeys[index] = key
+			local predicted = table.clone(s.choices)
+			for j = s.nextRow, index do
+				predicted[j] = lanes[j]
+			end
+			local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, predicted)
+			local outcome = if ok and type(result) == "table" then findOutcome(result, index) else nil
+			visuals:Engage(index, lane, fightFor(s.stats, row, optionAt(row, lane), outcome))
+		end
 	end
 end
 
@@ -390,6 +500,18 @@ local function finish(s: Session)
 		return
 	end
 	s.phase = "finishing"
+	-- The server rejects runs faster than RunnerSim.MinDuration x 0.9; the boss
+	-- fight normally covers that, but never report early.
+	local okMin, minDuration = pcall(RunnerSim.MinDuration, s.course)
+	if okMin and type(minDuration) == "number" then
+		local wait = minDuration + FINISH_SLACK - (os.clock() - s.startClock)
+		if wait > 0 then
+			task.wait(wait)
+			if session ~= s then
+				return
+			end
+		end
+	end
 	local reply = Net.Request("RunnerFinish", s.runId, s.choices)
 	if session ~= s then
 		return
@@ -399,6 +521,10 @@ local function finish(s: Session)
 		return
 	end
 	s.phase = "summary"
+	if s.closeMessage then
+		s.closeMessage()
+		s.closeMessage = nil
+	end
 	local result = reply.result :: Result
 	local paid = numberOr(reply.paid, 0)
 	local data = State.Get()
@@ -416,6 +542,15 @@ local function finish(s: Session)
 	})
 end
 
+local function bossReward(result: Result): number
+	for _, line in result.lines do
+		if line.kind == "boss" then
+			return line.value
+		end
+	end
+	return 0
+end
+
 local function beginBoss(s: Session, lateral: number)
 	s.phase = "boss"
 	-- Any row we somehow skipped counts with the lane we are in now.
@@ -424,18 +559,51 @@ local function beginBoss(s: Session, lateral: number)
 		crossRow(s, index, laneAt(rows[index], lateral))
 	end
 	s.humanoid:Move(Vector3.zero, false)
-	local result = safeResolve(s)
-	local fraction = bossFraction(s.course, result)
-	local okMin, minDuration = pcall(RunnerSim.MinDuration, s.course)
-	local elapsed = os.clock() - s.startClock
-	-- Fight at least BOSS_MIN_TIME, and long enough that the server's
-	-- anti-cheat minimum run time is surely over before we report.
-	local wanted = if okMin and type(minDuration) == "number" then minDuration - elapsed + 0.75 else 0
-	local duration = math.clamp(wanted, BOSS_MIN_TIME, BOSS_MAX_TIME)
-	if s.visuals then
-		s.visuals:StartBossFight(duration, fraction)
+	if s.hud then
+		s.hud.SetProgress(1)
 	end
-	task.delay(duration + 0.4, function()
+	local result = safeResolve(s)
+	local visuals = s.visuals
+	local outcome: BossOutcome? = if result and type(result.boss) == "table" then result.boss else nil
+	if not result or not outcome or not visuals then
+		task.spawn(finish, s) -- finish yields; we are inside the RenderStep callback
+		return
+	end
+	local tier = s.live.tier
+	local dmg = s.live.dmg
+	local total = visuals:StartBossFight(outcome, {
+		onProgress = function(alive: number, _hp: number)
+			if session == s then
+				updateHud(s, alive)
+			end
+		end,
+		onResolved = function(victory: boolean)
+			if session ~= s then
+				return
+			end
+			s.live = { troops = outcome.survivors, cash = s.live.cash, tier = tier, dmg = dmg }
+			updateHud(s)
+			if s.closeMessage then
+				s.closeMessage()
+			end
+			if victory then
+				s.closeMessage = RunnerUI.ShowMessage(
+					"BOSS DEFEATED!",
+					"+" .. Format.Money(bossReward(result)) .. " boss reward",
+					P.Coin,
+					3
+				)
+			else
+				s.closeMessage =
+					RunnerUI.ShowMessage("DEFEATED BY THE BOSS", "Pick the best lanes to beat it", P.ButtonRed, 3.2)
+			end
+		end,
+		onDone = function()
+			task.spawn(finish, s)
+		end,
+	})
+	-- Safety net: finish even if the visuals stopped updating.
+	task.delay(total + BOSS_SAFETY, function()
 		finish(s)
 	end)
 end
@@ -457,10 +625,13 @@ local function requestGo(s: Session)
 		end
 		s.stats = cleanStats(reply.stats, s.previewStats)
 		s.runSpeed = numberOr(reply.runSpeed, s.runSpeed)
+		-- Boss HP is an exact search over the whole course (memoized per
+		-- course + stats): compute it now so the first row crossing has no hitch.
+		pcall(RunnerSim.BossHp, s.course, s.stats)
 		s.phase = "running"
 		s.startClock = os.clock()
 		s.lastProgressClock = os.clock()
-		s.live = { troops = s.stats.startTroops, cash = 0, tier = 1 }
+		s.live = { troops = s.stats.startTroops, cash = 0, tier = 1, dmg = 1 }
 		local root = getRoot(s.character)
 		if root then
 			s.targetLateral = math.clamp(root.Position.X - s.centreX, -LATERAL_LIMIT, LATERAL_LIMIT)
@@ -471,8 +642,12 @@ local function requestGo(s: Session)
 			s.prepare = nil
 		end
 		if s.visuals then
-			s.visuals:SetSquad(s.live.troops, 0, s.stats.capacity, 1)
+			s.visuals:SetSquad(s.live.troops, 1)
 		end
+		if s.hud then
+			s.hud.SetStatsVisible(true)
+		end
+		updateHud(s)
 	end)
 end
 
@@ -501,7 +676,7 @@ local function buyUpgrade(s: Session, kind: string)
 			end
 			toast("Permanent upgrade bought!", "success")
 			if s.visuals and s.phase == "prepare" then
-				s.visuals:SetSquad(s.previewStats.startTroops, 0, s.previewStats.capacity, 1)
+				s.visuals:SetSquad(s.previewStats.startTroops, 1)
 			end
 		else
 			toast(reply.err or "Could not buy the upgrade", "error")
@@ -530,11 +705,17 @@ local function updateCamera(s: Session, root: BasePart, dt: number)
 	end
 	local alpha = 1 - math.exp(-dt * 6)
 	local lateral = root.Position.X - s.centreX
-	s.camLateral += (lateral * 0.55 - s.camLateral) * alpha
-	local goalOffset = if s.phase == "prepare" or s.phase == "running" then CAMERA_OFFSET else BOSS_CAMERA_OFFSET
-	s.camOffset = s.camOffset:Lerp(goalOffset, alpha * 0.5)
-	local focus = Vector3.new(s.centreX + s.camLateral, Layout.FLOOR_Y + 2, root.Position.Z)
-	camera.CFrame = CFrame.lookAt(focus + s.camOffset, focus + Vector3.new(0, 0, -CAMERA_LOOK_AHEAD))
+	local running = s.phase == "prepare" or s.phase == "running"
+	-- Boss fight: frame the squad and the boss (focus between them, centred).
+	local bossAt = if running or not s.visuals then nil else s.visuals:BossFocus()
+	s.camLateral += ((if bossAt then 0 else lateral * 0.55) - s.camLateral) * alpha
+	s.camOffset = s.camOffset:Lerp(if running then CAMERA_OFFSET else BOSS_CAMERA_OFFSET, alpha * 0.5)
+	local focusZ = if bossAt then root.Position.Z + (bossAt.Z - root.Position.Z) * 0.4 else root.Position.Z
+	local goal = Vector3.new(s.centreX + s.camLateral, Layout.FLOOR_Y + 2, focusZ)
+	local focus = if s.camFocus then s.camFocus:Lerp(goal, alpha) else goal
+	s.camFocus = focus
+	local lookAt = if bossAt then focus + Vector3.new(0, 1, -1) else focus + Vector3.new(0, 0, -CAMERA_LOOK_AHEAD)
+	camera.CFrame = CFrame.lookAt(focus + s.camOffset, lookAt)
 end
 
 local function step(dt: number)
@@ -583,26 +764,13 @@ local function step(dt: number)
 		local sideways = math.clamp((s.targetLateral - lateral) * STEER_GAIN, -speed * 0.9, speed * 0.9)
 		s.humanoid:Move(Vector3.new(sideways, 0, -speed).Unit, false)
 
-		-- Rows: shoot at squads/barricades a bit early, record the lane on crossing.
+		-- Rows: record the lane on crossing, then shoot at what is in range.
 		local rows = s.course.rows
-		while s.nextRow <= #rows do
+		while s.nextRow <= #rows and distance >= rows[s.nextRow].distance do
 			local index = s.nextRow
-			local row = rows[index]
-			if
-				(row.kind == "squad" or row.kind == "barricade")
-				and not s.engaged[index]
-				and distance >= row.distance - ENGAGE_RANGE
-			then
-				s.engaged[index] = true
-				if visuals then
-					visuals:Engage(index, laneAt(row, lateral))
-				end
-			end
-			if distance < row.distance then
-				break
-			end
-			crossRow(s, index, laneAt(row, lateral))
+			crossRow(s, index, laneAt(rows[index], lateral))
 		end
+		updateEngagements(s, distance, lateral)
 
 		-- Progress bar + stuck check.
 		local stopDistance = if visuals then visuals.stopDistance else Layout.RUNNER_TRACK_LENGTH
@@ -768,11 +936,12 @@ local function startSession(reply: { [string]: any })
 		phase = "prepare",
 		choices = {},
 		nextRow = 1,
-		engaged = {},
-		live = { troops = stats.startTroops, cash = 0, tier = 1 },
+		engageKeys = {},
+		live = { troops = stats.startTroops, cash = 0, tier = 1, dmg = 1 },
 		targetLateral = 0,
 		camLateral = 0,
 		camOffset = CAMERA_OFFSET,
+		camFocus = nil,
 		startClock = os.clock(),
 		lastDistance = 0,
 		lastProgressClock = os.clock(),
@@ -784,6 +953,7 @@ local function startSession(reply: { [string]: any })
 		hud = nil,
 		prepare = nil,
 		closeSummary = nil,
+		closeMessage = nil,
 		goPending = false,
 		buying = {},
 		levelOverrides = {},
@@ -796,9 +966,9 @@ local function startSession(reply: { [string]: any })
 	session = s
 
 	local ok, err = pcall(function()
-		local visuals = RunnerVisuals.new(s.course, slot)
+		local visuals = RunnerVisuals.new(s.course, slot, character)
 		s.visuals = visuals
-		visuals:SetSquad(stats.startTroops, 0, stats.capacity, 1)
+		visuals:SetSquad(stats.startTroops, 1)
 		s.hud = RunnerUI.ShowHud(s.level)
 		local data = State.Get()
 		if data then

@@ -399,22 +399,41 @@ local function baseThreat(def: EnemyDef): number
 	return def.hp * def.damage
 end
 
--- Split `total` cents-exactly over `weights` (last entry takes the rounding remainder).
+-- Split a whole-dollar `total` over `weights`: every share is a whole number
+-- of dollars, at least $1 each (when total >= #weights), and the shares sum
+-- EXACTLY to `total`. Each entry first gets $1, the rest is shared by weight
+-- with largest-remainder rounding (ties -> earlier entry).
 local function splitCash(total: number, weights: { number }): { number }
-	local out = {}
+	local out: { number } = {}
+	local count = #weights
+	if count == 0 then
+		return out
+	end
+	total = math.max(0, math.floor(total + 0.5))
+	local floorEach = if total >= count then 1 else 0
+	local rest = total - floorEach * count
 	local sum = 0
 	for _, w in weights do
-		sum += w
+		sum += math.max(0, w)
 	end
 	local given = 0
+	local order: { { index: number, frac: number } } = {}
 	for index, w in weights do
-		if index == #weights then
-			out[index] = math.max(0, Format.RoundCents(total - given))
-		else
-			local value = if sum > 0 then Format.RoundCents(total * w / sum) else 0
-			out[index] = value
-			given += value
+		local exact = if sum > 0 then rest * math.max(0, w) / sum else rest / count
+		local whole = math.floor(exact + 1e-9)
+		out[index] = floorEach + whole
+		given += whole
+		table.insert(order, { index = index, frac = exact - whole })
+	end
+	table.sort(order, function(a, b)
+		if math.abs(a.frac - b.frac) > 1e-9 then
+			return a.frac > b.frac
 		end
+		return a.index < b.index
+	end)
+	for i = 1, rest - given do
+		local entry = order[(i - 1) % count + 1]
+		out[entry.index] += 1
 	end
 	return out
 end
@@ -556,10 +575,13 @@ function CombatDefs.LevelPlan(level: number, mode: string): LevelPlan
 		table.insert(all, boss)
 	end
 
-	-- 4) cash: 70% dropped by enemies, 30% in ground piles
-	local reward = Economy.CombatLevelReward(lvl)
-	local enemyCash = Format.RoundCents(reward * CombatDefs.CASH_ENEMY_SHARE)
-	local pileCash = Format.RoundCents(reward - enemyCash)
+	-- 4) cash: 70% dropped by enemies, 30% in ground piles, all whole dollars
+	--    (every drop and pile >= $1; together exactly the level reward)
+	local reward = Format.RoundWhole(Economy.CombatLevelReward(lvl))
+	local pileCount = waveCount * CombatDefs.PILES_PER_WAVE
+	local enemyCash = Format.RoundWhole(reward * CombatDefs.CASH_ENEMY_SHARE)
+	enemyCash = math.max(math.min(enemyCash, reward - pileCount), math.min(#all, reward))
+	local pileCash = reward - enemyCash
 	local weights = {}
 	for i, e in all do
 		weights[i] = CombatDefs.ENEMIES[e.type].cashWeight
@@ -569,7 +591,7 @@ function CombatDefs.LevelPlan(level: number, mode: string): LevelPlan
 		e.cash = enemyValues[i]
 	end
 	local pileWeights = {}
-	for i = 1, waveCount * CombatDefs.PILES_PER_WAVE do
+	for i = 1, pileCount do
 		pileWeights[i] = 1
 	end
 	local pileValues = splitCash(pileCash, pileWeights)
