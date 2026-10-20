@@ -41,10 +41,12 @@
 			pool:Active() -> number                        bullets in flight
 			pool:Destroy()
 
-	Bullet styles (bulletStyle of RunnerDefs.WEAPONS):
-		pistol  small yellow slug        rifle   long pale tracer
-		smg     small fast orange slug   assault orange tracer
-		minigun thin bright stream       rocket  big red rocket + smoke trail + explosion flash
+	Bullet styles (bulletStyle of RunnerDefs.WEAPONS). The track floor is
+	white, so bullets are solid (not Neon: glowing yellows turned white) in
+	strong, dark-enough colours, one per gun:
+		pistol  small orange slug        rifle   long red tracer
+		smg     small fast pink slug     assault blue tracer
+		minigun thin purple stream       rocket  big dark-red rocket + smoke trail + explosion flash
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -294,50 +296,60 @@ type Style = {
 	smoke: boolean, -- rocket smoke trail
 }
 
+-- [PROPOSAL] Bullet colours: saturated and dark enough to stand out on the
+-- white track floor (owner feedback: the old yellow / pale Neon bullets were
+-- invisible on it). Hit flashes use the same colour.
+local BULLET_ORANGE = Color3.fromRGB(235, 90, 0)
+local BULLET_RED = Color3.fromRGB(215, 20, 35)
+local BULLET_PINK = Color3.fromRGB(220, 30, 150)
+local BULLET_BLUE = Color3.fromRGB(25, 85, 235)
+local BULLET_PURPLE = Color3.fromRGB(125, 35, 220)
+local ROCKET_RED = Color3.fromRGB(170, 20, 20)
+
 local STYLES: { [string]: Style } = {
 	pistol = {
-		size = Vector3.new(0.3, 0.3, 0.7),
-		color = P.Coin,
+		size = Vector3.new(0.38, 0.38, 0.8),
+		color = BULLET_ORANGE,
 		shape = Enum.PartType.Block,
 		hitSize = 1.1,
-		hitColor = P.Coin,
+		hitColor = BULLET_ORANGE,
 		smoke = false,
 	},
 	rifle = {
-		size = Vector3.new(0.16, 0.16, 2.8),
-		color = P.CoinShine,
+		size = Vector3.new(0.26, 0.26, 2.8),
+		color = BULLET_RED,
 		shape = Enum.PartType.Block,
 		hitSize = 1.3,
-		hitColor = P.CoinShine,
+		hitColor = BULLET_RED,
 		smoke = false,
 	},
 	smg = {
-		size = Vector3.new(0.22, 0.22, 0.75),
-		color = P.CardOrange,
+		size = Vector3.new(0.3, 0.3, 0.85),
+		color = BULLET_PINK,
 		shape = Enum.PartType.Block,
 		hitSize = 0.9,
-		hitColor = P.CardOrange,
+		hitColor = BULLET_PINK,
 		smoke = false,
 	},
 	assault = {
-		size = Vector3.new(0.2, 0.2, 1.9),
-		color = P.CardOrange,
+		size = Vector3.new(0.28, 0.28, 1.9),
+		color = BULLET_BLUE,
 		shape = Enum.PartType.Block,
 		hitSize = 1.2,
-		hitColor = P.CoinDark,
+		hitColor = BULLET_BLUE,
 		smoke = false,
 	},
 	minigun = {
-		size = Vector3.new(0.12, 0.12, 3.6),
-		color = P.CoinShine,
+		size = Vector3.new(0.22, 0.22, 3.6),
+		color = BULLET_PURPLE,
 		shape = Enum.PartType.Block,
 		hitSize = 0.9,
-		hitColor = P.White,
+		hitColor = BULLET_PURPLE,
 		smoke = false,
 	},
 	rocket = {
 		size = Vector3.new(0.6, 0.6, 1.7),
-		color = P.ButtonRed,
+		color = ROCKET_RED,
 		shape = Enum.PartType.Block,
 		hitSize = 7,
 		hitColor = P.CardOrange,
@@ -407,8 +419,12 @@ function RunnerGuns.newPool(parent: Instance, maxBullets: number?): Pool
 		part.CanQuery = false
 		part.CanTouch = false
 		part.CastShadow = false
-		part.Material = Enum.Material.Neon
+		part.Material = Enum.Material.SmoothPlastic -- solid colour: Neon glows towards white on the white floor
+		-- Start in the pistol style for real (Fire only restyles when the style
+		-- changes, so without this the first pistol bullets stayed default grey).
 		part.Size = STYLES.pistol.size
+		part.Color = STYLES.pistol.color
+		part.Shape = STYLES.pistol.shape
 		part.CFrame = HIDDEN
 		part.Parent = folder
 		bullets[i] = {

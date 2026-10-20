@@ -5,7 +5,8 @@
 
 		* locked slot (area unlocked)  -> white unlock pad with a thick green
 		                                  border, gold price + coin (image 1),
-		                                  ProximityPrompt "Unlock"
+		                                  ProximityPrompt "Unlock". Its name +
+		                                  price label is AlwaysOnTop (see buildPad)
 		* locked area                  -> a "LOCKED" sign in the middle of the area
 		* unlocked revenue section     -> colourful building (BuildingFactory),
 		                                  billboard with level, $/s, stock bar and a
@@ -124,6 +125,9 @@ local accumulator = 0
 local UPDATE_RATE = 1 / 30
 local PROMPT_DISTANCE = 10
 local BILLBOARD_DISTANCE = 150
+-- AlwaysOnTop labels show through walls, so they stop at a shorter distance
+-- (pads of the next area, 184 studs away, stay hidden).
+local PAD_LABEL_DISTANCE = 110
 local EMPLOYEE_HOP_TIME = 0.55
 
 -------------------------------------------------------------------------------
@@ -165,13 +169,14 @@ local function makePrompt(
 end
 
 -- World-sized billboard (Size in studs) with a "Content" frame inside that
--- Theme.Pop can bounce.
+-- Theme.Pop can bounce. `alwaysOnTop` draws it over everything else.
 local function billboard(
 	adornee: BasePart,
 	widthStuds: number,
 	heightStuds: number,
 	offsetY: number,
-	maxDistance: number?
+	maxDistance: number?,
+	alwaysOnTop: boolean?
 ): (BillboardGui, Frame)
 	local board = Theme.Billboard({
 		Name = "Info",
@@ -179,6 +184,7 @@ local function billboard(
 		Adornee = adornee,
 		Size = UDim2.fromScale(widthStuds, heightStuds),
 		StudsOffset = Vector3.new(0, offsetY, 0),
+		AlwaysOnTop = alwaysOnTop == true,
 		MaxDistance = maxDistance or BILLBOARD_DISTANCE,
 	})
 	local content = Instance.new("Frame")
@@ -277,9 +283,10 @@ local function buildPad(sv: SlotVisual)
 
 	local price = Economy.SlotUnlockPrice(sv.id)
 	local priceText = Format.Money(price)
-	-- Lifted well above the pad so the name + price are never cut off by the
-	-- floor when the camera looks down at the plot (owner feedback).
-	local board, content = billboard(tile, 14, 4, 4.6)
+	-- Lifted well above the pad AND drawn on top: the pad's white/green
+	-- picture is a SurfaceGui, and Roblox can draw it over a normal billboard
+	-- that overlaps it on screen, which cut the name + price off (owner feedback).
+	local board, content = billboard(tile, 14, 4, 4.6, PAD_LABEL_DISTANCE, true)
 	board.Name = "PadInfo"
 	sv.content = content
 	local titleText = if isArena then "⚔️ Combat Arena" else sv.def.icon .. " " .. sv.def.name
@@ -453,7 +460,8 @@ local function buildHireTile(sv: SlotVisual)
 	local tile =
 		BuildingFactory.FlatTile(folder, CFrame.new(pos + Vector3.new(0, 0.42, 0)), 7, 7, P.HireTile, P.White, 0.45)
 	tile.Name = "HireTile"
-	local board, content = billboard(tile, 6, 6, 4.6)
+	-- Drawn on top for the same reason as the unlock pad label (buildPad).
+	local board, content = billboard(tile, 6, 6, 4.6, PAD_LABEL_DISTANCE, true)
 	board.Name = "HireInfo"
 	local face = Theme.Label({
 		Text = "🧑‍💼",

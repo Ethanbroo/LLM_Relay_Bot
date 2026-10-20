@@ -10,13 +10,18 @@
 	                  When the row before a gold weapon gate is crossed, that gate is
 	                  relabelled with the gun you would get ("🔫 SMG"; at the top tier
 	                  "🔫 MAX +$X", the cash it pays instead); rows further ahead keep
-	                  "WEAPON +1" (the gun depends on the gates you take before them)
-	  * cash rows   - stacks of gold coins + green cash bricks. Their VALUE labels
-	                  (and the cash label of a red toll gate) stay hidden until the
-	                  previous row has been crossed (owner request: the far-away
-	                  values cluttered the view); row 1's are visible from the start
-	  * enemy squads- red-uniform soldiers with rifles and a count label
+	                  "WEAPON +1" (the gun depends on the gates you take before them).
+	                  The panel you run through vanishes at once (owner request)
+	  * cash rows   - stacks of gold coins + green cash bricks; the stack you take
+	                  vanishes at once
+	  * enemy squads- red-uniform soldiers with rifles and a "N SOLDIERS" label
 	  * barricades  - sandbag walls with an HP bar
+	  * value labels- a row's cash values, a red toll gate's cash, a squad's
+	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
+	                  previous row has been crossed (owner request: far-away labels
+	                  cluttered the view); row 1's are visible from the start. They
+	                  are plain outlined text (no dark pill behind them), so they never
+	                  cover what is further down the track
 	  * the castle  - at the end of the track, with a 13-stud gateway; the BOSS
 	                  (RunnerBoss) waits hidden behind its door and walks out of it
 	  * your squad  - up to 40 green toy soldiers standing NEXT TO the avatar in
@@ -31,7 +36,7 @@
 	                  fireRate (up to FRONT_MAX_RATE = 12/s); the back rows share what
 	                  is left of the bullet budget (BULLET_BUDGET of the pool alive),
 	                  so the pistol, SMG, assault rifle and minigun clearly differ in
-	                  rate, bullet style and speed. Range: RunnerDefs.GUN_RANGE
+	                  rate, bullet style, colour and speed. Range: RunnerDefs.GUN_RANGE
 	  * effects     - pop text, gate flashes, hit flashes, falling enemies, confetti
 
 	The OUTCOME of every fight comes from RunnerSim (RunnerController passes it
@@ -210,13 +215,8 @@ local function makeHpBar(adornee: BasePart, title: string, width: number, offset
 	}
 end
 
-local function makeTextBillboard(
-	adornee: BasePart,
-	text: string,
-	color: Color3,
-	offsetY: number,
-	pill: Color3?
-): BillboardGui
+-- Outlined text only (no background), so it never hides what is behind it.
+local function makeTextBillboard(adornee: BasePart, text: string, color: Color3, offsetY: number): BillboardGui
 	local gui = Theme.Billboard({
 		Name = "Value",
 		Parent = adornee,
@@ -226,28 +226,16 @@ local function makeTextBillboard(
 		AlwaysOnTop = false,
 		MaxDistance = 220,
 	})
-	local holder: Instance = gui
-	if pill then
-		local frame = Instance.new("Frame")
-		frame.Name = "Pill"
-		frame.BackgroundColor3 = pill
-		frame.Size = UDim2.fromScale(0.8, 1)
-		frame.Position = UDim2.fromScale(0.5, 0)
-		frame.AnchorPoint = Vector2.new(0.5, 0)
-		frame.Parent = gui
-		Theme.Corner(frame, 0.4)
-		Theme.Stroke(frame, P.CardOutline, 2, true)
-		holder = frame
-	end
 	Theme.Label({
 		Name = "Text",
 		Text = text,
 		TextColor3 = color,
 		MaxTextSize = 34,
+		StrokeThickness = 3,
 		Size = UDim2.new(1, -8, 1, -4),
 		Position = UDim2.fromScale(0.5, 0.5),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Parent = holder,
+		Parent = gui,
 	})
 	return gui
 end
@@ -365,7 +353,7 @@ type OptionVisual = {
 	targets: { Vector3 },
 	hp: HpBar?,
 	anchor: Part?,
-	cashLabel: BillboardGui?, -- hidden until the previous row is crossed
+	valueLabel: BillboardGui?, -- cash / "N SOLDIERS" / HP bar: hidden until the previous row is crossed
 }
 
 type RowVisual = { row: Row, options: { OptionVisual }, revealed: boolean, crossed: boolean }
@@ -456,16 +444,16 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			-- A red "toll" gate also carries cash: a small stack behind it whose
 			-- value label stays hidden until the previous row is crossed.
 			local tollCash: Model? = nil
-			local cashLabel: BillboardGui? = nil
+			local valueLabel: BillboardGui? = nil
 			local cash = option.cash or 0
 			if cash > 0 then
 				local base = worldAt(row.distance + 2.5, option.x, 0)
 				local stack = RunnerModels.CoinStack(rowFolder, base, 4)
 				tollCash = stack
 				local anchor = anchorPart(stack, base + Vector3.new(0, 3.2, 0))
-				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6, P.PillBlack)
+				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6)
 				gui.Enabled = false
-				cashLabel = gui
+				valueLabel = gui
 			end
 			table.insert(list, {
 				option = option,
@@ -477,7 +465,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = nil,
-				cashLabel = cashLabel,
+				valueLabel = valueLabel,
 			})
 		end
 		for _, x in edges do
@@ -504,7 +492,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local base = worldAt(row.distance, option.x, 0)
 			local model = RunnerModels.CoinStack(rowFolder, base, coins)
 			local anchor = anchorPart(model, base + Vector3.new(0, 3.6, 0))
-			local gui = makeTextBillboard(anchor, Format.Money(cash), P.PriceGold, 1.2, nil)
+			local gui = makeTextBillboard(anchor, Format.Money(cash), P.PriceGold, 1.2)
 			gui.Enabled = false -- revealed when the previous row is crossed
 			table.insert(list, {
 				option = option,
@@ -516,7 +504,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = anchor,
-				cashLabel = gui,
+				valueLabel = gui,
 			})
 		end
 		return list
@@ -544,13 +532,13 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				table.insert(rigs, { rig = rig, fall = 0, target = 0 })
 			end
 			local anchor = anchorPart(model, worldAt(row.distance, option.x, 4.5))
-			makeTextBillboard(
+			local gui = makeTextBillboard(
 				anchor,
 				if option.label ~= "" then option.label else tostring(count),
-				P.White,
-				0.8,
-				P.EnemyRed
+				P.ButtonRed,
+				0.8
 			)
+			gui.Enabled = false -- revealed when the previous row is crossed (like the cash values)
 			table.insert(list, {
 				option = option,
 				centre = worldAt(row.distance, option.x, 0),
@@ -561,7 +549,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = anchor,
-				cashLabel = nil,
+				valueLabel = gui,
 			})
 		end
 		return list
@@ -576,6 +564,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local anchor = anchorPart(model, centre + Vector3.new(0, 4.4, 0))
 			local hp = makeHpBar(anchor, "HP " .. Format.Short(math.floor((option.hp or 0) + 0.5)), 150, 1.4)
 			hp.set(1)
+			hp.gui.Enabled = false -- revealed when the previous row is crossed (like the cash values)
 			local targets = {
 				centre + Vector3.new(-width / 4, 1.5, 0.7),
 				centre + Vector3.new(0, 2.2, 0.7),
@@ -591,7 +580,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = targets,
 				hp = hp,
 				anchor = anchor,
-				cashLabel = nil,
+				valueLabel = hp.gui,
 			})
 		end
 		return list
@@ -636,7 +625,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		return "🔫 " .. (if def then def.short else option.label)
 	end
 
-	-- Show a row's cash values (owner request: only once the row before it is
+	-- Show a row's value labels (owner request: only once the row before it is
 	-- crossed) and name the gun its weapon gates give with the weapon tier the
 	-- squad has now (`tierNow`).
 	local function reveal(index: number, tierNow: number)
@@ -651,8 +640,8 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				label.Text = weaponGateText(ov.option, tierNow)
 				Theme.Pop(label)
 			end
-			local gui = ov.cashLabel
-			if gui then
+			local gui = ov.valueLabel
+			if gui and gui.Parent then
 				gui.Enabled = true
 				local holder = gui:FindFirstChildWhichIsA("GuiObject")
 				if holder then
@@ -1176,7 +1165,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 		rowVisual.crossed = true
 		engaged[rowIndex] = nil
-		-- The next row's cash values appear now; its weapon gates name the gun
+		-- The next row's value labels appear now; its weapon gates name the gun
 		-- for the tier we have after THIS row (SetSquad updates `tier` later).
 		reveal(rowIndex + 1, if outcome then outcome.weaponTier else tier)
 		local optionVisual = rowVisual.options[lane]
@@ -1190,24 +1179,19 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		local tierBefore = tier
 
 		if kind == "gate" then
+			-- The panel you ran through vanishes at once (owner request), with
+			-- its label and any toll cash behind it; the pop text below is the feedback.
 			local panel = optionVisual.panel
 			if panel then
-				-- Flash bright, then fade away like the Count-Masters gates.
-				panel.Transparency = 0.1
-				Theme.Tween(panel, { Transparency = 1 }, 0.45)
-				local label = optionVisual.label
-				if label then
-					Theme.Tween(label, { TextTransparency = 1 }, 0.45)
-					local stroke = label:FindFirstChildOfClass("UIStroke")
-					if stroke then
-						Theme.Tween(stroke, { Transparency = 1 }, 0.45)
-					end
-				end
+				panel:Destroy()
+				optionVisual.panel = nil
+				optionVisual.label = nil
 			end
 			local tollCash = optionVisual.model
 			if tollCash then
-				flyAway(tollCash, Vector3.new(0, 6, 4), 0.4)
+				tollCash:Destroy()
 				optionVisual.model = nil
+				optionVisual.valueLabel = nil
 				if cashDelta > 0.001 then
 					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(cashDelta), P.MoneyGreen)
 				end
@@ -1218,10 +1202,13 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				Theme.FloatText(popAt, gateText(optionVisual.option), if good then P.MoneyGreen else P.ButtonRed)
 			end
 		elseif kind == "cash" then
+			-- The stack you took vanishes at once, like a gate.
 			local model = optionVisual.model
 			if model then
-				flyAway(model, Vector3.new(0, 6, 4), 0.4)
+				model:Destroy()
 				optionVisual.model = nil
+				optionVisual.anchor = nil
+				optionVisual.valueLabel = nil
 			end
 			if cashDelta > 0.001 then
 				Theme.FloatText(popAt, "+" .. Format.Money(cashDelta), P.MoneyGreen)

@@ -68,13 +68,16 @@ were measured from the pixels, not guessed (section 10).
 | **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red) |
 | **Weapon / damage gate** | 2 | Gold weapon gate (shows the gun you will get: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
 | **Cash row** | 3 | Stacks of cash, small/medium/large. **Their values only appear once you pass the row before** (owner request: no clutter far ahead) |
-| **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1 |
+| **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1. **The "N SOLDIERS" label also appears only once you pass the row before** (owner request) |
 | **Barricade** | 2 | Weak or strong; destroyed if your squad's damage in range is high enough (cash), otherwise you lose 25% of troops |
 | **Castle boss (end)** | – | See 2.3 |
 
 ❓ **Q2 — Original maths modifiers.** 💡 *Kept.* **+, ×, −, ÷ change the troop count** (the troops replace the
 coins of the original game). Exactly two **×2** gates appear per course, so troop counts stay readable.
 Red gates can also carry cash ("toll gates": −3 troops but +$15), which gives a real choice.
+✅ The gate (or cash stack) you run through **disappears instantly** (owner request). 💡 Every label on the track
+(cash values, toll cash, "N SOLDIERS", barricade HP) appears one row ahead only, as outlined text with no dark
+background, so nothing hides the track behind it.
 Weapons and damage use their own gold gates, not maths.
 
 ### 2.2 Guns and the squad (owner requests)
@@ -86,12 +89,15 @@ Weapons and damage use their own gold gates, not maths.
 
 | Gun | Damage per bullet | Bullets per second | Damage per second (per unit) | Bullets |
 |---|---|---|---|---|
-| Pistol | 10 | 2 | 20 | small yellow |
-| Rifle | 18 | 1.5 | 27 | long tracer |
-| SMG | 5 | 7 | 35 | small fast orange |
-| Assault Rifle | 9 | 5 | 45 | orange tracers |
-| Minigun | 6 | 10 | 60 | thin bright streams |
-| Rocket | 150 | 0.5 | 75 | big rocket, smoke, explosion |
+| Pistol | 10 | 2 | 20 | small orange |
+| Rifle | 18 | 1.5 | 27 | long red tracer |
+| SMG | 5 | 7 | 35 | small fast pink |
+| Assault Rifle | 9 | 5 | 45 | blue tracers |
+| Minigun | 6 | 10 | 60 | thin purple streams |
+| Rocket | 150 | 0.5 | 75 | big dark-red rocket, smoke, explosion |
+
+* ✅ Bullets are solid, strong colours (owner request: the old yellow/pale glowing bullets were invisible on the
+  white track).
 
 * 💡 Squad damage per second = units × gun damage × fire rate × your permanent damage upgrade × damage gates.
 * ✅ Run stats (troops, gun, squad damage per second, cash carried / capacity) are shown in a **screen corner**
@@ -167,6 +173,9 @@ The summary lists **Collected this run** (troops, weapons, damage gates, cash), 
 | 6 | Desert Outpost | Water Depot | Supply Bazaar | Solar Farm | Oasis Cafe |
 | 7 | Mountain Fortress | Climbing Gear | Hot Cocoa Hut | Ski Rental | Armory |
 | 8 | Command HQ | Medal Shop | War Room Cafe | Satellite Uplink | Officer Club |
+
+✅ The name + price over every unlock pad (and "Hire me" over employee tiles) is always drawn on top, so the
+white/green pad never cuts it off (owner request).
 
 ❓ **Q5 — Four unlocks at stage two.** 💡 In area 2, combat **replaces the fourth revenue section**:
 3 shops + the **Combat Arena**. The arena **counts as the area's fourth cash source**. It earns actively

@@ -624,8 +624,12 @@ local function buildPortal(map: Instance)
 			Enum.Material.Neon
 	end
 
-	-- "ARMY RUN ▶" painted on top. Written twice (one copy upside down, like a
-	-- helipad marking) so it reads correctly from both ends of the walkway.
+	-- "ARMY RUN ▶" painted on top, reading the same way as the arch sign
+	-- behind it: left to right along +X, its top towards the arch (-Z), so it
+	-- is upright for players walking up from the spawn (+Z). The top edge of a
+	-- SurfaceGui on a Top face points to the part's Left (-X) side, so an
+	-- unrotated label reads sideways from the walkway (owner feedback); Rotation
+	-- 90 turns it to face the spawn. The pad is square, so the canvas is too.
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "PortalText"
 	gui.Face = Enum.NormalId.Top
@@ -642,23 +646,22 @@ local function buildPortal(map: Instance)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.12, 0)
 	corner.Parent = inner
-	for i, rotation in { 0, 180 } do
-		local label = Instance.new("TextLabel")
-		label.BackgroundTransparency = 1
-		label.AnchorPoint = Vector2.new(0.5, 0.5)
-		label.Position = UDim2.fromScale(0.5, if i == 1 then 0.72 else 0.28)
-		label.Size = UDim2.fromScale(0.92, 0.36)
-		label.Rotation = rotation
-		label.Font = Config.Font
-		label.Text = "ARMY RUN ▶"
-		label.TextScaled = true
-		label.TextColor3 = P.CardOrange
-		label.Parent = inner
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = P.TextStroke
-		stroke.Thickness = 5
-		stroke.Parent = label
-	end
+	local label = Instance.new("TextLabel")
+	label.Name = "PortalLabel"
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.94, 0.5)
+	label.Rotation = 90
+	label.Font = Config.Font
+	label.Text = "ARMY RUN ▶"
+	label.TextScaled = true
+	label.TextColor3 = P.CardOrange
+	label.Parent = inner
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = P.TextStroke
+	stroke.Thickness = 5
+	stroke.Parent = label
 
 	-- Standing arch behind the pad, readable while walking up from the spawn.
 	-- The posts stand just OUTSIDE the sign beam so they never cover its text.

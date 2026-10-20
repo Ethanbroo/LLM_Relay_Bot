@@ -298,7 +298,9 @@ are written by the lead after the build — do not create them.
   fight: every unit fires the same gun; squad damage = units × UnitDps × ENGAGE_SECONDS
   (guns reach GUN_RANGE = 1.5 rows) kills enemies, survivors cost troops 1:1);
   **barricades** (HP; destroyed if that damage ≥ HP, else lose 25% of troops).
-  Cash-row values are hidden until the previous row is crossed.
+  Every value label (cash values, toll cash, squad "N SOLDIERS", barricade HP bar) is
+  hidden until the previous row is crossed, and is outlined text without a background.
+  The option you run through (gate panel, toll cash, cash stack) is removed instantly.
   Final **castle boss** (owner request): walks out of the castle with a head HP bar and
   kills one unit per interval (troops first, the avatar last); HP = BOSS_HP_SHARE × the
   best path's potential damage, so only the best lanes win. Reward only on victory.
@@ -399,7 +401,8 @@ are written by the lead after the build — do not create them.
 
 ## 7. Visual rules (match the reference images)
 * Bright, saturated toy look; `Enum.Material.SmoothPlastic` (Neon only for glows,
-  bullets, highlights). Colours only from `Config.Palette` (or a slot/vehicle colour).
+  flashes, highlights; runner bullets are SmoothPlastic in strong colours because Neon
+  turned them white on the white track). Colours only from `Config.Palette` (or a slot/vehicle colour).
 * Base: sky-blue floor, lighter walkways with white edge lines, plot outlines,
   green Lego-stud hedges (studs = small cylinders on top), yellow/red Lego walls,
   black iron gates with gold padlocks, grass patches with trees and benches, water

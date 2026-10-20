@@ -10934,8 +10934,12 @@ local function buildPortal(map: Instance)
 			Enum.Material.Neon
 	end
 
-	-- "ARMY RUN ▶" painted on top. Written twice (one copy upside down, like a
-	-- helipad marking) so it reads correctly from both ends of the walkway.
+	-- "ARMY RUN ▶" painted on top, reading the same way as the arch sign
+	-- behind it: left to right along +X, its top towards the arch (-Z), so it
+	-- is upright for players walking up from the spawn (+Z). The top edge of a
+	-- SurfaceGui on a Top face points to the part's Left (-X) side, so an
+	-- unrotated label reads sideways from the walkway (owner feedback); Rotation
+	-- 90 turns it to face the spawn. The pad is square, so the canvas is too.
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "PortalText"
 	gui.Face = Enum.NormalId.Top
@@ -10952,23 +10956,22 @@ local function buildPortal(map: Instance)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.12, 0)
 	corner.Parent = inner
-	for i, rotation in { 0, 180 } do
-		local label = Instance.new("TextLabel")
-		label.BackgroundTransparency = 1
-		label.AnchorPoint = Vector2.new(0.5, 0.5)
-		label.Position = UDim2.fromScale(0.5, if i == 1 then 0.72 else 0.28)
-		label.Size = UDim2.fromScale(0.92, 0.36)
-		label.Rotation = rotation
-		label.Font = Config.Font
-		label.Text = "ARMY RUN ▶"
-		label.TextScaled = true
-		label.TextColor3 = P.CardOrange
-		label.Parent = inner
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = P.TextStroke
-		stroke.Thickness = 5
-		stroke.Parent = label
-	end
+	local label = Instance.new("TextLabel")
+	label.Name = "PortalLabel"
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.94, 0.5)
+	label.Rotation = 90
+	label.Font = Config.Font
+	label.Text = "ARMY RUN ▶"
+	label.TextScaled = true
+	label.TextColor3 = P.CardOrange
+	label.Parent = inner
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = P.TextStroke
+	stroke.Thickness = 5
+	stroke.Parent = label
 
 	-- Standing arch behind the pad, readable while walking up from the spawn.
 	-- The posts stand just OUTSIDE the sign beam so they never cover its text.
@@ -21716,7 +21719,8 @@ return BaseCustomers
 
 		* locked slot (area unlocked)  -> white unlock pad with a thick green
 		                                  border, gold price + coin (image 1),
-		                                  ProximityPrompt "Unlock"
+		                                  ProximityPrompt "Unlock". Its name +
+		                                  price label is AlwaysOnTop (see buildPad)
 		* locked area                  -> a "LOCKED" sign in the middle of the area
 		* unlocked revenue section     -> colourful building (BuildingFactory),
 		                                  billboard with level, $/s, stock bar and a
@@ -21835,6 +21839,9 @@ local accumulator = 0
 local UPDATE_RATE = 1 / 30
 local PROMPT_DISTANCE = 10
 local BILLBOARD_DISTANCE = 150
+-- AlwaysOnTop labels show through walls, so they stop at a shorter distance
+-- (pads of the next area, 184 studs away, stay hidden).
+local PAD_LABEL_DISTANCE = 110
 local EMPLOYEE_HOP_TIME = 0.55
 
 -------------------------------------------------------------------------------
@@ -21876,13 +21883,14 @@ local function makePrompt(
 end
 
 -- World-sized billboard (Size in studs) with a "Content" frame inside that
--- Theme.Pop can bounce.
+-- Theme.Pop can bounce. `alwaysOnTop` draws it over everything else.
 local function billboard(
 	adornee: BasePart,
 	widthStuds: number,
 	heightStuds: number,
 	offsetY: number,
-	maxDistance: number?
+	maxDistance: number?,
+	alwaysOnTop: boolean?
 ): (BillboardGui, Frame)
 	local board = Theme.Billboard({
 		Name = "Info",
@@ -21890,6 +21898,7 @@ local function billboard(
 		Adornee = adornee,
 		Size = UDim2.fromScale(widthStuds, heightStuds),
 		StudsOffset = Vector3.new(0, offsetY, 0),
+		AlwaysOnTop = alwaysOnTop == true,
 		MaxDistance = maxDistance or BILLBOARD_DISTANCE,
 	})
 	local content = Instance.new("Frame")
@@ -21988,9 +21997,10 @@ local function buildPad(sv: SlotVisual)
 
 	local price = Economy.SlotUnlockPrice(sv.id)
 	local priceText = Format.Money(price)
-	-- Lifted well above the pad so the name + price are never cut off by the
-	-- floor when the camera looks down at the plot (owner feedback).
-	local board, content = billboard(tile, 14, 4, 4.6)
+	-- Lifted well above the pad AND drawn on top: the pad's white/green
+	-- picture is a SurfaceGui, and Roblox can draw it over a normal billboard
+	-- that overlaps it on screen, which cut the name + price off (owner feedback).
+	local board, content = billboard(tile, 14, 4, 4.6, PAD_LABEL_DISTANCE, true)
 	board.Name = "PadInfo"
 	sv.content = content
 	local titleText = if isArena then "⚔️ Combat Arena" else sv.def.icon .. " " .. sv.def.name
@@ -22164,7 +22174,8 @@ local function buildHireTile(sv: SlotVisual)
 	local tile =
 		BuildingFactory.FlatTile(folder, CFrame.new(pos + Vector3.new(0, 0.42, 0)), 7, 7, P.HireTile, P.White, 0.45)
 	tile.Name = "HireTile"
-	local board, content = billboard(tile, 6, 6, 4.6)
+	-- Drawn on top for the same reason as the unlock pad label (buildPad).
+	local board, content = billboard(tile, 6, 6, 4.6, PAD_LABEL_DISTANCE, true)
 	board.Name = "HireInfo"
 	local face = Theme.Label({
 		Text = "🧑‍💼",
@@ -25085,10 +25096,12 @@ return RunnerBoss
 			pool:Active() -> number                        bullets in flight
 			pool:Destroy()
 
-	Bullet styles (bulletStyle of RunnerDefs.WEAPONS):
-		pistol  small yellow slug        rifle   long pale tracer
-		smg     small fast orange slug   assault orange tracer
-		minigun thin bright stream       rocket  big red rocket + smoke trail + explosion flash
+	Bullet styles (bulletStyle of RunnerDefs.WEAPONS). The track floor is
+	white, so bullets are solid (not Neon: glowing yellows turned white) in
+	strong, dark-enough colours, one per gun:
+		pistol  small orange slug        rifle   long red tracer
+		smg     small fast pink slug     assault blue tracer
+		minigun thin purple stream       rocket  big dark-red rocket + smoke trail + explosion flash
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25338,50 +25351,60 @@ type Style = {
 	smoke: boolean, -- rocket smoke trail
 }
 
+-- [PROPOSAL] Bullet colours: saturated and dark enough to stand out on the
+-- white track floor (owner feedback: the old yellow / pale Neon bullets were
+-- invisible on it). Hit flashes use the same colour.
+local BULLET_ORANGE = Color3.fromRGB(235, 90, 0)
+local BULLET_RED = Color3.fromRGB(215, 20, 35)
+local BULLET_PINK = Color3.fromRGB(220, 30, 150)
+local BULLET_BLUE = Color3.fromRGB(25, 85, 235)
+local BULLET_PURPLE = Color3.fromRGB(125, 35, 220)
+local ROCKET_RED = Color3.fromRGB(170, 20, 20)
+
 local STYLES: { [string]: Style } = {
 	pistol = {
-		size = Vector3.new(0.3, 0.3, 0.7),
-		color = P.Coin,
+		size = Vector3.new(0.38, 0.38, 0.8),
+		color = BULLET_ORANGE,
 		shape = Enum.PartType.Block,
 		hitSize = 1.1,
-		hitColor = P.Coin,
+		hitColor = BULLET_ORANGE,
 		smoke = false,
 	},
 	rifle = {
-		size = Vector3.new(0.16, 0.16, 2.8),
-		color = P.CoinShine,
+		size = Vector3.new(0.26, 0.26, 2.8),
+		color = BULLET_RED,
 		shape = Enum.PartType.Block,
 		hitSize = 1.3,
-		hitColor = P.CoinShine,
+		hitColor = BULLET_RED,
 		smoke = false,
 	},
 	smg = {
-		size = Vector3.new(0.22, 0.22, 0.75),
-		color = P.CardOrange,
+		size = Vector3.new(0.3, 0.3, 0.85),
+		color = BULLET_PINK,
 		shape = Enum.PartType.Block,
 		hitSize = 0.9,
-		hitColor = P.CardOrange,
+		hitColor = BULLET_PINK,
 		smoke = false,
 	},
 	assault = {
-		size = Vector3.new(0.2, 0.2, 1.9),
-		color = P.CardOrange,
+		size = Vector3.new(0.28, 0.28, 1.9),
+		color = BULLET_BLUE,
 		shape = Enum.PartType.Block,
 		hitSize = 1.2,
-		hitColor = P.CoinDark,
+		hitColor = BULLET_BLUE,
 		smoke = false,
 	},
 	minigun = {
-		size = Vector3.new(0.12, 0.12, 3.6),
-		color = P.CoinShine,
+		size = Vector3.new(0.22, 0.22, 3.6),
+		color = BULLET_PURPLE,
 		shape = Enum.PartType.Block,
 		hitSize = 0.9,
-		hitColor = P.White,
+		hitColor = BULLET_PURPLE,
 		smoke = false,
 	},
 	rocket = {
 		size = Vector3.new(0.6, 0.6, 1.7),
-		color = P.ButtonRed,
+		color = ROCKET_RED,
 		shape = Enum.PartType.Block,
 		hitSize = 7,
 		hitColor = P.CardOrange,
@@ -25451,8 +25474,12 @@ function RunnerGuns.newPool(parent: Instance, maxBullets: number?): Pool
 		part.CanQuery = false
 		part.CanTouch = false
 		part.CastShadow = false
-		part.Material = Enum.Material.Neon
+		part.Material = Enum.Material.SmoothPlastic -- solid colour: Neon glows towards white on the white floor
+		-- Start in the pistol style for real (Fire only restyles when the style
+		-- changes, so without this the first pistol bullets stayed default grey).
 		part.Size = STYLES.pistol.size
+		part.Color = STYLES.pistol.color
+		part.Shape = STYLES.pistol.shape
 		part.CFrame = HIDDEN
 		part.Parent = folder
 		bullets[i] = {
@@ -26104,13 +26131,18 @@ return RunnerModels
 	                  When the row before a gold weapon gate is crossed, that gate is
 	                  relabelled with the gun you would get ("🔫 SMG"; at the top tier
 	                  "🔫 MAX +$X", the cash it pays instead); rows further ahead keep
-	                  "WEAPON +1" (the gun depends on the gates you take before them)
-	  * cash rows   - stacks of gold coins + green cash bricks. Their VALUE labels
-	                  (and the cash label of a red toll gate) stay hidden until the
-	                  previous row has been crossed (owner request: the far-away
-	                  values cluttered the view); row 1's are visible from the start
-	  * enemy squads- red-uniform soldiers with rifles and a count label
+	                  "WEAPON +1" (the gun depends on the gates you take before them).
+	                  The panel you run through vanishes at once (owner request)
+	  * cash rows   - stacks of gold coins + green cash bricks; the stack you take
+	                  vanishes at once
+	  * enemy squads- red-uniform soldiers with rifles and a "N SOLDIERS" label
 	  * barricades  - sandbag walls with an HP bar
+	  * value labels- a row's cash values, a red toll gate's cash, a squad's
+	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
+	                  previous row has been crossed (owner request: far-away labels
+	                  cluttered the view); row 1's are visible from the start. They
+	                  are plain outlined text (no dark pill behind them), so they never
+	                  cover what is further down the track
 	  * the castle  - at the end of the track, with a 13-stud gateway; the BOSS
 	                  (RunnerBoss) waits hidden behind its door and walks out of it
 	  * your squad  - up to 40 green toy soldiers standing NEXT TO the avatar in
@@ -26125,7 +26157,7 @@ return RunnerModels
 	                  fireRate (up to FRONT_MAX_RATE = 12/s); the back rows share what
 	                  is left of the bullet budget (BULLET_BUDGET of the pool alive),
 	                  so the pistol, SMG, assault rifle and minigun clearly differ in
-	                  rate, bullet style and speed. Range: RunnerDefs.GUN_RANGE
+	                  rate, bullet style, colour and speed. Range: RunnerDefs.GUN_RANGE
 	  * effects     - pop text, gate flashes, hit flashes, falling enemies, confetti
 
 	The OUTCOME of every fight comes from RunnerSim (RunnerController passes it
@@ -26304,13 +26336,8 @@ local function makeHpBar(adornee: BasePart, title: string, width: number, offset
 	}
 end
 
-local function makeTextBillboard(
-	adornee: BasePart,
-	text: string,
-	color: Color3,
-	offsetY: number,
-	pill: Color3?
-): BillboardGui
+-- Outlined text only (no background), so it never hides what is behind it.
+local function makeTextBillboard(adornee: BasePart, text: string, color: Color3, offsetY: number): BillboardGui
 	local gui = Theme.Billboard({
 		Name = "Value",
 		Parent = adornee,
@@ -26320,28 +26347,16 @@ local function makeTextBillboard(
 		AlwaysOnTop = false,
 		MaxDistance = 220,
 	})
-	local holder: Instance = gui
-	if pill then
-		local frame = Instance.new("Frame")
-		frame.Name = "Pill"
-		frame.BackgroundColor3 = pill
-		frame.Size = UDim2.fromScale(0.8, 1)
-		frame.Position = UDim2.fromScale(0.5, 0)
-		frame.AnchorPoint = Vector2.new(0.5, 0)
-		frame.Parent = gui
-		Theme.Corner(frame, 0.4)
-		Theme.Stroke(frame, P.CardOutline, 2, true)
-		holder = frame
-	end
 	Theme.Label({
 		Name = "Text",
 		Text = text,
 		TextColor3 = color,
 		MaxTextSize = 34,
+		StrokeThickness = 3,
 		Size = UDim2.new(1, -8, 1, -4),
 		Position = UDim2.fromScale(0.5, 0.5),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Parent = holder,
+		Parent = gui,
 	})
 	return gui
 end
@@ -26459,7 +26474,7 @@ type OptionVisual = {
 	targets: { Vector3 },
 	hp: HpBar?,
 	anchor: Part?,
-	cashLabel: BillboardGui?, -- hidden until the previous row is crossed
+	valueLabel: BillboardGui?, -- cash / "N SOLDIERS" / HP bar: hidden until the previous row is crossed
 }
 
 type RowVisual = { row: Row, options: { OptionVisual }, revealed: boolean, crossed: boolean }
@@ -26550,16 +26565,16 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			-- A red "toll" gate also carries cash: a small stack behind it whose
 			-- value label stays hidden until the previous row is crossed.
 			local tollCash: Model? = nil
-			local cashLabel: BillboardGui? = nil
+			local valueLabel: BillboardGui? = nil
 			local cash = option.cash or 0
 			if cash > 0 then
 				local base = worldAt(row.distance + 2.5, option.x, 0)
 				local stack = RunnerModels.CoinStack(rowFolder, base, 4)
 				tollCash = stack
 				local anchor = anchorPart(stack, base + Vector3.new(0, 3.2, 0))
-				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6, P.PillBlack)
+				local gui = makeTextBillboard(anchor, "+" .. Format.Money(cash), P.MoneyGreen, 0.6)
 				gui.Enabled = false
-				cashLabel = gui
+				valueLabel = gui
 			end
 			table.insert(list, {
 				option = option,
@@ -26571,7 +26586,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = nil,
-				cashLabel = cashLabel,
+				valueLabel = valueLabel,
 			})
 		end
 		for _, x in edges do
@@ -26598,7 +26613,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local base = worldAt(row.distance, option.x, 0)
 			local model = RunnerModels.CoinStack(rowFolder, base, coins)
 			local anchor = anchorPart(model, base + Vector3.new(0, 3.6, 0))
-			local gui = makeTextBillboard(anchor, Format.Money(cash), P.PriceGold, 1.2, nil)
+			local gui = makeTextBillboard(anchor, Format.Money(cash), P.PriceGold, 1.2)
 			gui.Enabled = false -- revealed when the previous row is crossed
 			table.insert(list, {
 				option = option,
@@ -26610,7 +26625,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = anchor,
-				cashLabel = gui,
+				valueLabel = gui,
 			})
 		end
 		return list
@@ -26638,13 +26653,13 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				table.insert(rigs, { rig = rig, fall = 0, target = 0 })
 			end
 			local anchor = anchorPart(model, worldAt(row.distance, option.x, 4.5))
-			makeTextBillboard(
+			local gui = makeTextBillboard(
 				anchor,
 				if option.label ~= "" then option.label else tostring(count),
-				P.White,
-				0.8,
-				P.EnemyRed
+				P.ButtonRed,
+				0.8
 			)
+			gui.Enabled = false -- revealed when the previous row is crossed (like the cash values)
 			table.insert(list, {
 				option = option,
 				centre = worldAt(row.distance, option.x, 0),
@@ -26655,7 +26670,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = {},
 				hp = nil,
 				anchor = anchor,
-				cashLabel = nil,
+				valueLabel = gui,
 			})
 		end
 		return list
@@ -26670,6 +26685,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local anchor = anchorPart(model, centre + Vector3.new(0, 4.4, 0))
 			local hp = makeHpBar(anchor, "HP " .. Format.Short(math.floor((option.hp or 0) + 0.5)), 150, 1.4)
 			hp.set(1)
+			hp.gui.Enabled = false -- revealed when the previous row is crossed (like the cash values)
 			local targets = {
 				centre + Vector3.new(-width / 4, 1.5, 0.7),
 				centre + Vector3.new(0, 2.2, 0.7),
@@ -26685,7 +26701,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				targets = targets,
 				hp = hp,
 				anchor = anchor,
-				cashLabel = nil,
+				valueLabel = hp.gui,
 			})
 		end
 		return list
@@ -26730,7 +26746,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		return "🔫 " .. (if def then def.short else option.label)
 	end
 
-	-- Show a row's cash values (owner request: only once the row before it is
+	-- Show a row's value labels (owner request: only once the row before it is
 	-- crossed) and name the gun its weapon gates give with the weapon tier the
 	-- squad has now (`tierNow`).
 	local function reveal(index: number, tierNow: number)
@@ -26745,8 +26761,8 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				label.Text = weaponGateText(ov.option, tierNow)
 				Theme.Pop(label)
 			end
-			local gui = ov.cashLabel
-			if gui then
+			local gui = ov.valueLabel
+			if gui and gui.Parent then
 				gui.Enabled = true
 				local holder = gui:FindFirstChildWhichIsA("GuiObject")
 				if holder then
@@ -27270,7 +27286,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 		rowVisual.crossed = true
 		engaged[rowIndex] = nil
-		-- The next row's cash values appear now; its weapon gates name the gun
+		-- The next row's value labels appear now; its weapon gates name the gun
 		-- for the tier we have after THIS row (SetSquad updates `tier` later).
 		reveal(rowIndex + 1, if outcome then outcome.weaponTier else tier)
 		local optionVisual = rowVisual.options[lane]
@@ -27284,24 +27300,19 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		local tierBefore = tier
 
 		if kind == "gate" then
+			-- The panel you ran through vanishes at once (owner request), with
+			-- its label and any toll cash behind it; the pop text below is the feedback.
 			local panel = optionVisual.panel
 			if panel then
-				-- Flash bright, then fade away like the Count-Masters gates.
-				panel.Transparency = 0.1
-				Theme.Tween(panel, { Transparency = 1 }, 0.45)
-				local label = optionVisual.label
-				if label then
-					Theme.Tween(label, { TextTransparency = 1 }, 0.45)
-					local stroke = label:FindFirstChildOfClass("UIStroke")
-					if stroke then
-						Theme.Tween(stroke, { Transparency = 1 }, 0.45)
-					end
-				end
+				panel:Destroy()
+				optionVisual.panel = nil
+				optionVisual.label = nil
 			end
 			local tollCash = optionVisual.model
 			if tollCash then
-				flyAway(tollCash, Vector3.new(0, 6, 4), 0.4)
+				tollCash:Destroy()
 				optionVisual.model = nil
+				optionVisual.valueLabel = nil
 				if cashDelta > 0.001 then
 					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(cashDelta), P.MoneyGreen)
 				end
@@ -27312,10 +27323,13 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				Theme.FloatText(popAt, gateText(optionVisual.option), if good then P.MoneyGreen else P.ButtonRed)
 			end
 		elseif kind == "cash" then
+			-- The stack you took vanishes at once, like a gate.
 			local model = optionVisual.model
 			if model then
-				flyAway(model, Vector3.new(0, 6, 4), 0.4)
+				model:Destroy()
 				optionVisual.model = nil
+				optionVisual.anchor = nil
+				optionVisual.valueLabel = nil
 			end
 			if cashDelta > 0.001 then
 				Theme.FloatText(popAt, "+" .. Format.Money(cashDelta), P.MoneyGreen)
@@ -107434,7 +107448,7 @@ return RunnerVisuals
               </Item>
               <Item class="TextLabel" referent="2540">
                 <Properties>
-                  <string name="Name">TextLabel</string>
+                  <string name="Name">PortalLabel</string>
                   <Vector2 name="AnchorPoint">
                     <X>0.5</X>
                     <Y>0.5</Y>
@@ -107450,14 +107464,14 @@ return RunnerVisuals
                   <UDim2 name="Position">
                     <XS>0.5</XS>
                     <XO>0</XO>
-                    <YS>0.72</YS>
+                    <YS>0.5</YS>
                     <YO>0</YO>
                   </UDim2>
-                  <float name="Rotation">0</float>
+                  <float name="Rotation">90</float>
                   <UDim2 name="Size">
-                    <XS>0.92</XS>
+                    <XS>0.94</XS>
                     <XO>0</XO>
-                    <YS>0.36</YS>
+                    <YS>0.5</YS>
                     <YO>0</YO>
                   </UDim2>
                   <string name="Text">ARMY RUN ▶</string>
@@ -107480,56 +107494,76 @@ return RunnerVisuals
                   </Properties>
                 </Item>
               </Item>
-              <Item class="TextLabel" referent="2542">
-                <Properties>
-                  <string name="Name">TextLabel</string>
-                  <Vector2 name="AnchorPoint">
-                    <X>0.5</X>
-                    <Y>0.5</Y>
-                  </Vector2>
-                  <float name="BackgroundTransparency">1</float>
-                  <Font name="FontFace">
-                    <Family>
-                      <url>rbxasset://fonts/families/FredokaOne.json</url>
-                    </Family>
-                    <Weight>400</Weight>
-                    <Style>Normal</Style>
-                  </Font>
-                  <UDim2 name="Position">
-                    <XS>0.5</XS>
-                    <XO>0</XO>
-                    <YS>0.28</YS>
-                    <YO>0</YO>
-                  </UDim2>
-                  <float name="Rotation">180</float>
-                  <UDim2 name="Size">
-                    <XS>0.92</XS>
-                    <XO>0</XO>
-                    <YS>0.36</YS>
-                    <YO>0</YO>
-                  </UDim2>
-                  <string name="Text">ARMY RUN ▶</string>
-                  <Color3 name="TextColor3">
-                    <R>0.9882353</R>
-                    <G>0.6431373</G>
-                    <B>0.047058824</B>
-                  </Color3>
-                  <bool name="TextScaled">true</bool>
-                </Properties>
-                <Item class="UIStroke" referent="2543">
-                  <Properties>
-                    <string name="Name">UIStroke</string>
-                    <Color3 name="Color">
-                      <R>0.10980392</R>
-                      <G>0.11764706</G>
-                      <B>0.18039216</B>
-                    </Color3>
-                    <float name="Thickness">5</float>
-                  </Properties>
-                </Item>
-              </Item>
             </Item>
           </Item>
+        </Item>
+        <Item class="Part" referent="2542">
+          <Properties>
+            <string name="Name">PortalGlow</string>
+            <bool name="Anchored">true</bool>
+            <token name="BottomSurface">0</token>
+            <CoordinateFrame name="CFrame">
+              <X>-7</X>
+              <Y>0.2899933</Y>
+              <Z>-60</Z>
+              <R00>1</R00>
+              <R01>0</R01>
+              <R02>0</R02>
+              <R10>0</R10>
+              <R11>1</R11>
+              <R12>0</R12>
+              <R20>0</R20>
+              <R21>0</R21>
+              <R22>1</R22>
+            </CoordinateFrame>
+            <bool name="CanCollide">true</bool>
+            <bool name="CanTouch">false</bool>
+            <bool name="CastShadow">false</bool>
+            <Color3uint8 name="Color3uint8">16557068</Color3uint8>
+            <token name="Material">288</token>
+            <token name="shape">1</token>
+            <Vector3 name="size">
+              <X>1</X>
+              <Y>0.1000061</Y>
+              <Z>15</Z>
+            </Vector3>
+            <token name="TopSurface">0</token>
+            <float name="Transparency">0</float>
+          </Properties>
+        </Item>
+        <Item class="Part" referent="2543">
+          <Properties>
+            <string name="Name">PortalGlow</string>
+            <bool name="Anchored">true</bool>
+            <token name="BottomSurface">0</token>
+            <CoordinateFrame name="CFrame">
+              <X>0</X>
+              <Y>0.2899933</Y>
+              <Z>-67</Z>
+              <R00>1</R00>
+              <R01>0</R01>
+              <R02>0</R02>
+              <R10>0</R10>
+              <R11>1</R11>
+              <R12>0</R12>
+              <R20>0</R20>
+              <R21>0</R21>
+              <R22>1</R22>
+            </CoordinateFrame>
+            <bool name="CanCollide">true</bool>
+            <bool name="CanTouch">false</bool>
+            <bool name="CastShadow">false</bool>
+            <Color3uint8 name="Color3uint8">16557068</Color3uint8>
+            <token name="Material">288</token>
+            <token name="shape">1</token>
+            <Vector3 name="size">
+              <X>13</X>
+              <Y>0.1000061</Y>
+              <Z>1</Z>
+            </Vector3>
+            <token name="TopSurface">0</token>
+            <float name="Transparency">0</float>
+          </Properties>
         </Item>
         <Item class="Part" referent="2544">
           <Properties>
@@ -107537,7 +107571,7 @@ return RunnerVisuals
             <bool name="Anchored">true</bool>
             <token name="BottomSurface">0</token>
             <CoordinateFrame name="CFrame">
-              <X>-7</X>
+              <X>7</X>
               <Y>0.2899933</Y>
               <Z>-60</Z>
               <R00>1</R00>
@@ -107573,74 +107607,6 @@ return RunnerVisuals
             <CoordinateFrame name="CFrame">
               <X>0</X>
               <Y>0.2899933</Y>
-              <Z>-67</Z>
-              <R00>1</R00>
-              <R01>0</R01>
-              <R02>0</R02>
-              <R10>0</R10>
-              <R11>1</R11>
-              <R12>0</R12>
-              <R20>0</R20>
-              <R21>0</R21>
-              <R22>1</R22>
-            </CoordinateFrame>
-            <bool name="CanCollide">true</bool>
-            <bool name="CanTouch">false</bool>
-            <bool name="CastShadow">false</bool>
-            <Color3uint8 name="Color3uint8">16557068</Color3uint8>
-            <token name="Material">288</token>
-            <token name="shape">1</token>
-            <Vector3 name="size">
-              <X>13</X>
-              <Y>0.1000061</Y>
-              <Z>1</Z>
-            </Vector3>
-            <token name="TopSurface">0</token>
-            <float name="Transparency">0</float>
-          </Properties>
-        </Item>
-        <Item class="Part" referent="2546">
-          <Properties>
-            <string name="Name">PortalGlow</string>
-            <bool name="Anchored">true</bool>
-            <token name="BottomSurface">0</token>
-            <CoordinateFrame name="CFrame">
-              <X>7</X>
-              <Y>0.2899933</Y>
-              <Z>-60</Z>
-              <R00>1</R00>
-              <R01>0</R01>
-              <R02>0</R02>
-              <R10>0</R10>
-              <R11>1</R11>
-              <R12>0</R12>
-              <R20>0</R20>
-              <R21>0</R21>
-              <R22>1</R22>
-            </CoordinateFrame>
-            <bool name="CanCollide">true</bool>
-            <bool name="CanTouch">false</bool>
-            <bool name="CastShadow">false</bool>
-            <Color3uint8 name="Color3uint8">16557068</Color3uint8>
-            <token name="Material">288</token>
-            <token name="shape">1</token>
-            <Vector3 name="size">
-              <X>1</X>
-              <Y>0.1000061</Y>
-              <Z>15</Z>
-            </Vector3>
-            <token name="TopSurface">0</token>
-            <float name="Transparency">0</float>
-          </Properties>
-        </Item>
-        <Item class="Part" referent="2547">
-          <Properties>
-            <string name="Name">PortalGlow</string>
-            <bool name="Anchored">true</bool>
-            <token name="BottomSurface">0</token>
-            <CoordinateFrame name="CFrame">
-              <X>0</X>
-              <Y>0.2899933</Y>
               <Z>-53</Z>
               <R00>1</R00>
               <R01>0</R01>
@@ -107667,7 +107633,7 @@ return RunnerVisuals
             <float name="Transparency">0</float>
           </Properties>
         </Item>
-        <Item class="Part" referent="2548">
+        <Item class="Part" referent="2546">
           <Properties>
             <string name="Name">ArchPost</string>
             <bool name="Anchored">true</bool>
@@ -107701,7 +107667,7 @@ return RunnerVisuals
             <float name="Transparency">0</float>
           </Properties>
         </Item>
-        <Item class="Part" referent="2549">
+        <Item class="Part" referent="2547">
           <Properties>
             <string name="Name">ArchPost</string>
             <bool name="Anchored">true</bool>
@@ -107735,7 +107701,7 @@ return RunnerVisuals
             <float name="Transparency">0</float>
           </Properties>
         </Item>
-        <Item class="Part" referent="2550">
+        <Item class="Part" referent="2548">
           <Properties>
             <string name="Name">ArchSign</string>
             <bool name="Anchored">true</bool>
@@ -107768,7 +107734,7 @@ return RunnerVisuals
             <token name="TopSurface">0</token>
             <float name="Transparency">0</float>
           </Properties>
-          <Item class="SurfaceGui" referent="2551">
+          <Item class="SurfaceGui" referent="2549">
             <Properties>
               <string name="Name">TextBack</string>
               <token name="Face">2</token>
@@ -107776,7 +107742,7 @@ return RunnerVisuals
               <float name="PixelsPerStud">24</float>
               <token name="SizingMode">1</token>
             </Properties>
-            <Item class="TextLabel" referent="2552">
+            <Item class="TextLabel" referent="2550">
               <Properties>
                 <string name="Name">TextLabel</string>
                 <Color3 name="BackgroundColor3">
@@ -107806,7 +107772,7 @@ return RunnerVisuals
                 </Color3>
                 <bool name="TextScaled">true</bool>
               </Properties>
-              <Item class="UIPadding" referent="2553">
+              <Item class="UIPadding" referent="2551">
                 <Properties>
                   <string name="Name">UIPadding</string>
                   <UDim name="PaddingBottom">
@@ -107827,7 +107793,7 @@ return RunnerVisuals
                   </UDim>
                 </Properties>
               </Item>
-              <Item class="UIStroke" referent="2554">
+              <Item class="UIStroke" referent="2552">
                 <Properties>
                   <string name="Name">UIStroke</string>
                   <Color3 name="Color">
