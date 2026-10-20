@@ -41,7 +41,13 @@ echo "== rojo build"
 mkdir -p build
 TMP_BUILD=$(mktemp --suffix=.rbxlx)
 rojo build default.project.json -o "$TMP_BUILD" >/dev/null; BUILD_RC=$?
-if [ "$BUILD_RC" = 0 ]; then mv -f "$TMP_BUILD" build/ArmyRunTycoon.rbxlx; echo "-- built build/ArmyRunTycoon.rbxlx"; else rm -f "$TMP_BUILD"; fi
+if [ "$BUILD_RC" = 0 ]; then
+  # Pre-build the static map into the place so it is visible in Studio's editor.
+  lune run scripts/bake "$TMP_BUILD" || echo "-- WARNING: map bake failed (the map will still be built when the game starts)"
+  mv -f "$TMP_BUILD" build/ArmyRunTycoon.rbxlx; chmod 644 build/ArmyRunTycoon.rbxlx; echo "-- built build/ArmyRunTycoon.rbxlx"
+else
+  rm -f "$TMP_BUILD"
+fi
 
 if [ "$TYPE_OK" = 1 ] && [ "$TEST_RC" = 0 ] && [ "$BUILD_RC" = 0 ]; then
   echo "ALL CHECKS PASSED"; exit 0

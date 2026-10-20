@@ -188,6 +188,49 @@ customRequire = function(target: any)
 	error("harness: unsupported require target " .. tostring(target))
 end
 
+-- Load a module by its path under src/ with extra globals (used by scripts/bake.luau
+-- to run server code that builds Instances into a real Lune DataModel).
+-- `services` maps service name -> Instance returned by game:GetService.
+function Harness.loadWithServices(relativePath: string, services: { [string]: any }, extraGlobals: { [string]: any }?): any
+	local file = resolveFile(SRC .. "/" .. relativePath)
+	if not file then
+		error("harness: cannot find module at " .. relativePath)
+	end
+	local gameWithServices = {
+		GetService = function(_self, name)
+			if services[name] then
+				return services[name]
+			end
+			return serviceProxy(name)
+		end,
+	}
+	local env = {
+		script = makeProxy(file),
+		require = customRequire,
+		game = gameWithServices,
+		Instance = roblox.Instance,
+		Color3 = roblox.Color3,
+		Vector3 = roblox.Vector3,
+		Vector2 = roblox.Vector2,
+		CFrame = roblox.CFrame,
+		UDim = roblox.UDim,
+		UDim2 = roblox.UDim2,
+		Enum = roblox.Enum,
+		BrickColor = roblox.BrickColor,
+		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		NumberRange = roblox.NumberRange,
+		task = task,
+	}
+	for key, value in extraGlobals or {} do
+		env[key] = value
+	end
+	local fn = luau.load(fs.readFile(file), { debugName = file, environment = env })
+	return fn()
+end
+
 -- Load a module by its path under src/, e.g. Harness.load("shared/Economy")
 function Harness.load(relativePath: string): any
 	return loadModule(SRC .. "/" .. relativePath)
