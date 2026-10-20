@@ -10,8 +10,13 @@
 		          Theme.PurchaseDialog (fixed Robux price or a cash price that
 		          grows with your progress: Economy.VehicleCoinPrice).
 		BOOSTS    how the random offers on the home map work, every boost with
-		          its appearance chance (from Config.Boosts weights), its Robux
-		          price, its current cash price, and the active 2x timer.
+		          its appearance chance (Config.Boosts weights, using the same
+		          candidate rule as BoostService: a time skip is only offered
+		          when it would pay >= 25% of its full value right now), its
+		          Robux price, its current cash price, and the active 2x timer.
+		          Time skips show "Pays $X now" (Economy.TimeSkipPayout of your
+		          shops) and "up to $V when every shop has an employee"; their
+		          cash price is 80% of what they pay you now (+25%).
 
 	Public API (used by Controllers/ShopController):
 		ShopUI.Open(opts): () -> ()        -- returns close(); does nothing extra if already open
@@ -25,6 +30,9 @@
 		ShopUI.Refresh()                   -- call after a data Sync (rebuilds only if something relevant changed)
 		ShopUI.IsOpen(): boolean
 		ShopUI.Close()
+		ShopUI.BoostPricing(def, data): (price, preview?, reference)
+			-- cash price right now (same maths as the server), what a time skip
+			   pays right now (nil for 2x) and Economy.BoostValue (the reference)
 
 	All text/prices are display only: the server re-checks every purchase.
 ]]
@@ -85,6 +93,17 @@ local timerLabel: TextLabel? = nil
 local timerThread: thread? = nil
 local dialogClose: (() -> ())? = nil
 
+-- Labels of the boosts tab that are updated in place (stock changes every
+-- sale, rebuilding the whole tab that often would reset the scroll).
+type BoostRow = {
+	def: Config.BoostDef,
+	detail: TextLabel,
+	chance: TextLabel,
+	price: TextLabel,
+	cashPill: Frame,
+}
+local boostRows: { BoostRow } = {}
+
 local function getGui(): ScreenGui
 	if not shopGui then
 		-- Below Theme's modal gui (50) so purchase dialogs appear on top.
@@ -98,12 +117,39 @@ local function pct(fraction: number): string
 	return string.format("%g%%", math.floor(fraction * 1000 + 0.5) / 10)
 end
 
-local function totalBoostWeight(): number
+-- Cash price, time-skip preview (nil for 2x) and reference value of a boost
+-- for this player right now. The server recomputes the price at purchase.
+function ShopUI.BoostPricing(def: Config.BoostDef, data: any): (number, number?, number)
+	local area = data.base.highestArea
+	local reference = Economy.BoostValue(def.id, area)
+	if def.kind == "timeskip" then
+		local preview = Economy.TimeSkipPayout(data.base.sections, (def.hours or 0) * 3600)
+		return Economy.TimeSkipCoinPrice(def.id, area, preview), preview, reference
+	end
+	return Economy.BoostCoinPrice(def.id, area), nil, reference
+end
+
+-- Chance of each boost being the next offer, with the same candidate filter
+-- as BoostService.spawnOffer (time skips only when worth offering).
+local function offerChances(data: any): { [string]: number }
+	local weights: { [string]: number } = {}
 	local total = 0
 	for _, def in Config.Boosts do
-		total += math.max(0, def.weight)
+		local offered = true
+		if def.kind == "timeskip" then
+			local _, preview = ShopUI.BoostPricing(def, data)
+			offered = Economy.TimeSkipWorthOffering(def.id, data.base.highestArea, preview or 0)
+		end
+		if offered then
+			weights[def.id] = math.max(0, def.weight)
+			total += math.max(0, def.weight)
+		end
 	end
-	return total
+	local chances: { [string]: number } = {}
+	for _, def in Config.Boosts do
+		chances[def.id] = if total > 0 then (weights[def.id] or 0) / total else 0
+	end
+	return chances
 end
 
 -- A compact text describing everything the current tab depends on, so we
@@ -124,12 +170,9 @@ local function signature(): string
 					.. (if data.cash + 1e-6 >= price then "a" else "-")
 			)
 		end
-	else
-		for _, def in Config.Boosts do
-			local price = Economy.BoostCoinPrice(def.id, data.base.highestArea)
-			table.insert(parts, def.id .. (if data.cash + 1e-6 >= price then "a" else "-"))
-		end
 	end
+	-- Boosts tab: prices / previews / chances are updated in place
+	-- (updateBoostRows), only the tab and the area rebuild it.
 	return table.concat(parts, "|")
 end
 
@@ -175,6 +218,7 @@ local function openVehicleDialog(def: Config.VehicleDef)
 		CashPrice = price,
 		CashAffordable = data.cash + 1e-6 >= price,
 		Footnote = "The Robux price is fixed. The cash price grows with the areas you unlock.",
+		Context = "Base",
 		OnClose = function()
 			dialogClose = nil
 		end,
@@ -312,11 +356,41 @@ local function timerText(): string
 	return "No 2x boost active right now"
 end
 
-local function boostDescription(def: Config.BoostDef): string
+local function boostDetailText(def: Config.BoostDef, preview: number?, reference: number): string
 	if def.kind == "multiplier" then
-		return ("Doubles ALL cash you earn for %d min of play time"):format(def.minutes or 0)
+		return ("Doubles ALL cash you earn for %d min of play time  •  worth ~%s"):format(
+			def.minutes or 0,
+			Format.Money(reference)
+		)
 	end
-	return ("Instantly collects %dh of your shops' revenue"):format(def.hours or 0)
+	return ("Pays %s now  •  up to %s when every shop has an employee"):format(
+		Format.Money(preview or 0),
+		Format.Money(reference)
+	)
+end
+
+local function chanceText(chance: number): string
+	return ("🍀 %s chance"):format(pct(chance))
+end
+
+-- Refresh the numbers of every boost row (stock, cash and area change often).
+local function updateBoostRows()
+	local data = State.Get()
+	if not data or #boostRows == 0 then
+		return
+	end
+	local chances = offerChances(data)
+	for _, row in boostRows do
+		if not row.price.Parent then
+			continue
+		end
+		local price, preview, reference = ShopUI.BoostPricing(row.def, data)
+		local affordable = price > 0 and data.cash + 1e-6 >= price
+		row.detail.Text = boostDetailText(row.def, preview, reference)
+		row.chance.Text = chanceText(chances[row.def.id] or 0)
+		row.price.Text = Format.Money(price)
+		row.cashPill.BackgroundColor3 = if affordable then P.ButtonGreen else P.ButtonGreyDark
+	end
 end
 
 local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: number, chance: number)
@@ -324,9 +398,8 @@ local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: numb
 	if not data then
 		return
 	end
-	local price = Economy.BoostCoinPrice(def.id, data.base.highestArea)
-	local value = Economy.BoostValue(def.id, data.base.highestArea)
-	local affordable = data.cash + 1e-6 >= price
+	local price, preview, value = ShopUI.BoostPricing(def, data)
+	local affordable = price > 0 and data.cash + 1e-6 >= price
 
 	local row = Instance.new("Frame")
 	row.Name = "Boost_" .. def.id
@@ -352,8 +425,8 @@ local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: numb
 		Position = UDim2.fromOffset(58, 4),
 		Parent = row,
 	})
-	Theme.Label({
-		Text = ("%s  •  worth ~%s"):format(boostDescription(def), Format.Money(value)),
+	local detail = Theme.Label({
+		Text = boostDetailText(def, preview, value),
 		MaxTextSize = 16,
 		TextColor3 = Color3.fromRGB(226, 214, 255),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -370,8 +443,8 @@ local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: numb
 	chancePill.Size = UDim2.new(0.2, -8, 0, 46)
 	chancePill.Parent = row
 	Theme.Corner(chancePill, 10)
-	Theme.Label({
-		Text = ("🍀 %s chance"):format(pct(chance)),
+	local chanceLabel = Theme.Label({
+		Text = chanceText(chance),
 		MaxTextSize = 18,
 		Size = UDim2.new(1, -8, 1, -6),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -412,7 +485,7 @@ local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: numb
 		Position = UDim2.new(0, 6, 0.5, 0),
 		Parent = cashPill,
 	})
-	Theme.Label({
+	local priceLabel = Theme.Label({
 		Text = Format.Money(price),
 		TextColor3 = P.PriceGold,
 		MaxTextSize = 20,
@@ -421,6 +494,10 @@ local function buildBoostRow(parent: Instance, def: Config.BoostDef, order: numb
 		AnchorPoint = Vector2.new(0, 0.5),
 		Parent = cashPill,
 	})
+	table.insert(
+		boostRows,
+		{ def = def, detail = detail, chance = chanceLabel, price = priceLabel, cashPill = cashPill }
+	)
 end
 
 local function buildBoostsTab(page: Frame)
@@ -442,7 +519,7 @@ local function buildBoostsTab(page: Frame)
 	local info = Instance.new("Frame")
 	info.Name = "HowItWorks"
 	info.BackgroundColor3 = P.CardBlueDark
-	info.Size = UDim2.new(1, -12, 0, 140)
+	info.Size = UDim2.new(1, -12, 0, 165)
 	info.LayoutOrder = 1
 	info.Parent = scroll
 	Theme.Corner(info, 12)
@@ -457,11 +534,12 @@ local function buildBoostsTab(page: Frame)
 	local minMinutes = Config.BoostOffers.MinInterval / 60
 	local maxMinutes = Config.BoostOffers.MaxInterval / 60
 	Theme.Label({
-		Text = ("Every %s-%s minutes a purple bubble pops up on a walkway of your base (up to %d at once, each stays %ds). Walk into it to buy it with Robux or cash. It is luck: cheap boosts appear often, valuable ones rarely. The cash price is 80%% of what the boost is worth, so it still pays back +25%% if you use it fully. Time skips only appear once you own a shop."):format(
+		Text = ("Every %s-%s minutes a purple bubble pops up on a walkway of your base (up to %d at once, each stays %ds). Walk into it to buy it with Robux or cash. It is luck: cheap boosts appear often, valuable ones rarely. 2x cash price = 80%% of its value (+25%% if you keep playing). Time skips: cash price = 80%% of what it pays you now (+25%%); they only appear once your shops would collect at least %d%% of the full amount, so hire employees!"):format(
 			string.format("%g", math.floor(minMinutes * 10 + 0.5) / 10),
 			string.format("%g", math.floor(maxMinutes * 10 + 0.5) / 10),
 			Config.BoostOffers.MaxActive,
-			Config.BoostOffers.Lifetime
+			Config.BoostOffers.Lifetime,
+			math.floor(Economy.TimeSkipOfferMinShare * 100 + 0.5)
 		),
 		MaxTextSize = 18,
 		TextColor3 = Color3.fromRGB(226, 238, 255),
@@ -488,10 +566,10 @@ local function buildBoostsTab(page: Frame)
 		Parent = timerRow,
 	})
 
-	local total = totalBoostWeight()
+	local data = State.Get()
+	local chances = if data then offerChances(data) else {}
 	for index, def in Config.Boosts do
-		local chance = if total > 0 then math.max(0, def.weight) / total else 0
-		buildBoostRow(scroll, def, 10 + index, chance)
+		buildBoostRow(scroll, def, 10 + index, chances[def.id] or 0)
 	end
 end
 
@@ -537,6 +615,7 @@ rebuild = function()
 		return
 	end
 	timerLabel = nil
+	table.clear(boostRows)
 	for _, child in frame:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
@@ -582,10 +661,12 @@ function ShopUI.Open(opts: OpenOptions): () -> ()
 		HeaderDarkColor = P.CardPinkDark,
 		Size = UDim2.fromOffset(880, 590),
 		Gui = getGui(),
+		Context = "Base",
 		OnClose = function()
 			closePanel = nil
 			content = nil
 			timerLabel = nil
+			table.clear(boostRows)
 			options = nil
 			local thread = timerThread
 			timerThread = nil
@@ -625,6 +706,8 @@ function ShopUI.Refresh()
 	end
 	if signature() ~= lastSignature then
 		rebuild()
+	else
+		updateBoostRows()
 	end
 end
 

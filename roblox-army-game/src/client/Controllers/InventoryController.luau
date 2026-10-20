@@ -9,8 +9,9 @@
 		InventoryController:Close()   -- close it if this controller opened it
 
 	Behaviour:
-		* The Armoury opened from the HUD closes itself when you leave Base mode
-		  (the Combat lobby opens its own copy through CombatController).
+		* The Armoury opened from the HUD is a "Base" dialog (Theme Context) and
+		  closes itself when you leave Base mode (the Combat lobby opens its own
+		  copy, without a Context, through CombatController).
 		* "Granted"   -> the new item gets a "NEW" badge in the Armoury.
 		* "Converted" -> toast: your inventory was full, the drop became cash.
 ]]
@@ -45,6 +46,7 @@ function InventoryController:Open()
 	end
 	closeArmoury = InventoryUI.Open({
 		Title = "Armoury",
+		Context = "Base", -- the HUD closes it when you leave the base
 		OnClose = function()
 			closeArmoury = nil
 		end,

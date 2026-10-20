@@ -7,21 +7,29 @@
 		  goes down while the player is in the game (play-time). Buying more
 		  adds more TIME; the multiplier itself is never more than 2x.
 		* Time skip: instantly pays what the player's shops would earn in that
-		  many hours (BaseService:ApplyTimeSkip does the maths).
+		  many hours (BaseService:ApplyTimeSkip does the maths). Shops without
+		  an employee only pay until their stock runs out.
+		  [PROPOSAL] Cash price = (1 - NetGainShare) x V with
+		  V = min(Economy.BoostValue (area reference), BaseService:PreviewTimeSkip)
+		  = Economy.TimeSkipCoinPrice, computed here at purchase time, so a
+		  cash time skip always returns +25% of what was paid. A skip that would
+		  pay less than $1 is never sold (cash or Robux).
 
 	It also spawns the random boost OFFERS on the home map (Config.BoostOffers):
 		* Per player, every MinInterval..MaxInterval seconds (only while the
 		  player is in "Base" mode), at most MaxActive at a time.
 		* Which boost appears is a weighted random pick using
 		  Config.Boosts[i].weight, so cheap boosts show up much more often than
-		  valuable ones (the brief's "luck" rule).
+		  valuable ones (the brief's "luck" rule). Time skips are only in the
+		  draw when they would pay >= 25% of their reference value right now
+		  (Economy.TimeSkipWorthOffering); otherwise only 2x boosts appear.
 		* The offer sits on a walkway of a random unlocked area and lives for
 		  Lifetime seconds. Walking into it (client) opens a Robux-or-cash dialog.
 
 	Requests (Net actions):
 		BuyBoostOffer(offerId: string, route: "cash" | "robux")
 			Offer must be alive and the player within OFFER_RANGE studs.
-			"cash"  -> pays Economy.BoostCoinPrice(boostId, highestArea), applies it.
+			"cash"  -> pays BoostService:GetCashPrice(player, boostId), applies it.
 			"robux" -> reserves the offer for 60 s and opens the Roblox purchase
 			           window; ShopService's receipt applies the boost and calls
 			           RemoveReservedOffer.
@@ -37,7 +45,9 @@
 		BoostService:GetCashMultiplier(player): number            -- 2 while 2x is active, else 1
 		BoostService:AddMultiplierMinutes(player, minutes)
 		BoostService:ApplyBoost(player, boostId): boolean         -- true = applied
-		BoostService:CanApplyBoost(player, boostId): (boolean, string?)  -- e.g. time skip with no shops
+		BoostService:CanApplyBoost(player, boostId): (boolean, string?)  -- e.g. time skip that pays < $1
+		BoostService:GetTimeSkipPreview(player, boostId): number  -- what a time skip pays now (0 for 2x)
+		BoostService:GetCashPrice(player, boostId): number        -- cash price right now (math.huge = not for sale)
 		BoostService:RemoveReservedOffer(player, boostId)         -- receipt finished
 		BoostService:GetBoostDef(boostId): Config.BoostDef?
 ]]
@@ -197,6 +207,20 @@ local function hasRevenueSection(data: any): boolean
 	return false
 end
 
+-- What the time skip `def` would pay the player right now (0 if it is not a
+-- time skip or BaseService is missing).
+local function timeSkipPreview(player: Player, def: Config.BoostDef): number
+	if def.kind ~= "timeskip" then
+		return 0
+	end
+	local base = Services.BaseService
+	if not base or type(base.PreviewTimeSkip) ~= "function" then
+		return 0
+	end
+	local preview = base:PreviewTimeSkip(player, (def.hours or 0) * 3600)
+	return if isFiniteNumber(preview) then math.max(0, preview) else 0
+end
+
 local function sendOffer(player: Player, offer: Offer)
 	Net.Fire("Boost", player, "Offer", {
 		id = offer.id,
@@ -262,12 +286,15 @@ local function pickOfferPosition(data: any, state: PlayerState): Vector3
 end
 
 local function spawnOffer(player: Player, data: any, state: PlayerState)
-	-- [PROPOSAL] Time skips only appear once the player owns a revenue
-	-- section (before that they would pay $0).
+	-- [PROPOSAL] Time skips only appear when they would pay at least 25% of
+	-- their reference value right now (Economy.TimeSkipWorthOffering), so
+	-- an offer is always worth buying. ShopUI shows chances from the same rule.
 	local candidates: { Config.BoostDef } = {}
-	local skipsUseful = hasRevenueSection(data)
 	for _, boost in Config.Boosts do
-		if boost.kind ~= "timeskip" or skipsUseful then
+		if
+			boost.kind ~= "timeskip"
+			or Economy.TimeSkipWorthOffering(boost.id, data.base.highestArea, timeSkipPreview(player, boost))
+		then
 			table.insert(candidates, boost)
 		end
 	end
@@ -383,8 +410,27 @@ function BoostService:AddMultiplierMinutes(player: Player, minutes: number)
 	sendTimer(player)
 end
 
--- Can this boost do anything for the player right now? (A time skip with no
--- revenue section would pay $0, so we refuse to sell it.) [PROPOSAL]
+function BoostService:GetTimeSkipPreview(player: Player, boostId: string): number
+	local def = boostById[boostId]
+	return if def then timeSkipPreview(player, def) else 0
+end
+
+-- Cash price right now. 2x: Economy.BoostCoinPrice. Time skip: 80% of what it
+-- would pay now, capped at the area reference (Economy.TimeSkipCoinPrice).
+function BoostService:GetCashPrice(player: Player, boostId: string): number
+	local def = boostById[boostId]
+	local data = getData(player)
+	if not def or not data then
+		return math.huge
+	end
+	if def.kind == "timeskip" then
+		return Economy.TimeSkipCoinPrice(def.id, data.base.highestArea, timeSkipPreview(player, def))
+	end
+	return Economy.BoostCoinPrice(def.id, data.base.highestArea)
+end
+
+-- Can this boost do anything for the player right now? (A time skip that
+-- would pay less than $1 is refused, for cash AND Robux.) [PROPOSAL]
 function BoostService:CanApplyBoost(player: Player, boostId: string): (boolean, string?)
 	local def = boostById[boostId]
 	if not def then
@@ -394,8 +440,13 @@ function BoostService:CanApplyBoost(player: Player, boostId: string): (boolean, 
 	if not data then
 		return false, "Your data is still loading"
 	end
-	if def.kind == "timeskip" and not hasRevenueSection(data) then
-		return false, "Unlock a revenue section first: time skips pay your shops' earnings"
+	if def.kind == "timeskip" then
+		if not hasRevenueSection(data) then
+			return false, "Unlock a revenue section first: time skips pay your shops' earnings"
+		end
+		if timeSkipPreview(player, def) < 1 then
+			return false, "Your shops are out of stock: restock them or hire employees first"
+		end
 	end
 	return true, nil
 end
@@ -496,7 +547,8 @@ local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Resu
 	end
 
 	if route == "cash" then
-		local price = Economy.BoostCoinPrice(def.id, data.base.highestArea)
+		-- Priced on the server right now (never trust a client price).
+		local price = BoostService:GetCashPrice(player, def.id)
 		if not isFiniteNumber(price) or price <= 0 then
 			return Net.Fail("This boost cannot be bought with cash")
 		end

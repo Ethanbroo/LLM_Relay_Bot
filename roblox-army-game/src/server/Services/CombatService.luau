@@ -30,7 +30,9 @@
 		"EnemyDied"       { list = { { id, type, x, z, boss } } }
 		"Damage"          { list = { { x, z, amount, kind, crit } } }  kind "enemy"|"player"|"dodge"|"shield"|"heal"|"boom"
 		"Collected"       { list = { { id, x, z, value } } }
-		"Result"          { victory, mode, level, kills, collected, paid, chest = { tier, uid, item }?, ... }
+		"Result"          { victory, mode, level, kills, fightSeconds, collected, paid, chest = { tier, uid, item }?, ... }
+		                  chest: gold/silver on a win; wood on a defeat or retreat if you killed
+		                  at least 1 enemy or fought >= CombatDefs.CHEST_MIN_SECONDS (else none)
 		"Ended"           { sessionId, reason }                    session is gone (back to base)
 	Client -> server on "Combat":
 		"Hit", { id = projectileId }   an enemy bullet touched my character (validated)
@@ -167,6 +169,7 @@ type Session = {
 	stateEnds: number,
 	clock: number,
 	started: boolean,
+	fightStartsAt: number, -- s.clock when the 3-2-1 countdown ends (chest rule)
 	settled: boolean,
 	base: CombatStats?,
 	stats: RunStats?,
@@ -1384,7 +1387,10 @@ local function settle(s: Session, victory: boolean): { [string]: any }
 	end
 
 	local chest = nil
-	local tier = CombatDefs.ChestTier(s.mode, s.level, victory, s.kills)
+	-- seconds fought after the countdown: a defeat with 0 kills still earns a
+	-- wooden chest after CombatDefs.CHEST_MIN_SECONDS ([PROPOSAL])
+	local fightSeconds = if s.started then math.max(0, s.clock - s.fightStartsAt) else 0
+	local tier = CombatDefs.ChestTier(s.mode, s.level, victory, s.kills, fightSeconds)
 	if tier and data then
 		local ok, uid, item = callService("InventoryService", "AwardChest", player, tier)
 		if ok and item ~= nil then
@@ -1428,6 +1434,7 @@ local function settle(s: Session, victory: boolean): { [string]: any }
 		wavesCleared = if victory then s.waveCount else math.max(0, s.wave - 1),
 		waveCount = s.waveCount,
 		kills = s.kills,
+		fightSeconds = math.floor(fightSeconds),
 		collected = collected,
 		paid = paid,
 		boosted = paid > collected + 0.001,
@@ -1687,6 +1694,7 @@ local function handlePrepare(player: Player, mode: any, param: any): Net.Result
 		stateEnds = 0,
 		clock = 0,
 		started = false,
+		fightStartsAt = 0,
 		settled = false,
 		base = nil,
 		stats = nil,
@@ -1775,6 +1783,7 @@ local function handleStart(player: Player, sessionId: any): Net.Result
 	s.started = true
 	s.state = "countdown"
 	s.stateEnds = s.clock + CombatDefs.COUNTDOWN
+	s.fightStartsAt = s.stateEnds
 	s.humanoid.WalkSpeed = stats.moveSpeed
 	player:SetAttribute("CombatActive", true)
 	sendVitals(s, true)

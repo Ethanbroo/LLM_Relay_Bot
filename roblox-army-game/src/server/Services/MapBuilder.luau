@@ -8,7 +8,8 @@
 			Area1 .. AreaN   sky-blue floor slab, a lighter cross-shaped walkway
 			                 with thin white edge lines, 4 rounded plot outlines,
 			                 chunky Lego walls with round studs on top (hedge
-			                 green / yellow / red per area), an area name sign at
+			                 green / yellow / red per area), walkway fillers in the
+			                 gate openings, an area name sign at
 			                 the west entrance, grass strips with low-poly trees,
 			                 benches, street lamps (and a red phone box in area 1)
 			Corridor1 ..     short walled bridge between two neighbouring areas
@@ -20,7 +21,9 @@
 
 	It also fills the sea (Terrain water) around the base island, the runner
 	tracks and the combat arenas, and sets up colour correction + bloom so the
-	game keeps the bright, saturated toy look of the reference images.
+	game keeps the bright, saturated toy look of the reference images, plus a
+	light cyan Atmosphere ("BaseAtmosphere") and a texture-free Sky ("BaseSky")
+	so the sky is bright cyan instead of Roblox's default clouds.
 
 	If workspace.Map already exists (for example a pre-baked map saved in the
 	place file) the parts are NOT rebuilt, but terrain water and lighting are
@@ -468,8 +471,28 @@ local function buildArea(map: Instance, areaIndex: number)
 	end
 	sideWall(west, areaIndex > 1)
 	sideWall(east, areaIndex < areaCount)
+	-- Walkway filler inside each wall opening, so the east-west walkway runs
+	-- straight into the corridor (no darker strip / step at the gate).
+	for _, side in { -1, 1 } do
+		local hasOpening = if side < 0 then areaIndex > 1 else areaIndex < areaCount
+		if hasOpening then
+			slab(
+				folder,
+				"GatewayPath",
+				cx + side * (WALL_INNER + WALL_T / 2),
+				cz,
+				WALL_T,
+				Layout.GATE_WIDTH,
+				0.12,
+				TOP_PATH_EW,
+				P.BasePath
+			)
+		end
+	end
 
 	-- Area name sign: an arch over the west entrance (a wall sign in area 1).
+	-- The board is exactly as wide as the opening, so it fits BETWEEN the two
+	-- pillars and they never cover the first / last letters.
 	local signX = west
 	for _, side in { -1, 1 } do
 		makePart(folder, {
@@ -481,7 +504,7 @@ local function buildArea(map: Instance, areaIndex: number)
 	end
 	local board = makePart(folder, {
 		Name = "AreaSign",
-		Size = Vector3.new(1.6, 4, GATE_HALF * 2 + 6.8),
+		Size = Vector3.new(1.6, 4, Layout.GATE_WIDTH),
 		CFrame = CFrame.new(signX, FLOOR_Y + 13, cz),
 		Color = P.CardBlue,
 	})
@@ -638,18 +661,21 @@ local function buildPortal(map: Instance)
 	end
 
 	-- Standing arch behind the pad, readable while walking up from the spawn.
+	-- The posts stand just OUTSIDE the sign beam so they never cover its text.
 	local archZ = pos.Z - size / 2 - 1.5
+	local beamWidth = 20
+	local postSize = 1.6
 	for _, side in { -1, 1 } do
 		makePart(folder, {
 			Name = "ArchPost",
-			Size = Vector3.new(1.6, 13, 1.6),
-			CFrame = CFrame.new(pos.X + side * 9, FLOOR_Y + 6.5, archZ),
+			Size = Vector3.new(postSize, 13, postSize),
+			CFrame = CFrame.new(pos.X + side * (beamWidth / 2 + postSize / 2), FLOOR_Y + 6.5, archZ),
 			Color = P.CardOrangeDark,
 		})
 	end
 	local beam = makePart(folder, {
 		Name = "ArchSign",
-		Size = Vector3.new(20, 3.6, 1.2),
+		Size = Vector3.new(beamWidth, 3.6, 1.2),
 		CFrame = CFrame.new(pos.X, FLOOR_Y + 12, archZ),
 		Color = P.CardOrange,
 	})
@@ -736,6 +762,37 @@ local function applyLighting()
 
 	-- Keep the air clear and bright (no heavy fog), like both reference images.
 	Lighting.FogEnd = 100000
+
+	-- Bright cyan sky like the runner reference (image 2) instead of Roblox's
+	-- default cloudy skybox. A thin Atmosphere tints the horizon; Density stays
+	-- low so the base and the arenas keep their saturated toy colours.
+	local atmo = Lighting:FindFirstChild("BaseAtmosphere")
+	if not (atmo and atmo:IsA("Atmosphere")) then
+		local created = Instance.new("Atmosphere")
+		created.Name = "BaseAtmosphere"
+		created.Parent = Lighting
+		atmo = created
+	end
+	local atmosphere = atmo :: Atmosphere
+	atmosphere.Density = 0.2 -- [PROPOSAL]
+	atmosphere.Offset = 0.25 -- [PROPOSAL]
+	atmosphere.Color = P.Sky
+	atmosphere.Decay = P.Sea
+	atmosphere.Glare = 0
+	atmosphere.Haze = 0.6 -- [PROPOSAL]
+
+	-- A Sky without textures (no asset IDs): no sun / moon / stars, so the
+	-- Atmosphere colour fills the whole sky.
+	local sk = Lighting:FindFirstChild("BaseSky")
+	if not (sk and sk:IsA("Sky")) then
+		local created = Instance.new("Sky")
+		created.Name = "BaseSky"
+		created.Parent = Lighting
+		sk = created
+	end
+	local sky = sk :: Sky
+	sky.CelestialBodiesShown = false
+	sky.StarCount = 0
 end
 
 -------------------------------------------------------------------------------

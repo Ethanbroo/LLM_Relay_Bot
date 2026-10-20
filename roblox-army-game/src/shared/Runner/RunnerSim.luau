@@ -352,10 +352,18 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 	for _, line in upgradeLines do
 		table.insert(lines, line)
 	end
+	-- Separate the permanent starting troops (upgrades) from what this run
+	-- added or lost (gates / enemies can also lower the count).
+	local gained = troops - st.startTroops
 	table.insert(lines, {
 		kind = "troops",
-		label = "Troops x " .. troops,
-		detail = Format.Money(troopEach) .. " each",
+		label = "Troops at finish x " .. troops,
+		detail = ("%s each (started with %d from upgrades, %s%d this run)"):format(
+			Format.Money(troopEach),
+			st.startTroops,
+			if gained >= 0 then "+" else "-",
+			math.abs(gained)
+		),
 		value = troopsValue,
 	})
 	local cashDetail = Format.Money(carried) .. " of " .. Format.Money(st.capacity) .. " capacity"

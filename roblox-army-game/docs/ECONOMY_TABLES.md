@@ -141,6 +141,8 @@ R$ 200 or cash = 20 x R(area) (PriceScalesWith = SectionArea).
 ## 6. Boosts
 
 Value V = cash the boost gives when used properly; coin price = (1 - NetGainShare) x V.
+For time skips this V is the area REFERENCE (every shop of every area owned, all with
+employees); the actual cash price follows the rule in 6.1.
 
 | Boost | Robux | Weight | Area 1 value / price | Area 4 value / price | Area 8 value / price | Value / price |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -153,6 +155,27 @@ Value V = cash the boost gives when used properly; coin price = (1 - NetGainShar
 | Time Skip 8h | 149 | 5 | $39,863.20 / $31,890.56 | $486,818.10 / $389,454.48 | $5.59M / $4.47M | 1.250 |
 | Time Skip 12h | 199 | 2.5 | $59,794.80 / $47,835.84 | $730,227.15 / $584,181.72 | $8.38M / $6.71M | 1.250 |
 | Time Skip 24h | 349 | 1 | $119,589.59 / $95,671.67 | $1.46M / $1.17M | $16.8M / $13.4M | 1.250 |
+
+### 6.1 Time-skip cash price (what your shops would pay right now)
+
+A time skip pays `Economy.TimeSkipPayout(sections, seconds)`: per owned shop,
+sales = floor(seconds / sale interval); with an employee every sale is paid, without one
+only min(sales, stock). Price = (1 - NetGainShare) x min(reference V, preview), rounded
+down to cents, so a cash time skip always returns at least +25% of what was paid.
+Random offers only show a time skip when the preview is >= 25% of its reference;
+a skip that would pay less than $1 is never sold (cash or Robux).
+
+Example, area-1 player: (a) only the first shop, full stock, no employee;
+(b) all four area-1 shops with employees.
+
+| Boost | Reference V / old price | (a) pays / price / offered | (b) pays / price / offered |
+| --- | --- | --- | --- |
+| Time Skip 1h | $4,982.90 / $3,986.32 | $24.25 / $19.40 / no | $4,979.62 / $3,983.69 / yes |
+| Time Skip 2h | $9,965.80 / $7,972.64 | $24.25 / $19.40 / no | $9,963.28 / $7,970.62 / yes |
+| Time Skip 4h | $19,931.60 / $15,945.28 | $24.25 / $19.40 / no | $19,928.54 / $15,942.83 / yes |
+| Time Skip 8h | $39,863.20 / $31,890.56 | $24.25 / $19.40 / no | $39,859.69 / $31,887.75 / yes |
+| Time Skip 12h | $59,794.80 / $47,835.84 | $24.25 / $19.40 / no | $59,792.27 / $47,833.81 / yes |
+| Time Skip 24h | $119,589.59 / $95,671.67 | $24.25 / $19.40 / no | $119,586.52 / $95,669.21 / yes |
 
 ## 7. Vehicles
 
@@ -222,7 +245,7 @@ Value V = cash the boost gives when used properly; coin price = (1 - NetGainShar
 | 20 | $23,057.88 | barrier of area 7 |
 | 21 | $28,386.81 |  |
 | 22 | $34,947.31 |  |
-| 23 | $43,024.02 | barrier of area 8 |
+| 23 | $43,024.02 |  |
 | 24 | $52,967.34 |  |
 | 25 | $65,208.67 |  |
 

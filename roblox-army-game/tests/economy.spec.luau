@@ -225,6 +225,114 @@ return function(H)
 		H.near(Economy.BoostValue("skip_4", 3), 4 * 3600 * Economy.ReferencePassiveRate(3), 0.01, "skip value")
 	end)
 
+	H.test("TimeSkipPayout: employee pays every sale, no employee stops at stock", function()
+		local stats = Economy.SectionStats("a1s1", 1)
+		local seconds = 3600
+		local sales = math.floor(seconds / stats.saleInterval + 1e-9)
+		H.expect(sales > stats.stockCapacity, "1h has more sales than one stock (test premise)")
+
+		-- With an employee: all sales, no stock used.
+		local total, per = Economy.TimeSkipPayout({ a1s1 = { level = 1, stock = 3, employee = true } }, seconds)
+		H.near(total, sales * stats.incomePerSale, 0.011, "employee pays all sales")
+		H.expect(per.a1s1.sales == sales and per.a1s1.stockUsed == 0, "employee uses no stock")
+		H.near(per.a1s1.paid, total, 1e-9, "per slot paid")
+
+		-- Without one: capped by floor(stock), and that stock is reported.
+		total, per = Economy.TimeSkipPayout({ a1s1 = { level = 1, stock = 7.9, employee = false } }, seconds)
+		H.near(total, 7 * stats.incomePerSale, 0.011, "no employee pays only the stock")
+		H.expect(per.a1s1.sales == 7 and per.a1s1.stockUsed == 7, "stock used = 7")
+
+		-- Short skip below the stock: every sale paid either way.
+		total, per =
+			Economy.TimeSkipPayout({ a1s1 = { level = 1, stock = 25, employee = false } }, stats.saleInterval * 3)
+		H.expect(per.a1s1.sales == 3 and per.a1s1.stockUsed == 3, "3 sales from stock")
+		H.near(total, 3 * stats.incomePerSale, 0.011, "3 sales")
+
+		-- Empty stock, the arena slot, unknown slots and bad input pay nothing.
+		total, per = Economy.TimeSkipPayout(
+			{
+				a1s1 = { level = 1, stock = 0, employee = false },
+				a2s4 = { level = 1, stock = 50, employee = true },
+				nope = { level = 1, stock = 50, employee = true },
+			} :: any,
+			seconds
+		)
+		H.expect(total == 0 and next(per) == nil, "nothing to pay")
+		H.expect((Economy.TimeSkipPayout({ a1s1 = { level = 1, stock = 5, employee = true } }, -5)) == 0, "negative")
+		H.expect((Economy.TimeSkipPayout({ a1s1 = { level = 1, stock = 5, employee = true } }, 0 / 0)) == 0, "nan")
+		H.expect((Economy.TimeSkipPayout(nil :: any, 3600)) == 0, "nil sections")
+
+		-- Several sections and levels: total = sum of rounded per-slot amounts, all in cents.
+		local sections = {
+			a1s1 = { level = 3, stock = 10, employee = false },
+			a1s2 = { level = 2, stock = 4, employee = true },
+			a1s3 = { level = 1, stock = 30, employee = false },
+		}
+		total, per = Economy.TimeSkipPayout(sections, 7 * 3600 + 17)
+		local sum = 0
+		for slotId, slot in per do
+			isCents(slot.paid, slotId .. " paid")
+			sum += slot.paid
+		end
+		isCents(total, "total")
+		H.near(total, sum, 1e-6, "total = sum of slots")
+		H.expect(sections.a1s1.stock == 10, "pure: input stock unchanged")
+	end)
+
+	H.test("Time skip: preview of one unstaffed shop vs every shop staffed", function()
+		-- Area-1 player with one shop and no employee: pays only its stock.
+		local one = { a1s1 = { level = 1, stock = Economy.SectionStats("a1s1", 1).stockCapacity, employee = false } }
+		local preview = Economy.TimeSkipPayout(one, 3600)
+		local reference = Economy.BoostValue("skip_1", 1)
+		H.expect(preview > 0 and preview < reference, "one shop pays less than the reference")
+		H.near(Economy.TimeSkipValue("skip_1", 1, preview), preview, 1e-9, "value = preview below the cap")
+		H.expect(not Economy.TimeSkipWorthOffering("skip_1", 1, preview), "not worth offering")
+
+		-- All four area-1 shops with employees: pays the reference (cap).
+		local all = {}
+		for _, slotDef in Config.Areas[1].slots do
+			if slotDef.kind == "revenue" then
+				all[slotDef.id] = { level = 1, stock = 0, employee = true }
+			end
+		end
+		local full = Economy.TimeSkipPayout(all, 3600)
+		H.near(full, reference, reference * 0.01 + 0.05, "full staff ~ reference")
+		H.near(Economy.TimeSkipValue("skip_1", 1, full * 10), reference, 1e-9, "capped at the reference")
+		H.expect(Economy.TimeSkipWorthOffering("skip_1", 1, full), "worth offering")
+		H.expect(Economy.TimeSkipCoinPrice("x2_15", 1, 100) == math.huge, "not a time skip")
+		H.expect(Economy.TimeSkipCoinPrice("nope", 1, 100) == math.huge, "unknown boost")
+	end)
+
+	H.test("Time skip cash price never exceeds 0.8 x preview (always +25% back)", function()
+		local share = 1 - Config.CoinRoute.NetGainShare
+		local previews = { 0, 0.01, 0.37, 1, 1.13, 7.77, 24, 99.99, 123.45, 1000.01, 3986.4, 1e7 }
+		for area = 1, AREAS do
+			for _, boost in Config.Boosts do
+				if boost.kind ~= "timeskip" then
+					continue
+				end
+				for _, preview in previews do
+					local price = Economy.TimeSkipCoinPrice(boost.id, area, preview)
+					H.expect(price >= 0 and price == price, "price is a number")
+					isCents(price, "time skip price")
+					H.expect(
+						price <= share * preview + 1e-6,
+						("%s %g: %g > 0.8 x preview"):format(boost.id, preview, price)
+					)
+					H.expect(price <= Economy.BoostCoinPrice(boost.id, area) + 1e-6, "never above the reference price")
+					if preview >= 1 then
+						H.near(price, share * math.min(preview, Economy.BoostValue(boost.id, area)), 0.011, "0.8 V")
+					end
+				end
+			end
+		end
+		-- Real sections: price from the preview, payout >= 1.25 x price.
+		local sections = { a1s1 = { level = 1, stock = 25, employee = false } }
+		local preview = Economy.TimeSkipPayout(sections, 3600)
+		local price = Economy.TimeSkipCoinPrice("skip_1", 1, preview)
+		H.expect(preview >= price / share - 1e-6, "pays back at least +25%")
+	end)
+
 	H.test("Vehicles: coin price follows nearby gate prices", function()
 		for _, v in Config.Vehicles do
 			local previous = 0

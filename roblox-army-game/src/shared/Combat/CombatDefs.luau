@@ -29,7 +29,9 @@
 		CombatDefs.RollAbilities(stacks, rng, count?): { string }   random distinct ids, respects maxStacks
 		CombatDefs.PERK_IDS: { string }                every perk id of ARCHITECTURE §4.5
 		CombatDefs.DeriveStats(base, abilityStacks): RunStats       equipment stats + perks + abilities
-		CombatDefs.ChestTier(mode, level, victory, kills): string?  "gold" | "silver" | "wood" | nil
+		CombatDefs.ChestTier(mode, level, victory, kills, seconds): string?  "gold" | "silver" | "wood" | nil
+			seconds = how long the fight ran after the 3-2-1 countdown
+		CombatDefs.CHEST_MIN_SECONDS                   a defeat with 0 kills still gets wood after this long
 		CombatDefs.EncodeSnap(snap): buffer / CombatDefs.DecodeSnap(buf): Snap?
 			compact binary form of the 20 Hz "CombatSnap" (unreliable remotes drop
 			payloads over ~1 KB, so the snapshot is packed into a buffer).
@@ -862,16 +864,19 @@ end
 -- Chests  [REQUIREMENT: a chest at the end of every combat game]
 -------------------------------------------------------------------------------
 -- gold: barrier wins and every 5th arena level won; silver: other wins;
--- wood: defeats, but only if at least one enemy was killed ([PROPOSAL]: stops
--- free chests from starting and instantly leaving).
-function CombatDefs.ChestTier(mode: string, level: number, victory: boolean, kills: number): string?
+-- wood: defeats / retreats, but only if the player killed at least one enemy
+-- OR fought for at least CHEST_MIN_SECONDS after the countdown ([PROPOSAL]:
+-- every real game ends with a chest, but starting and instantly leaving does not).
+CombatDefs.CHEST_MIN_SECONDS = 20 -- [PROPOSAL]
+
+function CombatDefs.ChestTier(mode: string, level: number, victory: boolean, kills: number, seconds: number): string?
 	if victory then
 		if mode == "barrier" or sanitizeLevel(level) % 5 == 0 then
 			return "gold"
 		end
 		return "silver"
 	end
-	if kills > 0 then
+	if kills > 0 or seconds >= CombatDefs.CHEST_MIN_SECONDS then
 		return "wood"
 	end
 	return nil

@@ -27,6 +27,13 @@
 
 	Cleanup (camera, controls, jump, visuals, UI, input) happens on COLLECT,
 	Back, any failed request, death/respawn, or the server leaving Runner mode.
+
+	Portal pad: walking onto it starts OpenPrepare, but never while a Theme
+	dialog is open (Theme.IsModalOpen) - step off and back on after closing it.
+	When the run starts, HUDController closes the open "Base" dialogs
+	(Theme.CloseModals("Base")); the run's own screens are not "Base" dialogs
+	(the pre-run screen is not a panel, the summary panel has no Context), so
+	they are never closed by that.
 ]]
 
 local Players = game:GetService("Players")
@@ -938,6 +945,10 @@ function RunnerController:Start()
 		local flat = Vector2.new(offset.X, offset.Z).Magnitude
 		if flat > PORTAL_RADIUS or math.abs(offset.Y) > 12 then
 			portalArmed = true -- must step off and back on to trigger again
+		elseif Theme.IsModalOpen() then
+			-- Looking at a dialog (shop, purchase, ...): never yank the player
+			-- into a run. Step off and back on once the dialog is closed.
+			portalArmed = false
 		elseif portalArmed and os.clock() >= portalCooldownUntil then
 			portalArmed = false
 			portalCooldownUntil = os.clock() + PORTAL_COOLDOWN

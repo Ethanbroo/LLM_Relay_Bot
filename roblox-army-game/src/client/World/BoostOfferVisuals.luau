@@ -11,11 +11,13 @@
 
 	When the local character walks within APPROACH_RANGE studs of an offer
 	the OnApproach callback runs once (the ShopController then opens the
-	Robux-or-cash dialog). It re-arms after walking more than REARM_RANGE away.
+	Robux-or-cash dialog). It re-arms after walking more than REARM_RANGE away,
+	or right away when OnApproach returns false (dialog refused, e.g. another
+	dialog was open), so walking back in / staying on it retries.
 	Offers disappear when the server says "OfferGone" or when they expire.
 
 	Public API (used by Controllers/ShopController):
-		BoostOfferVisuals.Start(opts: { OnApproach: (offer: Offer) -> () })
+		BoostOfferVisuals.Start(opts: { OnApproach: (offer: Offer) -> boolean? })
 		BoostOfferVisuals.Add(offer: Offer)        -- offer = server "Offer" payload
 		BoostOfferVisuals.Remove(offerId: string)
 		BoostOfferVisuals.Get(offerId: string): Offer?
@@ -73,7 +75,7 @@ end
 local entries: { [string]: Entry } = {}
 local folder: Folder? = nil
 local heartbeat: RBXScriptConnection? = nil
-local onApproach: ((Offer) -> ())? = nil
+local onApproach: ((Offer) -> boolean?)? = nil
 local sinceCheck = 0
 
 local function getFolder(): Folder
@@ -333,7 +335,11 @@ local function onHeartbeat(dt: number)
 			entry.inside = true
 			local callback = onApproach
 			if callback then
-				task.spawn(callback, entry.offer)
+				task.spawn(function()
+					if callback(entry.offer) == false then
+						entry.inside = false -- refused: re-arm so it can trigger again
+					end
+				end)
 			end
 		elseif entry.inside and distance > REARM_RANGE then
 			entry.inside = false
@@ -341,7 +347,7 @@ local function onHeartbeat(dt: number)
 	end
 end
 
-function BoostOfferVisuals.Start(opts: { OnApproach: (Offer) -> () })
+function BoostOfferVisuals.Start(opts: { OnApproach: (Offer) -> boolean? })
 	onApproach = opts.OnApproach
 	if not heartbeat then
 		heartbeat = RunService.Heartbeat:Connect(onHeartbeat)

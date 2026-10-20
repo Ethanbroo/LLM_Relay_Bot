@@ -12,6 +12,12 @@
 	  2. It runs one run "session" per player and is the authority on money:
 	     the client only reports which lane it picked in each row, the server
 	     re-simulates the whole run with RunnerSim.Resolve and pays the result.
+	  3. While a run is going it watches the avatar every Heartbeat and notes
+	     which lane it was really in as it crossed each row. RunnerFinish only
+	     believes the client's lane when it matches what the server saw (or is
+	     the next lane over and the avatar was within LANE_EDGE_TOLERANCE studs
+	     of it - the server sees the avatar 0.1-0.3 s late), so a cheater can
+	     not simply send the best lanes.
 
 	Net actions (client -> server, see ARCHITECTURE §3):
 		RunnerPrepare()               -> { runId, course, level, area, slot, stats, runSpeed }
@@ -32,14 +38,18 @@
 		BuyRunnerUpgrade - permanent upgrades; allowed in Base mode, or in Runner
 		                 mode before the run has started.
 		RunnerGo       - locks the stats (plus the vehicle bonus) and the start time,
-		                 sets WalkSpeed = RUN_SPEED.
-		RunnerFinish   - anti-cheat time check, re-simulates, pays boostable cash,
-		                 raises runner.level.
+		                 sets WalkSpeed = RUN_SPEED, starts watching the lanes.
+		RunnerFinish   - anti-cheat time + position checks (fails if the avatar
+		                 is missing), picks the lanes (client's if plausible, else
+		                 the ones the server saw), re-simulates, pays boostable
+		                 cash, raises runner.level. A repeated request gets the
+		                 same reply again (never pays twice).
 		RunnerLeave    - restores the avatar and returns to the base.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local StarterPlayer = game:GetService("StarterPlayer")
 local Workspace = game:GetService("Workspace")
 
@@ -54,6 +64,8 @@ local RunnerDefs = require(Shared.Runner.RunnerDefs)
 local RunnerSim = require(Shared.Runner.RunnerSim)
 
 type Course = RunnerCourse.Course
+type Row = RunnerCourse.Row
+type Option = RunnerCourse.Option
 type Stats = RunnerSim.Stats
 type Result = RunnerSim.Result
 
@@ -69,6 +81,12 @@ local DEFAULT_RUN_SPEED = 24 -- used only if RunnerDefs.RUN_SPEED is missing
 local MIN_DURATION_SLACK = 0.9 -- [REQUIREMENT ARCH §6.1] reject runs faster than MinDuration x 0.9
 local FINISH_DISTANCE_SHARE = 0.6 -- [PROPOSAL] must have run at least 60% of the way to the boss
 local TRACK_LATERAL_LIMIT = 45 -- [PROPOSAL] studs from the track centre still counted "on the track"
+-- [PROPOSAL] The server sees the avatar 0.1-0.3 s late. A lane the client
+-- reports is still accepted when it is next to the lane the server saw and
+-- the avatar was at most this many studs outside it (sideways speed is at
+-- most ~0.9 x RUN_SPEED, so 3 studs covers ~0.15 s of steering at full tilt,
+-- plus the 1-stud gaps between lanes).
+local LANE_EDGE_TOLERANCE = 3
 local STRIPE_SPACING = 20 -- light-blue cross stripe every 20 studs (image 2)
 local STRIPE_LENGTH = 9
 local START_PLATFORM_LENGTH = 26
@@ -102,6 +120,12 @@ type Session = {
 	stats: Stats?, -- locked at RunnerGo
 	finished: boolean,
 	reply: { [string]: any }?, -- cached RunnerFinish reply (safe to resend)
+	sampler: RBXScriptConnection?, -- Heartbeat lane watcher (RunnerGo .. endSession / finish)
+	serverChoices: { [number]: number }, -- row index -> lane the server saw the avatar in
+	serverLaterals: { [number]: number }, -- row index -> lateral offset (studs) at that moment
+	nextSampleRow: number, -- first row the avatar has not crossed yet (server view)
+	lastTravelled: number?, -- latest sample: studs down the track
+	lastLateral: number?, -- latest sample: studs right of the centre line
 	originalWalkSpeed: number,
 	originalJumpHeight: number,
 	originalJumpPower: number,
@@ -173,6 +197,14 @@ local function restoreHumanoid(session: Session)
 	end
 end
 
+local function stopSampling(session: Session)
+	local sampler = session.sampler
+	if sampler then
+		session.sampler = nil
+		sampler:Disconnect()
+	end
+end
+
 -- Ends a session without touching the player's mode. Safe to call twice.
 local function endSession(player: Player, notifyClient: boolean)
 	local session = sessions[player]
@@ -180,6 +212,7 @@ local function endSession(player: Player, notifyClient: boolean)
 		return
 	end
 	sessions[player] = nil
+	stopSampling(session)
 	restoreHumanoid(session)
 	if notifyClient and player.Parent then
 		Net.Fire("Runner", player, "Ended", { runId = session.runId })
@@ -191,6 +224,105 @@ end
 -- distance or a little further.)
 local function bossDistance(course: Course): number
 	return math.min(course.boss.distance, Layout.RUNNER_TRACK_LENGTH + 30)
+end
+
+-------------------------------------------------------------------------------
+-- Lane watching (anti-cheat for the lane choices)
+-------------------------------------------------------------------------------
+-- Which lane (option) of a row a lateral position is in; between lanes or
+-- off the edge -> the nearest lane. Same rule as RunnerController's laneAt.
+local function laneAt(row: Row, lateral: number): number
+	local best, bestDistance = 1, math.huge
+	for index, option in row.options do
+		local lane = if type(option.lane) == "number" then option.lane else index
+		local half = option.width / 2
+		if lateral >= option.x - half and lateral <= option.x + half then
+			return lane
+		end
+		local d = math.abs(lateral - option.x)
+		if d < bestDistance then
+			best, bestDistance = lane, d
+		end
+	end
+	return best
+end
+
+local function optionForLane(row: Row, lane: number): Option?
+	for index, option in row.options do
+		if (if type(option.lane) == "number" then option.lane else index) == lane then
+			return option
+		end
+	end
+	return nil
+end
+
+-- Studs the lateral position lies outside an option's [x - width/2, x + width/2].
+local function outsideLane(option: Option, lateral: number): number
+	return math.max(0, math.abs(lateral - option.x) - option.width / 2)
+end
+
+-- One sample of the avatar: records the lane of every row it has newly
+-- crossed. Between two samples the position is interpolated, so the lane is
+-- taken exactly where the avatar passed the row's distance.
+local function sampleRows(session: Session)
+	local root = getRoot(session.character)
+	if not root then
+		return
+	end
+	local start = Layout.RunnerPoint(session.slot, 0, 0)
+	local position = root.CFrame.Position
+	local travelled = start.Z - position.Z
+	local lateral = position.X - start.X
+	if not isFiniteNumber(travelled) or not isFiniteNumber(lateral) then
+		return
+	end
+	local prevTravelled, prevLateral = session.lastTravelled, session.lastLateral
+	local rows = session.course.rows
+	while session.nextSampleRow <= #rows do
+		local index = session.nextSampleRow
+		local row = rows[index]
+		if travelled < row.distance then
+			break
+		end
+		local at = lateral
+		if prevTravelled and prevLateral and prevTravelled < row.distance and travelled > prevTravelled then
+			local t = (row.distance - prevTravelled) / (travelled - prevTravelled)
+			at = prevLateral + (lateral - prevLateral) * t
+		end
+		session.serverChoices[index] = laneAt(row, at)
+		session.serverLaterals[index] = at
+		session.nextSampleRow = index + 1
+	end
+	session.lastTravelled = travelled
+	session.lastLateral = lateral
+end
+
+-- The lanes that are paid. Per row: the client's lane if it is the lane the
+-- server saw, or the lane next to it while the avatar was within
+-- LANE_EDGE_TOLERANCE studs of it; otherwise the lane the server saw. Rows
+-- the server never saw crossed -> the lane nearest to the latest sample.
+local function chooseLanes(session: Session, choices: any): { number }
+	local clean: { number } = {}
+	local source = if type(choices) == "table" then choices else {}
+	local fallbackLateral = session.lastLateral or 0
+	for i, row in session.course.rows do
+		local observed = session.serverChoices[i]
+		if observed == nil then
+			clean[i] = laneAt(row, fallbackLateral)
+			continue
+		end
+		local lane = observed
+		local claimed = rawget(source, i)
+		local at = session.serverLaterals[i]
+		if type(claimed) == "number" and claimed ~= observed and math.abs(claimed - observed) == 1 and at then
+			local option = optionForLane(row, claimed)
+			if option and outsideLane(option, at) <= LANE_EDGE_TOLERANCE then
+				lane = claimed
+			end
+		end
+		clean[i] = lane
+	end
+	return clean
 end
 
 -------------------------------------------------------------------------------
@@ -442,6 +574,12 @@ local function onPrepare(player: Player)
 		stats = nil,
 		finished = false,
 		reply = nil,
+		sampler = nil,
+		serverChoices = {},
+		serverLaterals = {},
+		nextSampleRow = 1,
+		lastTravelled = nil,
+		lastLateral = nil,
 		originalWalkSpeed = if humanoid.WalkSpeed > 0 then humanoid.WalkSpeed else StarterPlayer.CharacterWalkSpeed,
 		originalJumpHeight = if humanoid.JumpHeight > 0 then humanoid.JumpHeight else StarterPlayer.CharacterJumpHeight,
 		originalJumpPower = if humanoid.JumpPower > 0 then humanoid.JumpPower else StarterPlayer.CharacterJumpPower,
@@ -535,23 +673,21 @@ local function onGo(player: Player, runId: any)
 	session.started = true
 	session.startTime = os.clock()
 	humanoid.WalkSpeed = RUN_SPEED
-	return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED })
-end
 
--- Clean the lane list the client sent: integers within each row's lane count.
-local function sanitiseChoices(course: Course, choices: any): { number }
-	local clean: { number } = {}
-	local source = if type(choices) == "table" then choices else {}
-	for i, row in course.rows do
-		local value = rawget(source, i)
-		local laneCount = #row.options
-		if type(value) == "number" and value == math.floor(value) and value >= 1 and value <= laneCount then
-			clean[i] = value
-		else
-			clean[i] = 1
+	-- Watch which lane the avatar is really in as it crosses each row.
+	-- ASSUMPTION: this runs every Heartbeat (faster than the 30 Hz loop rule)
+	-- on purpose - it is one position read per running player, and a finer
+	-- sample keeps honest players' lanes exact.
+	sampleRows(session)
+	stopSampling(session)
+	session.sampler = RunService.Heartbeat:Connect(function()
+		if sessions[player] ~= session then
+			stopSampling(session)
+			return
 		end
-	end
-	return clean
+		sampleRows(session)
+	end)
+	return Net.Ok({ stats = session.stats, runSpeed = RUN_SPEED })
 end
 
 -- Make sure the vehicle bonus shows up exactly once in the result.
@@ -602,18 +738,21 @@ local function onFinish(player: Player, runId: any, choices: any)
 		return Net.Fail("That was too fast!")
 	end
 	local root = getRoot(session.character)
-	if root then
-		local start = Layout.RunnerPoint(session.slot, 0, 0)
-		local position = root.CFrame.Position
-		local travelled = start.Z - position.Z
-		local lateral = math.abs(position.X - start.X)
-		if travelled < bossDistance(session.course) * FINISH_DISTANCE_SHARE or lateral > TRACK_LATERAL_LIMIT then
-			return Net.Fail("You did not reach the enemy base")
-		end
+	if not root then
+		return Net.Fail("Your character is not ready")
 	end
+	local start = Layout.RunnerPoint(session.slot, 0, 0)
+	local position = root.CFrame.Position
+	local travelled = start.Z - position.Z
+	local lateral = math.abs(position.X - start.X)
+	if travelled < bossDistance(session.course) * FINISH_DISTANCE_SHARE or lateral > TRACK_LATERAL_LIMIT then
+		return Net.Fail("You did not reach the enemy base")
+	end
+	-- Last sample: rows still ahead of the avatar count with the lane it stands in now.
+	sampleRows(session)
 
 	local stats = session.stats :: Stats
-	local clean = sanitiseChoices(session.course, choices)
+	local clean = chooseLanes(session, choices)
 	local result = RunnerSim.Resolve(session.course, stats, clean)
 	ensureBonus(result, stats.payoutBonus)
 
@@ -634,6 +773,7 @@ local function onFinish(player: Player, runId: any, choices: any)
 	}
 	session.finished = true
 	session.reply = reply
+	stopSampling(session) -- the lanes are final now
 	return Net.Ok(reply)
 end
 
@@ -677,7 +817,7 @@ function RunnerService:Start()
 		end)
 	end
 	Players.PlayerRemoving:Connect(function(player)
-		sessions[player] = nil
+		endSession(player, false) -- also stops the lane watcher
 	end)
 end
 

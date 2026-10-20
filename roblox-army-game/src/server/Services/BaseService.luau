@@ -32,6 +32,8 @@
 	Public API for other services (docs/ARCHITECTURE.md §4.3):
 		BaseService:AssignEmployee(player, slotId): boolean
 		BaseService:ApplyTimeSkip(player, seconds): number    -- cash paid (not 2x-boosted)
+		BaseService:PreviewTimeSkip(player, seconds): number  -- what ApplyTimeSkip would pay now (no changes)
+		  (both use Economy.TimeSkipPayout: shops without an employee stop at 0 stock)
 		BaseService:MarkBarrierDefeated(player, area)
 		BaseService:GetPassiveRate(player): number            -- $/s of sections that can sell
 ]]
@@ -233,45 +235,30 @@ function BaseService:AssignEmployee(player: Player, slotId: string): boolean
 end
 
 -- Pay the revenue the player's sections would make in `seconds` seconds.
--- Rule (§6.2): sales = floor(seconds / saleInterval) per section; with an
--- employee all sales are paid, without one only min(sales, stock) and the
--- stock goes down by that much. Not 2x-boosted. Returns the cash paid.
+-- Rule (§6.2, maths in Economy.TimeSkipPayout): sales = floor(seconds /
+-- saleInterval) per section; with an employee all sales are paid, without
+-- one only min(sales, stock) and the stock goes down by that much. Clamped to
+-- MAX_TIME_SKIP. Not 2x-boosted. Returns the cash paid.
 function BaseService:ApplyTimeSkip(player: Player, seconds: number): number
 	local data = getData(player)
 	if not data or not isFiniteNumber(seconds) or seconds <= 0 then
 		return 0
 	end
 	seconds = math.min(seconds, MAX_TIME_SKIP)
-	local total = 0
+	local total, slots = Economy.TimeSkipPayout(data.base.sections, seconds)
 	local perSlot: { [string]: number } = {}
 	local changed = false
-	for slotId, section in data.base.sections do
-		local info = slotInfo[slotId]
-		if type(section) ~= "table" or not info or info.def.kind ~= "revenue" then
-			continue
+	for slotId, slot in slots do
+		local section = data.base.sections[slotId]
+		if slot.stockUsed > 0 and type(section) == "table" then
+			section.stock = math.max(0, section.stock - slot.stockUsed)
+			changed = true
 		end
-		local stats = Economy.SectionStats(slotId, section.level)
-		if stats.saleInterval <= 0 then
-			continue
-		end
-		local sales = math.floor(seconds / stats.saleInterval + 1e-9)
-		if not section.employee then
-			sales = math.min(sales, math.max(0, math.floor(section.stock)))
-			if sales > 0 then
-				section.stock -= sales
-				changed = true
-			end
-		end
-		if sales > 0 then
-			local amount = Format.RoundCents(sales * stats.incomePerSale)
-			total += amount
-			perSlot[slotId] = amount
-		end
+		perSlot[slotId] = slot.paid
 	end
 	if changed then
 		markDirty(player)
 	end
-	total = Format.RoundCents(total)
 	if total <= 0 then
 		return 0
 	end
@@ -281,6 +268,17 @@ function BaseService:ApplyTimeSkip(player: Player, seconds: number): number
 		Net.Fire("Base", player, "Income", perSlot)
 	end
 	return paid
+end
+
+-- What ApplyTimeSkip(player, seconds) would pay right now (same maths and
+-- clamp, changes nothing). BoostService prices time skips from this.
+function BaseService:PreviewTimeSkip(player: Player, seconds: number): number
+	local data = getData(player)
+	if not data or not isFiniteNumber(seconds) or seconds <= 0 then
+		return 0
+	end
+	local total = Economy.TimeSkipPayout(data.base.sections, math.min(seconds, MAX_TIME_SKIP))
+	return total
 end
 
 -- The barrier squad guarding `area`'s exit gate has been beaten (COMBAT).

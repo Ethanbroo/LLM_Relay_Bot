@@ -542,8 +542,9 @@ Styles.hangar = function(b, def, color)
 	end
 	b.box("Doorway", 0, 3.6, 4.55, Vector3.new(12, 7.2, 0.2), darker(color, 0.5), false)
 	b.box("DoorStripe", 0, 7.4, 4.6, Vector3.new(12.4, 0.5, 0.25), P.Coin, false)
-	window(b, -7.8, 4, 4.4, 2.5, 2.5)
-	window(b, 7.8, 4, 4.4, 2.5, 2.5)
+	-- 4.6: in front of the arch's front face (z 4.5), so they do not z-fight with it
+	window(b, -7.8, 4, 4.6, 2.5, 2.5)
+	window(b, 7.8, 4, 4.6, 2.5, 2.5)
 	awning(b, 10, 5.5, 7, color)
 	counter(b, 7, 8.4, color)
 	crates(b, 10.5, 7.5)

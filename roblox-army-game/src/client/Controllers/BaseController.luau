@@ -14,6 +14,7 @@
 			"Hire me" tile  -> Theme.PurchaseDialog: R$ 200 (SHOP: "HireEmployeeRobux")
 			                   or cash (Net.Request("HireEmployeeCash", slotId));
 			                   with an employee token: Theme.Confirm -> "AssignEmployeeToken"
+			                   (both are "Base" dialogs: closed when you leave the base)
 			Arena prompt    -> registry.CombatController:OpenArenaMenu()
 			Gate prompt     -> barrier not beaten: registry.CombatController:StartBarrier(area)
 			                   beaten: Net.Request("UnlockGate", area)
@@ -150,6 +151,8 @@ local function onHire(slotId: string)
 	if tokens > 0 then
 		dialogOpen = true
 		Theme.Confirm({
+			Name = "HireTokenConfirm",
+			Context = "Base", -- the HUD closes it when you leave the base (OnClose resets dialogOpen)
 			Title = "Use employee token",
 			Body = ("You have %d employee token%s. Use one to hire an employee for %s for free?"):format(
 				tokens,
@@ -173,6 +176,7 @@ local function onHire(slotId: string)
 	local price = Economy.EmployeeCashPrice(slotId, data.base.highestArea)
 	dialogOpen = true
 	Theme.PurchaseDialog({
+		Context = "Base", -- the HUD closes it when you leave the base (OnClose resets dialogOpen)
 		Title = "Hire employee",
 		Description = ("Restocks %s automatically so it never stops selling."):format(name),
 		RobuxPrice = Config.Employee.Robux,

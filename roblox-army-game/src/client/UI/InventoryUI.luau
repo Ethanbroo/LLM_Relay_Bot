@@ -21,6 +21,8 @@
 			ActionText: string?,     -- show a big green action button with this text
 			OnAction: (() -> ())?,   -- called when the action button is pressed (then the panel closes)
 			OnClose: (() -> ())?,    -- called once when the panel closes (any reason)
+			Context: string?,        -- Theme panel context, e.g. "Base" (the HUD closes "Base"
+			                         -- dialogs when you leave the base); the combat lobby passes none
 		}): () -> ()                 -- returns close(); safe to call more than once
 		InventoryUI.MarkNew(uid: string)  -- show the "NEW" badge on an item until it is viewed
 		InventoryUI.IsOpen(): boolean
@@ -51,6 +53,7 @@ export type OpenOptions = {
 	ActionText: string?,
 	OnAction: (() -> ())?,
 	OnClose: (() -> ())?,
+	Context: string?,
 }
 
 type Entry = { uid: string, item: Item, def: EquipmentDefs.ItemDef, equipped: boolean }
@@ -303,6 +306,7 @@ function InventoryUI.Open(opts: OpenOptions): () -> ()
 
 	local _, content, panelClose = Theme.Panel({
 		Name = "Armoury",
+		Context = opts.Context,
 		Title = opts.Title or "Armoury",
 		HeaderColor = P.CardOrange,
 		HeaderDarkColor = P.CardOrangeDark,

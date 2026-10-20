@@ -16,9 +16,16 @@
 	Receipt rules (Roblox requirements):
 		* Player not in this server, or data not loaded -> NotProcessedYet
 		  (Roblox retries later, e.g. when they rejoin).
-		* Already processed (DataService:HasReceipt) -> PurchaseGranted.
-		* Grant -> DataService:AddReceipt -> DataService:SaveNow (pcall) ->
-		  PurchaseGranted. If anything fails or errors -> NotProcessedYet.
+		* Already processed (DataService:HasReceipt) -> PurchaseGranted, but
+		  only once it is saved: when saving is on (DataService:IsSaving) we
+		  SaveNow again and answer NotProcessedYet if that save fails.
+		* Grant -> DataService:AddReceipt -> DataService:SaveNow ->
+		  PurchaseGranted. If the grant fails or errors -> NotProcessedYet.
+		  If saving is on and SaveNow fails -> NotProcessedYet: the grant and
+		  the receipt stay in memory, so Roblox's retry takes the HasReceipt
+		  branch (saves again) and never grants twice. Without DataStore access
+		  (IsSaving() == false, e.g. Studio) a granted purchase is
+		  PurchaseGranted right away.
 
 	Requests (Net actions):
 		HireEmployeeRobux(slotId)
@@ -215,6 +222,16 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	if ds:HasReceipt(player, purchaseId) then
+		-- Granted earlier; tell Roblox only once that is actually saved.
+		if ds:IsSaving() then
+			local ok, saved = pcall(function()
+				return ds:SaveNow(player)
+			end)
+			if not ok or saved ~= true then
+				warn("[ShopService] save of an earlier purchase failed, will retry: " .. tostring(saved))
+				return Enum.ProductPurchaseDecision.NotProcessedYet
+			end
+		end
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 	if processing[purchaseId] then
@@ -242,14 +259,17 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 
 	ds:AddReceipt(player, purchaseId)
 	processing[purchaseId] = nil
-	local saveOk, saveErr = pcall(function()
-		ds:SaveNow(player)
+	local saveOk, saved = pcall(function()
+		return ds:SaveNow(player)
 	end)
-	if not saveOk then
-		warn("[ShopService] save after purchase failed: " .. tostring(saveErr))
-	end
 	if player.Parent then
 		Net.Fire("Shop", player, "Purchased", { key = key })
+	end
+	if ds:IsSaving() and (not saveOk or saved ~= true) then
+		-- The grant + receipt stay in memory: the retry takes the HasReceipt
+		-- branch above, saves again and never grants twice.
+		warn("[ShopService] save after purchase failed, Roblox will retry: " .. tostring(saved))
+		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end

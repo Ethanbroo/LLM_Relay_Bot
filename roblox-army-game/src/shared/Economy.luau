@@ -32,6 +32,19 @@
 	Extras (not in the contract, handy for UIs and tools):
 		Economy.SlotArea(slotId): number?            area index of a slot id
 		Economy.AreaUnlockTotal(area): number        all 4 slots + the exit gate of an area
+	Economy.TimeSkipPayout(sections, seconds): (total, perSlot)
+	                                             what a time skip of `seconds` pays the player's
+	                                             sections RIGHT NOW (data.base.sections);
+	                                             perSlot[slotId] = { paid, sales, stockUsed }
+	Economy.TimeSkipValue(boostId, playerArea, preview): number
+	                                             min(BoostValue, preview): value used for the price
+	Economy.TimeSkipCoinPrice(boostId, playerArea, preview): number
+	                                             (1 - NetGainShare) x TimeSkipValue, rounded DOWN
+	                                             to cents (never more than 0.8 x preview)
+	Economy.TimeSkipWorthOffering(boostId, playerArea, preview): boolean
+	                                             random offers only show a time skip when the preview
+	                                             is >= TimeSkipOfferMinShare (25%) of its reference
+	Economy.TimeSkipOfferMinShare: number
 		Economy._ClearCache()                        tests: forget memoized values (e.g. after
 		                                             switching Config.Benchmark.Mode)
 
@@ -56,9 +69,14 @@
 	  active runner rate R / RunDurationSeconds().
 	* Boost value V ("used properly", question 10): a 2x multiplier doubles your
 	  earnings while you play runs for its duration -> extra = minutes*60 /
-	  RunDurationSeconds() x R(area). A time skip pays hours*3600 x
-	  ReferencePassiveRate(area). Coin price = (1 - NetGainShare) x V = 0.8 V:
+	  RunDurationSeconds() x R(area). A time skip's REFERENCE value is
+	  hours*3600 x ReferencePassiveRate(area) (every shop of every area owned,
+	  all with employees). Coin price = (1 - NetGainShare) x V = 0.8 V:
 	  80% less net gain than the Robux route, still +25% return.
+	* Time skip cash price: a skip only pays what the player's own shops
+	  would earn (sections without an employee stop when their stock runs
+	  out), so the price uses V = min(reference, TimeSkipPayout preview) and a
+	  cash time skip ALWAYS returns +25% of what was paid.
 	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)).
 	* Combat: the barrier of area a is combat level 3a-1. A perfect clear of a
 	  combat level pays ~3 best-case runs of the area the level belongs to
@@ -70,6 +88,7 @@ local Shared = script.Parent
 local Config = require(Shared:WaitForChild("Config"))
 local EconomyDefs = require(Shared:WaitForChild("EconomyDefs"))
 local Format = require(Shared:WaitForChild("Format"))
+local Types = require(Shared:WaitForChild("Types"))
 local RunnerFolder = Shared:WaitForChild("Runner")
 local RunnerCourse = require(RunnerFolder:WaitForChild("RunnerCourse"))
 local RunnerDefs = require(RunnerFolder:WaitForChild("RunnerDefs"))
@@ -79,6 +98,8 @@ export type BenchmarkRun = { level: number, payout: number }
 export type BenchmarkDetails = { upgradeLevel: number, runs: { BenchmarkRun }, total: number }
 export type Upgrades = { troops: number, damage: number, capacity: number }
 export type RunnerStats = { startTroops: number, damage: number, capacity: number }
+type SectionState = Types.SectionState
+export type TimeSkipSlot = { paid: number, sales: number, stockUsed: number }
 export type SectionStats =
 	{ incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
 
@@ -440,6 +461,82 @@ function Economy.BoostCoinPrice(boostId: string, playerArea: number): number
 	end
 	local share = 1 - num(Config.CoinRoute.NetGainShare, 0.2)
 	return math.max(0.01, round(share * Economy.BoostValue(boostId, playerArea)))
+end
+
+-- What a time skip of `seconds` pays the given sections right now
+-- (docs/ARCHITECTURE.md §6.2). Per unlocked revenue section:
+-- sales = floor(seconds / saleInterval); with an employee every sale is paid,
+-- without one only min(sales, floor(stock)) (the stock runs out). Pure: the
+-- caller (BaseService) applies the stock decrement. Not 2x-boosted.
+function Economy.TimeSkipPayout(
+	sections: { [string]: SectionState },
+	seconds: number
+): (number, { [string]: TimeSkipSlot })
+	local perSlot: { [string]: TimeSkipSlot } = {}
+	local s = num(seconds, 0)
+	if s <= 0 or type(sections) ~= "table" then
+		return 0, perSlot
+	end
+	local total = 0
+	for slotId, section in sections do
+		local info = slotLookup[slotId]
+		if type(section) ~= "table" or not info or info.def.kind ~= "revenue" then
+			continue
+		end
+		local stats = Economy.SectionStats(slotId, section.level)
+		if stats.saleInterval <= 0 then
+			continue
+		end
+		-- 1e-9: 3600 / 4.6 style divisions never lose a whole sale to float noise.
+		local sales = math.floor(s / stats.saleInterval + 1e-9)
+		local stockUsed = 0
+		if section.employee ~= true then
+			sales = math.min(sales, math.max(0, math.floor(num(section.stock, 0))))
+			stockUsed = sales
+		end
+		if sales > 0 then
+			local paid = round(sales * stats.incomePerSale)
+			total += paid
+			perSlot[slotId] = { paid = paid, sales = sales, stockUsed = stockUsed }
+		end
+	end
+	return round(total), perSlot
+end
+
+-- [PROPOSAL] Value of a time skip for pricing: what it would pay right now
+-- (`preview`, from TimeSkipPayout), capped at the area reference.
+function Economy.TimeSkipValue(boostId: string, playerArea: number, preview: number): number
+	local boost = boostLookup[boostId]
+	if not boost or boost.kind ~= "timeskip" then
+		return 0
+	end
+	return round(math.min(Economy.BoostValue(boostId, playerArea), math.max(0, num(preview, 0))))
+end
+
+-- [PROPOSAL] Cash price of a time skip = (1 - NetGainShare) x TimeSkipValue,
+-- rounded DOWN to cents so it never exceeds 0.8 x what it pays. 0 = it pays
+-- (almost) nothing and must not be sold. Unknown / non-skip boost -> math.huge.
+function Economy.TimeSkipCoinPrice(boostId: string, playerArea: number, preview: number): number
+	local boost = boostLookup[boostId]
+	if not boost or boost.kind ~= "timeskip" then
+		return math.huge
+	end
+	local share = 1 - num(Config.CoinRoute.NetGainShare, 0.2)
+	return math.floor(share * Economy.TimeSkipValue(boostId, playerArea, preview) * 100 + 1e-6) / 100
+end
+
+-- [PROPOSAL] A random offer only shows a time skip when it would pay at
+-- least this share of its reference value (so offers are worth buying).
+Economy.TimeSkipOfferMinShare = 0.25
+
+function Economy.TimeSkipWorthOffering(boostId: string, playerArea: number, preview: number): boolean
+	local boost = boostLookup[boostId]
+	if not boost or boost.kind ~= "timeskip" then
+		return false
+	end
+	local reference = Economy.BoostValue(boostId, playerArea)
+	local p = num(preview, 0)
+	return p >= 1 and p + 1e-6 >= Economy.TimeSkipOfferMinShare * reference
 end
 
 function Economy.VehicleCoinPrice(vehicleId: string, playerArea: number): number

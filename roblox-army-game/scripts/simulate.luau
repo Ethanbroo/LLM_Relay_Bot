@@ -15,7 +15,8 @@
 		3. Slot prices, gate prices and area totals (both benchmark modes)
 		4. Revenue sections (income, stock, payback, upgrades)
 		5. Employees (R$ 200 or 20 runs of cash)
-		6. Boosts (value, coin price, Robux, value / price)
+		6. Boosts (value, coin price, Robux, value / price) + the time-skip
+		   price rule (priced from what the player's own shops would pay)
 		7. Vehicles
 		8. Permanent runner upgrades
 		9. Combat level rewards and barriers
@@ -337,6 +338,8 @@ emit()
 emit("## 6. Boosts")
 emit()
 emit("Value V = cash the boost gives when used properly; coin price = (1 - NetGainShare) x V.")
+emit("For time skips this V is the area REFERENCE (every shop of every area owned, all with")
+emit("employees); the actual cash price follows the rule in 6.1.")
 emit()
 header({
 	"Boost",
@@ -357,6 +360,63 @@ for _, boost in Config.Boosts do
 		ratio = v / p
 	end
 	table.insert(cells, string.format("%.3f", ratio))
+	row(cells)
+end
+emit()
+
+emit("### 6.1 Time-skip cash price (what your shops would pay right now)")
+emit()
+emit("A time skip pays `Economy.TimeSkipPayout(sections, seconds)`: per owned shop,")
+emit("sales = floor(seconds / sale interval); with an employee every sale is paid, without one")
+emit("only min(sales, stock). Price = (1 - NetGainShare) x min(reference V, preview), rounded")
+emit("down to cents, so a cash time skip always returns at least +25% of what was paid.")
+emit(
+	string.format(
+		"Random offers only show a time skip when the preview is >= %d%% of its reference;",
+		math.floor(Economy.TimeSkipOfferMinShare * 100 + 0.5)
+	)
+)
+emit("a skip that would pay less than $1 is never sold (cash or Robux).")
+emit()
+local function areaOneSections(withAll: boolean): { [string]: any }
+	local sections: { [string]: any } = {}
+	for index, slotDef in Config.Areas[1].slots do
+		if slotDef.kind == "revenue" and (withAll or index == 1) then
+			sections[slotDef.id] = {
+				level = 1,
+				stock = Economy.SectionStats(slotDef.id, 1).stockCapacity,
+				employee = withAll,
+			}
+		end
+	end
+	return sections
+end
+local oneShop = areaOneSections(false)
+local allShops = areaOneSections(true)
+emit("Example, area-1 player: (a) only the first shop, full stock, no employee;")
+emit("(b) all four area-1 shops with employees.")
+emit()
+header({
+	"Boost",
+	"Reference V / old price",
+	"(a) pays / price / offered",
+	"(b) pays / price / offered",
+})
+for _, boost in Config.Boosts do
+	if boost.kind ~= "timeskip" then
+		continue
+	end
+	local seconds = (boost.hours or 0) * 3600
+	local cells: { any } = {
+		boost.name,
+		money(Economy.BoostValue(boost.id, 1)) .. " / " .. money(Economy.BoostCoinPrice(boost.id, 1)),
+	}
+	for _, sections in { oneShop, allShops } do
+		local preview = Economy.TimeSkipPayout(sections, seconds)
+		local price = Economy.TimeSkipCoinPrice(boost.id, 1, preview)
+		local offered = Economy.TimeSkipWorthOffering(boost.id, 1, preview)
+		table.insert(cells, money(preview) .. " / " .. money(price) .. " / " .. (if offered then "yes" else "no"))
+	end
 	row(cells)
 end
 emit()
@@ -411,7 +471,8 @@ emit()
 emit("## 9. Combat level rewards")
 emit()
 local barrierOf: { [number]: number } = {}
-for area = 1, AREAS do
+-- The last area has no exit gate, so no barrier.
+for area = 1, AREAS - 1 do
 	barrierOf[Economy.BarrierCombatLevel(area)] = area
 end
 header({ "Level", "Perfect-clear reward", "Note" })

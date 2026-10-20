@@ -5,13 +5,17 @@
 	the game: chunky outlined text, orange/blue cards, black banners).
 
 	API:
-		CombatUI.OpenArenaMenu({ highestLevel, onFight = function(level) end }) -> close()
+		CombatUI.OpenArenaMenu({ highestLevel, onFight = function(level) end, onClose? }) -> close()
 			Level select for the repeatable Combat Arena: levels 1..highestLevel+1,
 			difficulty skulls, cash reward, chest, "FIGHT".
-		CombatUI.ConfirmBarrier({ level, nextAreaName, reward, onConfirm }) -> close()
+		CombatUI.ConfirmBarrier({ level, nextAreaName, reward, onConfirm, onClose? }) -> close()
+			Both are "Base" dialogs (Theme Context = "Base"): opening one again
+			replaces the old copy, and the HUD closes them when you leave the base.
 		CombatUI.LobbyBar({ onInventory, onStart, onLeave }) -> { Destroy: () -> () }
 			Small bar shown before round 1: [Inventory] [Start] [Leave].
 		CombatUI.Hud({ level, mode, nextAreaName, waveCount, onLeave }) -> Hud
+			The wave banner and the Leave button sit below Roblox's top bar
+			(Theme.TopInset(), updated when the top bar changes size).
 			Hud.SetWave(wave, waveCount)       black "WAVE 2/5" banner
 			Hud.Countdown(startsAt, wave, boss) big 3-2-1 / "WAVE 2" / "BOSS!" in the middle
 			Hud.SetCash(amount)                 lime money tag above your character
@@ -25,8 +29,10 @@
 			Three Theme cards (icon, name, description, stacks, "PICK") + timer.
 		CombatUI.Result({ result, onChest = function(done) end, onContinue }) -> close()
 			VICTORY / DEFEAT, cash earned, then the chest, then "CONTINUE".
+			A defeat without a chest explains how to earn one (CombatDefs.ChestTier).
 ]]
 
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -53,15 +59,21 @@ local CHEST_ICONS = { wood = "📦", silver = "🎁", gold = "👑" }
 -------------------------------------------------------------------------------
 -- Arena level select
 -------------------------------------------------------------------------------
-export type ArenaMenuOptions = { highestLevel: number, onFight: (level: number) -> () }
+export type ArenaMenuOptions = {
+	highestLevel: number,
+	onFight: (level: number) -> (),
+	onClose: (() -> ())?, -- called once when the menu closes (any reason)
+}
 
 function CombatUI.OpenArenaMenu(opts: ArenaMenuOptions): () -> ()
 	local _, content, close = Theme.Panel({
 		Name = "ArenaMenu",
+		Context = "Base",
 		Title = "⚔️ Combat Arena",
 		HeaderColor = P.ButtonRed,
 		HeaderDarkColor = P.ButtonRedDark,
 		Size = UDim2.fromOffset(620, 520),
+		OnClose = opts.onClose,
 	})
 	Theme.List(content, "Vertical", 8)
 
@@ -162,10 +174,18 @@ end
 -------------------------------------------------------------------------------
 -- Barrier confirm
 -------------------------------------------------------------------------------
-export type BarrierOptions = { level: number, nextAreaName: string, reward: number, onConfirm: () -> () }
+export type BarrierOptions = {
+	level: number,
+	nextAreaName: string,
+	reward: number,
+	onConfirm: () -> (),
+	onClose: (() -> ())?, -- called once when the dialog closes (also right before onConfirm)
+}
 
 function CombatUI.ConfirmBarrier(opts: BarrierOptions): () -> ()
 	return Theme.Confirm({
+		Name = "BarrierConfirm",
+		Context = "Base",
 		Title = "🛡️ Barrier Squad",
 		Body = ("Defeat the squad guarding %s!\nLevel %d • 4 waves • Officer boss\nUp to %s + a gold chest"):format(
 			opts.nextAreaName,
@@ -174,6 +194,7 @@ function CombatUI.ConfirmBarrier(opts: BarrierOptions): () -> ()
 		),
 		ConfirmText = "FIGHT!",
 		OnConfirm = opts.onConfirm,
+		OnClose = opts.onClose,
 	})
 end
 
@@ -277,12 +298,13 @@ function CombatUI.Hud(opts: HudOptions): Hud
 	root.Size = UDim2.fromScale(1, 1)
 	root.Parent = gui
 
-	-- top centre: black wave banner + level label
+	-- top centre: black wave banner + level label (below Roblox's top bar:
+	-- the CombatUI gui ignores the GUI inset)
 	local top = Instance.new("Frame")
 	top.Name = "Top"
 	top.BackgroundTransparency = 1
 	top.AnchorPoint = Vector2.new(0.5, 0)
-	top.Position = UDim2.new(0.5, 0, 0, 12)
+	top.Position = UDim2.new(0.5, 0, 0, Theme.TopInset() + 8)
 	top.Size = UDim2.fromOffset(320, 90)
 	top.Parent = root
 	Theme.ResponsiveScale(top)
@@ -311,12 +333,19 @@ function CombatUI.Hud(opts: HudOptions): Hud
 		Color = P.ButtonRed,
 		DarkColor = P.ButtonRedDark,
 		Size = UDim2.fromOffset(130, 50),
-		Position = UDim2.fromOffset(16, 16),
+		Position = UDim2.fromOffset(16, Theme.TopInset() + 8),
 		MaxTextSize = 22,
 		OnClick = opts.onLeave,
 		Parent = root,
 	})
-	Theme.ResponsiveScale(leave)
+	Theme.ResponsiveScale(leave) -- reuses the button's own "ThemeScale" UIScale
+
+	-- keep both below the top bar if it changes size
+	local insetConnection = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(function()
+		local y = Theme.TopInset() + 8
+		top.Position = UDim2.new(0.5, 0, 0, y)
+		leave.Position = UDim2.fromOffset(16, y)
+	end)
 
 	-- bottom bar: shield + HP bar
 	local bottom = Instance.new("Frame")
@@ -558,6 +587,7 @@ function CombatUI.Hud(opts: HudOptions): Hud
 	function hud.Destroy()
 		countdownToken += 1
 		hintToken += 1
+		insetConnection:Disconnect()
 		if board then
 			board:Destroy()
 			board = nil
@@ -772,13 +802,21 @@ function CombatUI.Result(opts: ResultOptions): () -> ()
 		Parent = cashRow,
 	})
 
+	local chest = result.chest
+	local chestTier = if type(chest) == "table" and type(chest.tier) == "string" then chest.tier else nil
+
 	local note = ""
 	if result.barrierDefeated then
 		note = ("The way to %s is open — unlock its gate!"):format(tostring(result.nextAreaName or "the next area"))
 	elseif result.newBest then
 		note = "New best level! The next level is unlocked."
+	elseif not victory and chestTier then
+		note = "Cash you collected is yours, and you earned a chest. Upgrade your gear and try again!"
 	elseif not victory then
-		note = "Cash you collected is yours. Upgrade your gear and try again!"
+		-- matches CombatDefs.ChestTier: wood needs 1 kill or CHEST_MIN_SECONDS of fighting
+		note = ("No chest this time: defeat an enemy or fight for %d seconds to earn one."):format(
+			CombatDefs.CHEST_MIN_SECONDS
+		)
 	end
 	Theme.Label({
 		Text = note,
@@ -790,8 +828,6 @@ function CombatUI.Result(opts: ResultOptions): () -> ()
 		Parent = content,
 	})
 
-	local chest = result.chest
-	local chestTier = if type(chest) == "table" and type(chest.tier) == "string" then chest.tier else nil
 	local button: TextButton
 	local continueMode = chestTier == nil
 	local opened = false

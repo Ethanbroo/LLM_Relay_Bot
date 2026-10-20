@@ -84,7 +84,7 @@ Weapons and damage use their own gold gates, not maths.
 |---|---|
 | Weapon: Rifle / SMG / Assault Rifle / Minigun / Rocket | $8 / $12 / $18 / $25 / $35 for each tier reached |
 | +20% Damage (each damage gate) | $9 |
-| Troops × N | $1.50 per troop alive at the finish |
+| Troops at finish × N | $1.50 per troop alive at the finish. The line also shows how many you started with from permanent upgrades and how many you gained or lost this run |
 | Cash carried | Cash you picked up, **capped by your coin-carrying capacity** (overflow shown as lost) |
 | Enemies defeated × N | $0.50 per soldier, plus barricade rewards |
 | Enemy base destroyed X% | Up to $60 × the share destroyed |
@@ -357,7 +357,7 @@ R values: **$226, $452, $803, $1,279, $2,356, $4,545, $7,686, $14,341** (areas 1
 |---|---|---|
 | Employee | 200 ✅ | 20 × R(area) ✅ ($4,521 → $286,827) |
 | 2× Cash 15 / 30 / 60 min | 29 / 49 / 89 💡 | 80% of its value (area 1: $3,115 / $6,230 / $12,459) |
-| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of its value (area 1: $3,986 … $95,672) |
+| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of what it pays **you right now**, never more than 80% of its full value (area 1 with all 4 shops staffed: 1 h = $3,984) |
 | Vehicles (8, one per area ✅) | 49 → 799 💡 | price factor × the gate price of your area (area 1 bike: $1,763) |
 
 * ✅ **Vehicles**: a better one unlocks with each area (Army Bike → Jeep → Supply Truck → Humvee → APC → Light Tank →
@@ -373,11 +373,18 @@ R values: **$226, $452, $803, $1,279, $2,356, $4,545, $7,686, $14,341** (areas 1
 * 💡 **Time skip** instantly pays what your shops would earn in that many hours. **Shops with an employee pay the full
   time** (the employee keeps restocking). **Shops without one pay only until their stock runs out.** This rewards
   hiring employees. 2× does not double time skips.
+* 💡 A time skip's price is based on **what your shops would really pay right now**. The dialog shows "Pays $X now" and
+  "up to $V when every shop has an employee". So a cash time skip **always returns +25%** of what you paid.
+  (Example, area 1, 1 h: one shop without an employee pays $24.25, so it is not offered. All four shops staffed pay
+  $4,980 for a price of $3,984.)
 
 ### 9.3 Random appearances on the home map
 ✅ 2× boosts and time skips appear randomly; cheaper ones appear more often.
 ❓ 💡 They are **purchase offers** (like the purple "+$357.1" bubble in image 1): a glowing bubble appears on a
 walkway every 2.5–5 minutes and stays 90 s (max 2 at once). Walk into it to choose **Robux or cash**.
+💡 A time skip is only offered when it would pay at least 25% of its full value. Until then only 2× offers appear
+(65.2% / 26.1% / 8.7%). The chances below apply once every time skip qualifies; the Shop's Boosts tab always
+shows your current chances.
 
 | Boost | Chance of each appearance |
 |---|---|
@@ -395,11 +402,12 @@ walkway every 2.5–5 minutes and stays 90 s (max 2 at once). Walk into it to ch
 ❓ **Q10.** 💡 The comparison is defined first, before any price multiplier is chosen:
 * **Efficiency = net in-game cash a purchase gives you.**
 * **Value V** = cash the boost produces **when used properly**. For 2×: playing runs for its whole duration.
-  For a time skip: all shops in your areas running with employees.
+  For a time skip: what your shops would pay right now, capped at the full value (every shop in your areas staffed).
 * **Robux route:** you get V and spend no cash, so you are up by **+V**.
 * **Cash route:** you get V and pay P, so you are up by **V − P**.
 * **"80% less efficient":** V − P = 20% of V, so **P = 0.8 × V**.
-* **"Slightly profitable":** you still gain **+25%** on what you paid (V / P = 1.25), but only if you use it fully.
+* **"Slightly profitable":** you still gain **+25%** on what you paid (V / P = 1.25). For time skips this is guaranteed,
+  because V is measured from your own shops. For 2× it holds if you keep playing for the whole duration.
 * **Applies to:** 2× multipliers and time skips (their value can be measured). Employees use the explicit
   20-run rule. Vehicles use the gate-price anchor (their value is speed, not cash).
 * Change it with `Config.CoinRoute.NetGainShare` (0.2 = 80% less efficient).

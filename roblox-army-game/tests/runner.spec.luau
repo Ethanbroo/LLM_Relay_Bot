@@ -294,6 +294,35 @@ return function(H)
 		end
 	end)
 
+	H.test("Troops line separates starting troops from troops gained in the run", function()
+		local rng = Rng.new(77)
+		local sawGain = false
+		for _, course in courses do
+			for _ = 1, 10 do
+				local stats = refStats(course.area)
+				local r = RunnerSim.Resolve(course, stats, randomChoices(course, rng))
+				local line
+				for _, l in r.lines do
+					if l.kind == "troops" then
+						line = l
+					end
+				end
+				H.expect(line ~= nil, "troops line")
+				H.expect(line.label == "Troops at finish x " .. r.troops, "label: " .. line.label)
+				local delta = r.troops - stats.startTroops
+				local sign = if delta >= 0 then "+" else "-"
+				local expected = ("started with %d from upgrades, %s%d this run"):format(
+					stats.startTroops,
+					sign,
+					math.abs(delta)
+				)
+				H.expect(line.detail:find(expected, 1, true) ~= nil, "detail: " .. line.detail)
+				sawGain = sawGain or delta > 0
+			end
+		end
+		H.expect(sawGain, "some random run gained troops")
+	end)
+
 	H.test("Payout bonus multiplies the total", function()
 		local course = courses[4]
 		local stats = refStats(course.area)

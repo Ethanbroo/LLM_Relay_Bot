@@ -32,12 +32,17 @@
 		  result line (what you picked up during this run and its cash value),
 		  then the TOTAL actually paid. A second sub-heading "PERMANENT UPGRADES"
 		  shows the bought starting stats, kept clearly apart (brief requirement).
+		  The panel deliberately has no Context, so HUD's Theme.CloseModals("Base")
+		  (run when the mode changes to Runner) never closes it.
+
+	Screen-size scaling uses Theme.ResponsiveScale on plain holder frames only
+	(one UIScale per object, shared with Theme.Pop / button press animations).
+	The HUD banner sits below Roblox's top bar (Theme.TopInset()).
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -98,29 +103,12 @@ local function getGui(): ScreenGui
 	return Theme.ScreenGui("RunnerUI", 8)
 end
 
--- Like Theme's responsive scale, but the viewport listener is stored in
--- `conns` so it can be disconnected when the screen closes (no leaks).
-local function responsive(gui: GuiObject, conns: { RBXScriptConnection })
-	local scale = Instance.new("UIScale")
-	scale.Name = "ResponsiveScale"
-	scale.Parent = gui
-	local function update()
-		local camera = Workspace.CurrentCamera
-		local height = if camera then camera.ViewportSize.Y else 800
-		scale.Scale = math.clamp(height / 820, 0.55, 1.25)
-	end
-	update()
-	local camera = Workspace.CurrentCamera
-	if camera then
-		table.insert(conns, camera:GetPropertyChangedSignal("ViewportSize"):Connect(update))
-	end
-end
-
-local function disconnectAll(conns: { RBXScriptConnection })
-	for _, conn in conns do
-		conn:Disconnect()
-	end
-	table.clear(conns)
+-- Screen-size scaling goes through Theme.ResponsiveScale, which reuses the
+-- object's single "ThemeScale" UIScale (Roblox applies only one UIScale per
+-- object) and stops listening when the screen is destroyed. It is only put
+-- on plain holder frames, never on a button or anything Theme.Pop animates.
+local function responsive(gui: GuiObject)
+	Theme.ResponsiveScale(gui)
 end
 
 local function upgradeLevel(data: PlayerData, kind: string, overrides: { [string]: number }?): number
@@ -167,11 +155,11 @@ function RunnerUI.ShowHud(level: number): Hud
 	root.Name = "RunnerHud"
 	root.BackgroundTransparency = 1
 	root.AnchorPoint = Vector2.new(0.5, 0)
-	root.Position = UDim2.new(0.5, 0, 0, 12)
+	-- RunnerUI ignores the GUI inset: start below Roblox's top bar.
+	root.Position = UDim2.new(0.5, 0, 0, Theme.TopInset() + 6)
 	root.Size = UDim2.fromOffset(300, 80)
 	root.Parent = getGui()
-	local conns: { RBXScriptConnection } = {}
-	responsive(root, conns)
+	responsive(root)
 
 	local _, setBanner = Theme.Banner({
 		Text = "Level " .. level,
@@ -205,7 +193,6 @@ function RunnerUI.ShowHud(level: number): Hud
 			fill.Size = UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
 		end,
 		Destroy = function()
-			disconnectAll(conns)
 			root:Destroy()
 		end,
 	}
@@ -240,7 +227,6 @@ function RunnerUI.ShowPrepare(props: {
 	root.BackgroundTransparency = 1
 	root.Size = UDim2.fromScale(1, 1)
 	root.Parent = getGui()
-	local conns: { RBXScriptConnection } = {}
 
 	---------------------------------------------------------------------------
 	-- LEFT: permanent upgrade cards
@@ -252,7 +238,7 @@ function RunnerUI.ShowPrepare(props: {
 	left.Position = UDim2.new(0, 16, 0.5, 10)
 	left.Size = UDim2.fromOffset(214, 660)
 	left.Parent = root
-	responsive(left, conns)
+	responsive(left)
 	Theme.List(left, "Vertical", 8, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
 
 	local heading = Instance.new("Frame")
@@ -367,7 +353,7 @@ function RunnerUI.ShowPrepare(props: {
 	rightHolder.Position = UDim2.new(1, -16, 0.5, 60)
 	rightHolder.Size = UDim2.fromOffset(206, 230)
 	rightHolder.Parent = root
-	responsive(rightHolder, conns)
+	responsive(rightHolder)
 	local _, bonusBody = Theme.Card({
 		Name = "Bonuses",
 		Title = "Bonuses",
@@ -416,7 +402,7 @@ function RunnerUI.ShowPrepare(props: {
 	hint.Position = UDim2.new(0.5, 0, 1, -24)
 	hint.Size = UDim2.fromOffset(420, 190)
 	hint.Parent = root
-	responsive(hint, conns)
+	responsive(hint)
 
 	local arrowBar = Instance.new("Frame")
 	arrowBar.Name = "Arrow"
@@ -471,7 +457,7 @@ function RunnerUI.ShowPrepare(props: {
 	backHolder.Position = UDim2.new(1, -16, 1, -16)
 	backHolder.Size = UDim2.fromOffset(130, 56)
 	backHolder.Parent = root
-	responsive(backHolder, conns)
+	responsive(backHolder)
 	Theme.Button({
 		Name = "Back",
 		Text = "Back",
@@ -562,7 +548,6 @@ function RunnerUI.ShowPrepare(props: {
 		end,
 		Destroy = function()
 			slide:Cancel()
-			disconnectAll(conns)
 			root:Destroy()
 		end,
 	}

@@ -9,6 +9,11 @@
 		CombatController:OpenArenaMenu()            level select for the repeatable Combat Arena
 		CombatController:StartBarrier(area: number) fight the barrier squad on `area`'s exit gate
 		CombatController:IsActive(): boolean        true while a fight (or its lobby) is open
+		OpenArenaMenu / StartBarrier do nothing while a fight (or its lobby) is open
+		or a CombatPrepare request is on its way. Their dialogs are "Base" dialogs:
+		opening one again replaces the old copy, and the HUD closes them when you
+		leave the base. The lobby inventory has no Context, so it stays open when
+		the mode changes to "Combat".
 
 	Flow of one fight:
 		1. OpenArenaMenu / StartBarrier -> CombatPrepare (server teleports you to your arena)
@@ -501,6 +506,7 @@ local function enter(reply: { [string]: any })
 				return
 			end
 			current.closeConfirm = Theme.Confirm({
+				Name = "RetreatConfirm",
 				Title = "Retreat?",
 				Body = "Leaving now counts as a defeat. You keep the cash you collected.",
 				ConfirmText = "Retreat",
@@ -562,7 +568,7 @@ end
 
 local function prepare(mode: string, param: number)
 	if busy or session then
-		return
+		return -- already fighting (or about to)
 	end
 	if State.Mode() ~= "Base" then
 		Theme.Toast("Finish what you are doing first", "error")
@@ -586,7 +592,7 @@ end
 function CombatController:OpenArenaMenu()
 	local data = State.Get()
 	if not data or busy or session then
-		return
+		return -- ignored while a fight (or its lobby) is open
 	end
 	if not data.base.arenaUnlocked then
 		Theme.Toast(
@@ -609,6 +615,9 @@ end
 function CombatController:StartBarrier(area: number)
 	local data = State.Get()
 	if not data or busy or session or type(area) ~= "number" then
+		return -- ignored while a fight (or its lobby) is open
+	end
+	if State.Mode() ~= "Base" then
 		return
 	end
 	if data.base.barriers[tostring(area)] then

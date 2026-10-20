@@ -10,7 +10,13 @@
 		  locally every second and is corrected by every data Sync / "Timer" event.
 		* Random boost offers on the home map (World/BoostOfferVisuals). Walking
 		  into one opens Theme.PurchaseDialog (Robux or cash) ->
-		  Net.Request("BuyBoostOffer", offerId, route).
+		  Net.Request("BuyBoostOffer", offerId, route). It does not open while
+		  another Theme dialog/panel or the inventory is open (the offer then
+		  re-triggers when you walk into it again). Time skips show what they
+		  pay you now (ShopUI.BoostPricing: Economy.TimeSkipPayout of your shops) and the full value
+		  with every shop staffed; their cash price is 80% of the first.
+		  Every dialog/panel opened here uses Context = "Base" (closed by the
+		  HUD when you leave the base).
 
 	Server events it listens to:
 		"Boost"   "Offer" / "OfferGone" / "Timer"   (BoostService)
@@ -33,11 +39,11 @@ local Client = script.Parent.Parent
 local State = require(Client.State)
 local Theme = require(Client.UI.Theme)
 local ShopUI = require(Client.UI.ShopUI)
+local InventoryUI = require(Client.UI.InventoryUI)
 local BoostOfferVisuals = require(Client.World.BoostOfferVisuals)
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
-local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
 local Net = require(Shared.Net)
 
@@ -102,41 +108,47 @@ local function closeOfferDialog(offerId: string?)
 	end
 end
 
-local function offerDescription(def: Config.BoostDef, area: number): string
-	local value = Economy.BoostValue(def.id, area)
+local function offerDescription(def: Config.BoostDef, preview: number?, value: number): string
 	if def.kind == "multiplier" then
 		return ("Doubles ALL cash you earn (runs, shops, combat) for %d minutes of play time. Adds to any time you already have.\nWorth about %s if you keep playing."):format(
 			def.minutes or 0,
 			Format.Money(value)
 		)
 	end
-	return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nWorth about %s."):format(
+	return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nPays %s now (up to %s when every shop has an employee)."):format(
 		def.hours or 0,
+		Format.Money(preview or 0),
 		Format.Money(value)
 	)
 end
 
-local function openOfferDialog(offer: BoostOfferVisuals.Offer)
-	if offerDialog or State.Mode() ~= "Base" or ShopUI.IsOpen() then
-		return
+-- Returns true when the dialog opened. false = refused (another dialog, the
+-- shop or the inventory is open, ...): BoostOfferVisuals then re-arms the
+-- offer so walking into it again retries.
+local function openOfferDialog(offer: BoostOfferVisuals.Offer): boolean
+	if offerDialog or State.Mode() ~= "Base" or ShopUI.IsOpen() or Theme.IsModalOpen() or InventoryUI.IsOpen() then
+		return false
 	end
 	local data = State.Get()
 	local def = boostById[offer.boostId]
 	if not data or not def then
-		return
+		return false
 	end
-	local area = data.base.highestArea
-	local price = Economy.BoostCoinPrice(def.id, area)
+	-- Display only: the server prices the boost again when you buy it.
+	local price, preview, value = ShopUI.BoostPricing(def, data)
 	local productId = Config.ProductIds[def.id] or 0
 	local offerId = offer.id
 	local close = Theme.PurchaseDialog({
 		Title = def.name,
-		Description = offerDescription(def, area),
+		Description = offerDescription(def, preview, value),
 		RobuxPrice = def.robux,
 		RobuxEnabled = productId ~= 0,
 		CashPrice = price,
-		CashAffordable = data.cash + 1e-6 >= price,
-		Footnote = "Cash price = 80% of its value: buying with cash still pays back +25% if you use it fully",
+		CashAffordable = price > 0 and data.cash + 1e-6 >= price,
+		Footnote = if def.kind == "timeskip"
+			then "Cash price = 80% of what it pays you now (+25%)"
+			else "Cash price = 80% of its value: buying with cash still pays back +25% if you use it fully",
+		Context = "Base",
 		OnClose = function()
 			if offerDialog and offerDialog.offerId == offerId then
 				offerDialog = nil
@@ -153,6 +165,7 @@ local function openOfferDialog(offer: BoostOfferVisuals.Offer)
 		end,
 	})
 	offerDialog = { offerId = offerId, close = close }
+	return true
 end
 
 local function onBoostEvent(msg: any, payload: any)
