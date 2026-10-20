@@ -43,9 +43,13 @@
 		                 Handle the client welds the weapon model to; the standard
 		                 tool-hold arm pose comes from the default Animate script).
 		                 bossHp = RunnerSim.BossHp(course, stats) for the client.
-		RunnerFinish   - sent by the client AFTER the boss fight (so the elapsed
-		                 time is always above RunnerSim.MinDuration, which only
-		                 counts the running part).
+		RunnerFinish   - sent ONCE by the client as soon as the squad reaches the
+		                 castle, during the boss intro, and never before
+		                 RunnerSim.MinDuration + a little slack on the client's
+		                 clock (which starts later than ours), so the
+		                 elapsed >= MinDuration x 0.9 check passes. The client then
+		                 plays the boss fight from reply.result.boss, so the fight
+		                 on screen is the one that is paid.
 		                 anti-cheat time + position checks (fails if the avatar
 		                 is missing), picks the lanes (client's if plausible, else
 		                 the ones the server saw), re-simulates, pays boostable

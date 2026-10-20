@@ -170,7 +170,8 @@ return function(H)
 							s.saleInterval >= baseInterval * 0.66 - 1e-9 and s.saleInterval <= baseInterval * 2 + 1e-9,
 							("%s sale interval %.2f"):format(slotDef.id, s.saleInterval)
 						)
-						H.expect(s.stockCapacity >= 25 and s.stockCapacity <= 40, "stock")
+						isWhole(s.stockCapacity, "stock")
+						H.expect(s.stockCapacity >= 5, "stock >= 5")
 						finitePositive(s.incomePerSale, "income per sale")
 						isWhole(s.incomePerSale, "income per sale")
 						H.expect(s.incomePerSale >= 1, "at least $1 per sale")
@@ -207,6 +208,39 @@ return function(H)
 		end)
 		-- Reference passive rate adds up all areas.
 		H.expect(Economy.ReferencePassiveRate(3) > Economy.ReferencePassiveRate(2), "reference passive rate")
+	end)
+
+	H.test("Sections: a full stock lasts the designed time at every level (whole-dollar sales)", function()
+		local d = EconomyDefs.Sections
+		for area = 1, AREAS do
+			for slotIndex, slotDef in Config.Areas[area].slots do
+				if slotDef.kind ~= "revenue" then
+					continue
+				end
+				local i = math.min(slotIndex, #d.SaleInterval)
+				local prevDuration, prevIncome = 0, 0
+				for level = 1, Economy.SectionMaxLevel do
+					local s = Economy.SectionStats(slotDef.id, level)
+					-- Designed: StockCapacity x SaleInterval at level 1, +10% per level.
+					local designed = d.StockCapacity[i] * (1 + d.StockPerLevel * (level - 1)) * d.SaleInterval[i]
+					local duration = s.stockCapacity * s.saleInterval
+					H.expect(
+						math.abs(duration / designed - 1) <= 0.1,
+						("%s L%d: full stock lasts %.0f s, designed %.0f s"):format(
+							slotDef.id,
+							level,
+							duration,
+							designed
+						)
+					)
+					isWhole(s.stockCapacity, "stock")
+					-- Upgrades raise both the income and how long a full stock lasts.
+					H.expect(s.incomePerSecond > prevIncome, ("%s L%d income rises"):format(slotDef.id, level))
+					H.expect(duration > prevDuration, ("%s L%d stock duration rises"):format(slotDef.id, level))
+					prevDuration, prevIncome = duration, s.incomePerSecond
+				end
+			end
+		end
 	end)
 
 	H.test("Employee cash price = 20 runs of R (both scaling rules)", function()

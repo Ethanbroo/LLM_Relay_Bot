@@ -68,14 +68,21 @@ EconomyDefs.Sections = {
 	-- [PROPOSAL] A full area of level-1 sections earns this share of the active
 	-- runner rate R(area) / RunDurationSeconds(). With CombinedSections prices a
 	-- level-1 section then repays its unlock price in ~40 minutes of stocked running.
-	-- (Raised from 0.32 when the castle boss fight made a run ~7 s longer.)
-	PassiveShare = 0.36,
-	-- Seconds between sales, by slot index 1..4 (bigger shops sell less often but more per sale).
+	-- (0.32 -> 0.36 when the castle boss fight made a run ~7 s longer, -> 0.39 when
+	-- the boss intro / outro (~5.4 s) were counted in RunDurationSeconds: the share
+	-- grows with the run length so the section $/s and the payback stay the same.)
+	PassiveShare = 0.39,
+	-- Designed seconds between sales, by slot index 1..4 (bigger shops sell less
+	-- often but more per sale). Economy.SectionStats stretches or shrinks this so
+	-- every sale is whole dollars (income per second stays exact).
 	SaleInterval = { 4, 4.6, 5.2, 5.8 }, -- [PROPOSAL]
-	-- Sales before a manual restock is needed, by slot index (25-37 sales = about 2-3.5 minutes).
+	-- Designed sales per full stock at the designed SaleInterval, by slot index:
+	-- a full level-1 stock lasts StockCapacity x SaleInterval = 100 / 133 / 172 / 215 s
+	-- (about 1.7-3.6 minutes) before a manual restock. SectionStats rescales the
+	-- number of sales with the real interval so a full stock still lasts that long.
 	StockCapacity = { 25, 29, 33, 37 }, -- [PROPOSAL]
 	IncomePerLevel = 0.2, -- [PROPOSAL] +20% of level-1 income per upgrade level
-	StockPerLevel = 0.1, -- [PROPOSAL] +10% of level-1 stock per upgrade level
+	StockPerLevel = 0.1, -- [PROPOSAL] +10% of level-1 stock duration per upgrade level
 	UpgradeBaseShare = 0.35, -- [PROPOSAL] level 1 -> 2 costs 35% of the unlock price
 	UpgradeGrowth = 1.5, -- [PROPOSAL] each further level costs x1.5
 }

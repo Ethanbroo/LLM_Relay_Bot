@@ -20,8 +20,12 @@
 		RunnerModels.CoinStack(parent, position, coins) -> Model     -- flat gold coins + green cash bricks
 		RunnerModels.Sandbags(parent, centre, width) -> Model         -- barricade wall
 		RunnerModels.Fort(parent, centre) -> (Model, { Vector3 }, Model)
-			castle at the end of the track + points to shoot at + its gate door
-			(the boss walks out through the door; RunnerVisuals slides it open)
+			castle at the end of the track + points to shoot at + its gate door.
+			The gateway is a real opening (FORT_GATE_WIDTH x FORT_GATE_HEIGHT,
+			FORT_GATE_DEPTH deep) so the ~11.7-stud boss fits; the boss waits in
+			it, hidden behind the door, and walks out once RunnerVisuals has sunk
+			the door into the ground.
+		RunnerModels.FORT_GATE_WIDTH / FORT_GATE_HEIGHT / FORT_GATE_DEPTH: number
 		RunnerModels.SurfaceLabel(part, face, text, maxTextSize?) -> TextLabel
 			big white text with a dark outline drawn on one face of a part.
 
@@ -174,6 +178,9 @@ function RunnerModels.SetRigGun(rig: Rig, tier: number)
 			Shape = piece.shape,
 			Parent = rig.model,
 		})
+		-- Anchored like the rest of the rig (moved with BulkMoveTo, no welds);
+		-- never collides, is never hit by raycasts and never fires Touched.
+		part.Massless = true
 		part.CastShadow = false
 		table.insert(rig.parts, part)
 		table.insert(rig.offsets, offset)
@@ -317,11 +324,21 @@ end
 -------------------------------------------------------------------------------
 -- Enemy base (boss)
 -------------------------------------------------------------------------------
+-- [PROPOSAL] Gateway sized for the boss (RunnerBoss: ~11.7 studs with its
+-- horns mid-stride, ~8 wide with the shoulder pads and cannon drum).
+RunnerModels.FORT_GATE_WIDTH = 11
+RunnerModels.FORT_GATE_HEIGHT = 13
+RunnerModels.FORT_GATE_DEPTH = 7
+
 -- Returns the model, a few points on its front to aim bullets at and the door.
 function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3 }, Model)
 	local model = Instance.new("Model")
 	model.Name = "EnemyBase"
-	local width, height, depth = 30, 10, 14
+	local width, height, depth = 30, 15, 14 -- [PROPOSAL] walls 2 studs above the gateway
+	local gateW = RunnerModels.FORT_GATE_WIDTH
+	local gateH = RunnerModels.FORT_GATE_HEIGHT
+	local gateD = RunnerModels.FORT_GATE_DEPTH
+	local front = depth / 2 -- the +Z face looks at the runner
 
 	local function block(name: string, size: Vector3, offset: Vector3, color: Color3): Part
 		return RunnerModels.Part({
@@ -333,12 +350,35 @@ function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3
 		})
 	end
 
-	-- Main walls (red Lego bricks with studs on top, like the base walls).
-	block("Wall", Vector3.new(width, height, depth), Vector3.new(0, height / 2, 0), P.WallRed)
+	-- Main walls (red Lego bricks) built AROUND the gateway opening: left and
+	-- right blocks, a lintel above the gate and a back block behind the recess.
+	local sideW = (width - gateW) / 2
+	for _, side in { -1, 1 } do
+		block(
+			"Wall",
+			Vector3.new(sideW, height, depth),
+			Vector3.new(side * (gateW / 2 + sideW / 2), height / 2, 0),
+			P.WallRed
+		)
+	end
+	block(
+		"Lintel",
+		Vector3.new(gateW, height - gateH, depth),
+		Vector3.new(0, gateH + (height - gateH) / 2, 0),
+		P.WallRed
+	)
+	block(
+		"WallBack",
+		Vector3.new(gateW, gateH, depth - gateD),
+		Vector3.new(0, gateH / 2, front - gateD - (depth - gateD) / 2),
+		P.WallRed
+	)
+	-- Dark back of the gateway recess (the boss waits in front of it).
+	block("Gateway", Vector3.new(gateW, gateH, 0.2), Vector3.new(0, gateH / 2, front - gateD + 0.1), P.Shade)
 	local crenels = 7
 	for i = 1, crenels do
 		local x = -width / 2 + (i - 0.5) * (width / crenels)
-		block("Crenel", Vector3.new(2.4, 1.6, 2.4), Vector3.new(x, height + 0.8, depth / 2 - 1.2), P.WallRed)
+		block("Crenel", Vector3.new(2.4, 1.6, 2.4), Vector3.new(x, height + 0.8, front - 1.2), P.WallRed)
 	end
 	-- Two dark towers with yellow tops.
 	for _, side in { -1, 1 } do
@@ -347,14 +387,19 @@ function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3
 		block("TowerTop", Vector3.new(7, 1.4, 7), Vector3.new(x, height + 6.7, 2), P.WallYellow)
 		block("Window", Vector3.new(2, 2, 0.3), Vector3.new(x, height + 2, 5.1), P.Shade)
 	end
-	-- Dark gateway (big enough for the boss to walk out of) behind an iron
-	-- door with bars. The door is its own model so it can sink into the ground.
-	block("Gateway", Vector3.new(11, 9.6, 0.2), Vector3.new(0, 4.8, depth / 2 + 0.05), P.Shade)
+	-- Iron door with bars over the gateway. Its own model so it can sink
+	-- into the ground (RunnerVisuals sinks it by its own height).
 	local door = Instance.new("Model")
 	door.Name = "Door"
-	block("Door", Vector3.new(10.6, 9.4, 0.4), Vector3.new(0, 4.7, depth / 2 + 0.3), P.GateIron).Parent = door
+	block(
+		"Door",
+		Vector3.new(gateW + 0.4, gateH + 0.2, 0.4),
+		Vector3.new(0, (gateH + 0.2) / 2, front + 0.3),
+		P.GateIron
+	).Parent =
+		door
 	for i = -2, 2 do
-		block("DoorBar", Vector3.new(0.35, 9.2, 0.2), Vector3.new(i * 2, 4.7, depth / 2 + 0.55), P.GatePost).Parent =
+		block("DoorBar", Vector3.new(0.35, gateH, 0.2), Vector3.new(i * 2, gateH / 2, front + 0.55), P.GatePost).Parent =
 			door
 	end
 	door.Parent = model
@@ -363,19 +408,19 @@ function RunnerModels.Fort(parent: Instance, centre: Vector3): (Model, { Vector3
 	block("Flag", Vector3.new(4.5, 2.6, 0.2), Vector3.new(2.45, height + 7.4, 0), P.EnemyRed)
 
 	-- Big "ENEMY BASE" sign above the door, facing the runner (+Z = Back face).
-	local sign = block("Sign", Vector3.new(16, 3, 0.4), Vector3.new(0, height + 3.4, depth / 2 + 0.3), P.PillBlack)
+	local sign = block("Sign", Vector3.new(16, 3, 0.4), Vector3.new(0, height + 3.4, front + 0.3), P.PillBlack)
 	RunnerModels.SurfaceLabel(sign, Enum.NormalId.Back, "ENEMY BASE", 100)
 
 	model.Parent = parent
-	local front = centre.Z + depth / 2 + 0.5
+	local frontZ = centre.Z + front + 0.5
 	local y = centre.Y
 	local targets = {
-		Vector3.new(centre.X - 8, y + 4, front),
-		Vector3.new(centre.X + 8, y + 4, front),
-		Vector3.new(centre.X, y + 6, front),
-		Vector3.new(centre.X - width / 2 - 2, y + 9, front - 3),
-		Vector3.new(centre.X + width / 2 + 2, y + 9, front - 3),
-		Vector3.new(centre.X, y + 2.5, front),
+		Vector3.new(centre.X - 8, y + 4, frontZ),
+		Vector3.new(centre.X + 8, y + 4, frontZ),
+		Vector3.new(centre.X, y + 6, frontZ),
+		Vector3.new(centre.X - width / 2 - 2, y + 9, frontZ - 3),
+		Vector3.new(centre.X + width / 2 + 2, y + 9, frontZ - 3),
+		Vector3.new(centre.X, y + 2.5, frontZ),
 	}
 	return model, targets, door
 end

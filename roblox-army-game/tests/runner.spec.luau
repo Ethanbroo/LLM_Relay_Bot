@@ -449,6 +449,22 @@ return function(H)
 			H.expect(bossSum == 10, ("area %d: best lanes beat the boss only %d / 10"):format(area, bossSum))
 		end
 	end)
+	H.test("Run overhead counts menus + the whole boss phase (intro, fight cap, outro)", function()
+		H.near(RunnerDefs.BOSS_INTRO_SECONDS, 2.62, 1e-9, "intro: door + walk out")
+		H.near(RunnerDefs.BOSS_OUTRO_SECONDS, 2.8, 1e-9, "outro")
+		H.near(
+			RunnerDefs.RUN_OVERHEAD_SECONDS,
+			11 + RunnerDefs.BOSS_INTRO_SECONDS + RunnerDefs.BOSS_MAX_FIGHT_SECONDS + RunnerDefs.BOSS_OUTRO_SECONDS,
+			1e-9,
+			"overhead"
+		)
+		H.near(
+			Economy.RunDurationSeconds(),
+			RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED + RunnerDefs.RUN_OVERHEAD_SECONDS,
+			1e-9,
+			"run duration"
+		)
+	end)
 	H.test("BossFight closed form: victory, defeat, survivors, duration", function()
 		-- 10 units, 10 DPS each, interval 0.55: D(k) = 5.5 (10k - k(k-1)/2), D(10) = 302.5.
 		H.near(RunnerDefs.BossKillInterval(10), 0.55, 1e-12, "interval")

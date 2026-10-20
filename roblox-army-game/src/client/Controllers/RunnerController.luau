@@ -24,13 +24,20 @@
 	                (lanes so far + the lane we are in now) so enemies fall and HP
 	                drains exactly as the sim says. When the avatar crosses a row
 	                we record the lane it is in and replay the run so far.
-	                Live stats sit in the TOP-LEFT panel (RunnerUI HUD).
-	  3. BOSS     - the avatar stops before the castle; the boss walks out and
-	                the fight plays RunnerSim's BossOutcome exactly (its HP bar
-	                follows BossHpAt, a unit dies every interval: troops first,
-	                the avatar last). Then we send our lane choices to the
-	                server (RunnerFinish). The server re-simulates and pays.
-	  4. SUMMARY  - "RUN COMPLETE!" panel; COLLECT returns to the base.
+	                Live stats sit in the BOTTOM-LEFT panel (RunnerUI HUD), clear
+	                of Roblox's chat window (top-left).
+	  3. BOSS     - the avatar stops before the castle. Right away we send our
+	                lane choices to the server (RunnerFinish, ONE request, never
+	                before RunnerSim.MinDuration + FINISH_SLACK); the server
+	                re-simulates and pays. Meanwhile the castle door opens and
+	                the boss walks out (RunnerDefs.BOSS_INTRO_SECONDS), which
+	                covers the round trip. The fight then plays the SERVER's
+	                BossOutcome (reply.result.boss) exactly (its HP bar follows
+	                BossHpAt, a unit dies every interval: troops first, the
+	                avatar last), so what you see always matches what is paid.
+	                Only if the request fails (or has no reply FINISH_REPLY_WAIT s
+	                after the intro) do we play our own RunnerSim.Resolve.
+	  4. SUMMARY  - "RUN COMPLETE!" panel from the reply; COLLECT returns to the base.
 
 	Cleanup (camera, controls, jump, visuals incl. guns / boss / bullets /
 	avatar pose, HUD panel, messages, input) happens on COLLECT, Back, any
@@ -94,6 +101,8 @@ local BOSS_CAMERA_OFFSET = Vector3.new(0, 26, 48) -- pulled back: 8 troop rows +
 local CAMERA_LOOK_AHEAD = 20
 local GUN_RANGE = RunnerDefs.GUN_RANGE -- guns reach 1.5 rows: squads/barricades are shot from here
 local FINISH_SLACK = 0.75 -- seconds past RunnerSim.MinDuration before we report the finish
+local FINISH_REPLY_WAIT = 6 -- [PROPOSAL] seconds after the boss intro we wait for RunnerFinish before playing our own prediction
+local FINISH_GIVE_UP = 15 -- [PROPOSAL] seconds after the fight with still no RunnerFinish reply: end the run
 local BOSS_SAFETY = 4 -- [PROPOSAL] seconds past the planned boss fight before we finish anyway
 local STUCK_TIME = 6 -- [PROPOSAL] no forward progress for this long = give up the run
 local MODE_GRACE = 3 -- seconds we tolerate "not in Runner mode" before cleaning up
@@ -115,7 +124,7 @@ type Session = {
 	stats: Stats,
 	previewStats: { startTroops: number, damage: number, capacity: number },
 	runSpeed: number,
-	phase: string, -- "prepare" | "running" | "boss" | "finishing" | "summary" | "ended"
+	phase: string, -- "prepare" | "running" | "boss" | "summary" | "ended"
 	choices: { number },
 	nextRow: number,
 	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
@@ -144,6 +153,14 @@ type Session = {
 	dragTotal: number,
 	held: { [Enum.KeyCode]: boolean },
 	thumbX: number,
+	-- Boss phase: one RunnerFinish request, sent on arrival at the castle.
+	localResult: Result?, -- our own RunnerSim.Resolve (fallback only)
+	finishSent: boolean,
+	finishDone: boolean, -- the request returned (ok or not)
+	finishReply: { [string]: any }?, -- ok reply: { result, paid, boosted, level }
+	finishError: string?,
+	fightStarted: boolean,
+	fightDone: boolean,
 }
 
 local RunnerController = {}
@@ -307,7 +324,7 @@ local function unitDps(s: Session, tier: number, dmg: number): number
 	return if ok and type(dps) == "number" then dps else 0
 end
 
--- Top-left HUD panel: troops (true count), weapon, squad DPS, carried cash.
+-- Bottom-left HUD panel: troops (true count), weapon, squad DPS, carried cash.
 local function updateHud(s: Session, troopsOverride: number?)
 	local hud = s.hud
 	if not hud then
@@ -495,35 +512,33 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 	end
 end
 
-local function finish(s: Session)
-	if session ~= s or s.phase ~= "boss" then
-		return
-	end
-	s.phase = "finishing"
-	-- The server rejects runs faster than RunnerSim.MinDuration x 0.9; the boss
-	-- fight normally covers that, but never report early.
-	local okMin, minDuration = pcall(RunnerSim.MinDuration, s.course)
-	if okMin and type(minDuration) == "number" then
-		local wait = minDuration + FINISH_SLACK - (os.clock() - s.startClock)
-		if wait > 0 then
-			task.wait(wait)
-			if session ~= s then
-				return
-			end
+local function bossReward(result: Result): number
+	for _, line in result.lines do
+		if line.kind == "boss" then
+			return line.value
 		end
 	end
-	local reply = Net.Request("RunnerFinish", s.runId, s.choices)
-	if session ~= s then
+	return 0
+end
+
+-- The summary appears once BOTH the boss fight has played (fightDone) and the
+-- RunnerFinish reply is in (finishDone). It always shows the server's result.
+local function tryShowSummary(s: Session)
+	if session ~= s or s.phase ~= "boss" or not s.fightDone or not s.finishDone then
 		return
 	end
-	if not reply.ok then
-		fail(s, reply.err or "Could not finish the run")
+	local reply = s.finishReply
+	if not reply then
+		fail(s, s.finishError or "Could not finish the run")
 		return
 	end
 	s.phase = "summary"
 	if s.closeMessage then
 		s.closeMessage()
 		s.closeMessage = nil
+	end
+	if s.hud then
+		s.hud.SetStatsVisible(false) -- the summary lists everything; keep the screen clear
 	end
 	local result = reply.result :: Result
 	local paid = numberOr(reply.paid, 0)
@@ -542,13 +557,111 @@ local function finish(s: Session)
 	})
 end
 
-local function bossReward(result: Result): number
-	for _, line in result.lines do
-		if line.kind == "boss" then
-			return line.value
+local function markFightDone(s: Session)
+	if session ~= s or s.fightDone then
+		return
+	end
+	s.fightDone = true
+	tryShowSummary(s)
+	-- The reply never came: give up instead of waiting forever.
+	task.delay(FINISH_GIVE_UP, function()
+		if session == s and s.phase == "boss" and not s.finishDone then
+			fail(s, "Could not finish the run")
+		end
+	end)
+end
+
+-- Plays the boss fight with the SERVER's outcome (RunnerFinish reply), so the
+-- screen always matches the payout. Only when the request failed (or is far
+-- too slow) does it fall back to our own RunnerSim.Resolve prediction.
+local function startFight(s: Session)
+	if session ~= s or s.phase ~= "boss" or s.fightStarted then
+		return
+	end
+	s.fightStarted = true
+	local reply = s.finishReply
+	local result: Result? = if reply then reply.result :: Result else s.localResult
+	local outcome: BossOutcome? = if result and type(result.boss) == "table" then result.boss else nil
+	local visuals = s.visuals
+	if not result or not outcome or not visuals then
+		markFightDone(s)
+		return
+	end
+	local fightResult: Result = result
+	local fightOutcome: BossOutcome = outcome
+	local tier = s.live.tier
+	local dmg = s.live.dmg
+	local total = visuals:StartBossFight(fightOutcome, {
+		onProgress = function(alive: number, _hp: number)
+			if session == s then
+				updateHud(s, alive)
+			end
+		end,
+		onResolved = function(victory: boolean)
+			if session ~= s then
+				return
+			end
+			s.live = { troops = fightOutcome.survivors, cash = s.live.cash, tier = tier, dmg = dmg }
+			updateHud(s)
+			if s.closeMessage then
+				s.closeMessage()
+			end
+			if victory then
+				s.closeMessage = RunnerUI.ShowMessage(
+					"BOSS DEFEATED!",
+					"+" .. Format.Money(bossReward(fightResult)) .. " boss reward",
+					P.Coin,
+					3
+				)
+			else
+				s.closeMessage =
+					RunnerUI.ShowMessage("DEFEATED BY THE BOSS", "Pick the best lanes to beat it", P.ButtonRed, 3.2)
+			end
+		end,
+		onDone = function()
+			markFightDone(s)
+		end,
+	})
+	-- Safety net: finish even if the visuals stopped updating.
+	task.delay(total + BOSS_SAFETY, function()
+		markFightDone(s)
+	end)
+end
+
+-- Sends RunnerFinish exactly ONCE, as soon as the squad reaches the castle
+-- (the boss intro covers the round trip). The server rejects runs faster
+-- than RunnerSim.MinDuration x 0.9; we never report before MinDuration +
+-- FINISH_SLACK (arriving at the castle normally takes longer anyway).
+local function sendFinish(s: Session)
+	if session ~= s or s.finishSent then
+		return
+	end
+	s.finishSent = true
+	local okMin, minDuration = pcall(RunnerSim.MinDuration, s.course)
+	if okMin and type(minDuration) == "number" then
+		local wait = minDuration + FINISH_SLACK - (os.clock() - s.startClock)
+		if wait > 0 then
+			task.wait(wait)
+			if session ~= s then
+				return
+			end
 		end
 	end
-	return 0
+	local reply = Net.Request("RunnerFinish", s.runId, s.choices)
+	if session ~= s then
+		return
+	end
+	if reply.ok and type(reply.result) == "table" then
+		s.finishReply = reply
+	else
+		s.finishError = if reply.ok then "Could not finish the run" else reply.err
+	end
+	s.finishDone = true
+	if s.fightStarted then
+		tryShowSummary(s) -- fight already playing (slow reply) or done
+	else
+		startFight(s)
+	end
 end
 
 local function beginBoss(s: Session, lateral: number)
@@ -562,49 +675,21 @@ local function beginBoss(s: Session, lateral: number)
 	if s.hud then
 		s.hud.SetProgress(1)
 	end
-	local result = safeResolve(s)
+	-- Our own prediction: the boss's max HP for the intro (the same number the
+	-- server uses: same course + stats) and the fallback if RunnerFinish fails.
+	local predicted = safeResolve(s)
+	s.localResult = predicted
+	local intro = 0
 	local visuals = s.visuals
-	local outcome: BossOutcome? = if result and type(result.boss) == "table" then result.boss else nil
-	if not result or not outcome or not visuals then
-		task.spawn(finish, s) -- finish yields; we are inside the RenderStep callback
-		return
+	if visuals then
+		local hp = if predicted and type(predicted.boss) == "table" then numberOr(predicted.boss.hp, 0) else 0
+		intro = visuals:OpenCastle(hp)
 	end
-	local tier = s.live.tier
-	local dmg = s.live.dmg
-	local total = visuals:StartBossFight(outcome, {
-		onProgress = function(alive: number, _hp: number)
-			if session == s then
-				updateHud(s, alive)
-			end
-		end,
-		onResolved = function(victory: boolean)
-			if session ~= s then
-				return
-			end
-			s.live = { troops = outcome.survivors, cash = s.live.cash, tier = tier, dmg = dmg }
-			updateHud(s)
-			if s.closeMessage then
-				s.closeMessage()
-			end
-			if victory then
-				s.closeMessage = RunnerUI.ShowMessage(
-					"BOSS DEFEATED!",
-					"+" .. Format.Money(bossReward(result)) .. " boss reward",
-					P.Coin,
-					3
-				)
-			else
-				s.closeMessage =
-					RunnerUI.ShowMessage("DEFEATED BY THE BOSS", "Pick the best lanes to beat it", P.ButtonRed, 3.2)
-			end
-		end,
-		onDone = function()
-			task.spawn(finish, s)
-		end,
-	})
-	-- Safety net: finish even if the visuals stopped updating.
-	task.delay(total + BOSS_SAFETY, function()
-		finish(s)
+	-- We are inside the RenderStep callback and sendFinish yields: spawn it.
+	task.spawn(sendFinish, s)
+	-- Reply far too slow: play our prediction rather than a frozen boss.
+	task.delay(intro + FINISH_REPLY_WAIT, function()
+		startFight(s)
 	end)
 end
 
@@ -962,6 +1047,13 @@ local function startSession(reply: { [string]: any })
 		dragTotal = 0,
 		held = {},
 		thumbX = 0,
+		localResult = nil,
+		finishSent = false,
+		finishDone = false,
+		finishReply = nil,
+		finishError = nil,
+		fightStarted = false,
+		fightDone = false,
 	}
 	session = s
 

@@ -17,10 +17,20 @@
 			Piece = { name, size, offset: CFrame, color, material?, shape? }
 		RunnerGuns.MuzzleOffset(tier, scale?) -> CFrame    muzzle relative to the grip
 		RunnerGuns.Build(tier, scale?) -> Model
-			unanchored, Massless, non-colliding parts welded to a PrimaryPart
-			"GunRoot" at the grip (move GunRoot / weld it to a hand).
+			unanchored, Massless parts (CanCollide / CanQuery / CanTouch off) with
+			a PrimaryPart "GunRoot" at the grip. NOT joined yet: move it with
+			model:PivotTo, parent it, then call RunnerGuns.WeldTo.
+		RunnerGuns.WeldTo(model, part)
+			WeldConstraint from `part` (Part0) to every part of the model. Call it
+			only AFTER the model is in place and parented: a WeldConstraint keeps
+			the offset the parts have when it switches on.
 		RunnerGuns.AttachToHandle(handle: BasePart, tier) -> Model
-			builds the gun, puts it inside the Handle and welds it there.
+			builds the gun, PivotTo(handle.CFrame * HANDLE_OFFSET), parents it to
+			the Handle and only then welds every part to the Handle (the same
+			order VehicleService uses for vehicles).
+		RunnerGuns.HANDLE_OFFSET: CFrame                   grip relative to the Tool Handle
+		RunnerGuns.HandleMuzzle(handle, tier) -> Vector3   world muzzle of the gun on that Handle
+		RunnerGuns.POOL_SIZE: number                       default bullet pool size
 
 		RunnerGuns.newPool(parent, maxBullets?) -> Pool    visual bullets (BulkMoveTo, no tweens)
 			pool:Fire(from, to, tier, impact) -> boolean   false when every bullet is busy
@@ -69,11 +79,16 @@ local RunnerGuns = {}
 
 local HIDDEN = CFrame.new(0, -500, 0)
 local DEFAULT_POOL = 90 -- [PROPOSAL] max visual bullets alive at once (performance cap)
-local FLASH_POOL = 28
+local FLASH_POOL = 40 -- impact + muzzle flashes (oldest is reused when all are busy)
 local SMOKE_POOL = 36
 
 -- A Cylinder part's axis is its X axis; this turns it to lie along Z (the barrel).
 local ALONG_Z = CFrame.Angles(0, math.rad(90), 0)
+
+RunnerGuns.POOL_SIZE = DEFAULT_POOL
+-- Where the gun's grip sits relative to the server's Tool Handle (identity:
+-- the Handle IS the grip; its LookVector is the barrel direction).
+RunnerGuns.HANDLE_OFFSET = CFrame.new()
 
 function RunnerGuns.Weapon(tier: number): WeaponDef
 	local index = math.clamp(math.floor(tier), 1, RunnerDefs.MAX_WEAPON_TIER)
@@ -230,33 +245,41 @@ function RunnerGuns.Build(tier: number, scale: number?): Model
 	local model = Instance.new("Model")
 	model.Name = "RunnerGunModel"
 	model:SetAttribute("Tier", tier)
-	local origin = CFrame.new(0, 2000, 0) -- built away from everything, then moved
+	local origin = CFrame.new(0, 2000, 0) -- built away from everything; PivotTo moves every part
 	local root = makeGunPart(piece("GunRoot", Vector3.new(0.2, 0.2, 0.2), CFrame.new(), P.GatePost), origin, model)
 	root.Transparency = 1
 	for _, p in RunnerGuns.Pieces(tier, scale) do
-		local part = makeGunPart(p, origin * p.offset, model)
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = root
-		weld.Part1 = part
-		weld.Parent = part
+		makeGunPart(p, origin * p.offset, model)
 	end
 	model.PrimaryPart = root
 	return model
 end
 
+function RunnerGuns.WeldTo(model: Model, part: BasePart)
+	for _, item in model:GetDescendants() do
+		if item:IsA("BasePart") and item ~= part then
+			local weld = Instance.new("WeldConstraint")
+			weld.Name = "GunWeld"
+			weld.Part0 = part
+			weld.Part1 = item
+			weld.Parent = item
+		end
+	end
+end
+
 function RunnerGuns.AttachToHandle(handle: BasePart, tier: number): Model
 	local model = RunnerGuns.Build(tier)
-	local root = model.PrimaryPart :: BasePart
-	root.CFrame = handle.CFrame -- welded parts follow (WeldConstraint keeps offsets)
-	local weld = Instance.new("Weld")
-	weld.Name = "GunWeld"
-	weld.Part0 = handle
-	weld.Part1 = root
-	weld.C0 = CFrame.new()
-	weld.C1 = CFrame.new()
-	weld.Parent = root
+	-- 1) move EVERY part (PivotTo works outside Workspace; setting only the
+	--    root's CFrame would leave the pieces 2000 studs up), 2) parent,
+	-- 3) weld: each WeldConstraint keeps the offset the parts have right now.
+	model:PivotTo(handle.CFrame * RunnerGuns.HANDLE_OFFSET)
 	model.Parent = handle
+	RunnerGuns.WeldTo(model, handle)
 	return model
+end
+
+function RunnerGuns.HandleMuzzle(handle: BasePart, tier: number): Vector3
+	return (handle.CFrame * RunnerGuns.HANDLE_OFFSET * RunnerGuns.MuzzleOffset(tier)).Position
 end
 
 -------------------------------------------------------------------------------

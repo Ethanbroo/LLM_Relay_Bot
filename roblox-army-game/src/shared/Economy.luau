@@ -65,7 +65,7 @@
 	* Employee cash price (question 4): Config.Employee.RunsEquivalent (20) x R,
 	  i.e. 20 best-case benchmark runs of the section's area ("SectionArea") or
 	  of the player's highest area ("PlayerArea").
-	* Sections: a full area of level-1 sections earns PassiveShare (36%) of the
+	* Sections: a full area of level-1 sections earns PassiveShare (39%) of the
 	  active runner rate R / RunDurationSeconds().
 	* Boost value V ("used properly", question 10): a 2x multiplier doubles your
 	  earnings while you play runs for its duration -> extra = minutes*60 /
@@ -90,7 +90,9 @@
 	  * the 80%-rule coin prices (boosts, time skips) are rounded DOWN, so
 	    value / price stays >= 1.25;
 	  * a section's incomePerSale is max(1, RoundWhole(x)) and its saleInterval
-	    is stretched by (rounded / x), so incomePerSecond is unchanged.
+	    is stretched by (rounded / x), so incomePerSecond is unchanged; its
+	    stockCapacity is scaled by (x / rounded) (whole sales, at least 5), so
+	    a full stock still lasts the designed StockCapacity x SaleInterval.
 	Rates per second (incomePerSecond, ReferencePassiveRate) stay fractional.
 ]]
 
@@ -418,6 +420,9 @@ function Economy.AreaUnlockTotal(area: number): number
 end
 
 local NO_INCOME: SectionStats = { incomePerSale = 0, saleInterval = 5, stockCapacity = 0, incomePerSecond = 0 }
+-- [PROPOSAL] A section always holds at least this many sales (safety floor;
+-- the real defs never come close: the smallest stock is about 18).
+local MIN_STOCK = 5
 
 function Economy.SectionStats(slotId: string, level: number): SectionStats
 	local info = slotLookup[slotId]
@@ -434,20 +439,27 @@ function Economy.SectionStats(slotId: string, level: number): SectionStats
 	end
 	local activeRate = Economy.RunBenchmark(info.area) / Economy.RunDurationSeconds()
 	local levelOneRate = d.PassiveShare * activeRate * info.def.incomeWeight / math.max(0.01, areaWeight)
-	local interval = d.SaleInterval[info.index] or d.SaleInterval[#d.SaleInterval]
-	local stock = d.StockCapacity[info.index] or d.StockCapacity[#d.StockCapacity]
+	local designedInterval = d.SaleInterval[info.index] or d.SaleInterval[#d.SaleInterval]
+	local baseStock = d.StockCapacity[info.index] or d.StockCapacity[#d.StockCapacity]
+	-- Designed sales per full stock at the designed interval (+10% per level).
+	local designedStock = baseStock * (1 + d.StockPerLevel * (lvl - 1))
 	-- Whole dollars per sale; the interval stretches by (rounded / exact) so
 	-- the income per second stays exactly the designed rate.
 	local rate = levelOneRate * (1 + d.IncomePerLevel * (lvl - 1))
-	local exact = rate * interval
+	local exact = rate * designedInterval
 	local perSale = math.max(1, round(exact))
+	local interval = designedInterval
 	if exact > 0 then
-		interval = interval * perSale / exact
+		interval = designedInterval * perSale / exact
 	end
+	-- The number of sales in a full stock scales the other way, so a full
+	-- stock still lasts the designed designedStock x designedInterval seconds
+	-- (restock rhythm unchanged by the rounding; upgrades make it last longer).
+	local stock = math.max(MIN_STOCK, round(designedStock * designedInterval / interval))
 	return {
 		incomePerSale = perSale,
 		saleInterval = interval,
-		stockCapacity = math.floor(stock * (1 + d.StockPerLevel * (lvl - 1)) + 0.5),
+		stockCapacity = stock,
 		incomePerSecond = perSale / interval,
 	}
 end

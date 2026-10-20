@@ -46,11 +46,11 @@ were measured from the pixels, not guessed (section 10).
 | Source of power | What it improves | Why it matters for later areas |
 |---|---|---|
 | Permanent runner upgrades | Troops, damage, carry capacity | Bigger runs: an upgraded player earns 2–6× more per run than an un-upgraded one from area 2 on |
-| Revenue sections + section upgrades | Passive income (about 36% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
+| Revenue sections + section upgrades | Passive income (about 39% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
 | Employees | Remove restocking | Sections never stop; required for full time-skip value |
 | Repeated arena combat | Cash (about 3 runs per level) + a chest after every real fight (§12.7) | Gear for harder barriers |
 | Armour and weapons (chests, coin upgrades) | HP, damage, fire rate, perks | Beats the barrier squads, which get harder every area |
-| Harder combat levels | Higher cash rewards (+17–26% per level) | Combat stays worth playing as prices rise |
+| Harder combat levels | Higher cash rewards (+14–28% per level) | Combat stays worth playing as prices rise |
 
 ---
 
@@ -61,7 +61,7 @@ were measured from the pixels, not guessed (section 10).
   (A/D or ←/→, drag on phones, gamepad stick).
 * ✅ During the run you collect **troops** and **weapon upgrades** for that round only.
 * 💡 A course has **18 rows** across a 900-stud white track over the sea, then the **castle boss**.
-  A run is about **36 seconds** of running, plus the boss fight and menus (RUN_LENGTH_PLACEHOLDER).
+  A run is about **36 seconds** of running, plus the boss fight and menus (about 65 s in total).
 
 | Row type | Lanes | What happens |
 |---|---|---|
@@ -140,7 +140,7 @@ blue stripes, translucent red/blue gates with dark posts and huge outlined numbe
 
 | Upgrade | Start | Per level 💡 | Max 💡 | Price 💡 |
 |---|---|---|---|---|
-| **Starting troops** | 3 | +1 troop | level 50 | $90 at level 0, ×1.17 per level |
+| **Starting troops** | 3 | +1 troop | level 50 | $67 at level 0, ×1.17 per level |
 | **Damage** | 10 | +4% | level 50 | same as troops |
 | **Coin-carrying capacity** | $60 in area 1 | +6% | level 50 | 90% of the troops price |
 
@@ -174,7 +174,7 @@ The summary lists **Collected this run** (troops, weapons, damage gates, cash), 
 
 ### 4.2 How a revenue section works
 * ✅ Unlocked with earned cash: a green-bordered **unlock pad** with a gold price (image 1). Hold **E** to buy.
-* 💡 Each sale pays cash every 4–6 s and uses **1 stock** (25–37 stock).
+* 💡 Each sale pays a whole-dollar amount every 3.5–6 s and uses **1 stock** (18–48 stock, more with upgrades).
 * ✅ **At 0 stock the shop stops** ("OUT OF STOCK!") **until you restock it by hand** (hold E at the shop).
   That is every 1.7–3.6 minutes.
 * ✅ **Improve revenue:** 💡 10 upgrade levels, +20% income and +10% stock each.
@@ -184,7 +184,7 @@ The summary lists **Collected this run** (troops, weapons, damage gates, cash), 
 * ✅ An employee does a specific job: **restocking**. Your shop restocks itself 3 s after it runs out, so the manual work is gone.
 * ✅ Two ways to pay, both kept: **200 Robux** or **cash = earnings of 20 army runs**.
 * ❓ **Q4 — Employee cash price.** 💡 "20 runs" = **20 × R(area)**, where **R** is the *best-case single-run*
-  benchmark of the area the shop is in (section 8). Prices: **$4,521 (area 1) → $286,827 (area 8)**.
+  benchmark of the area the shop is in (section 8). Prices: **$3,360 (area 1) → $179,160 (area 8)**.
   Using the shop's own area keeps automating old shops cheap. Switch: `Config.Employee.PriceScalesWith`
   (`"SectionArea"` or `"PlayerArea"`).
 * 💡 The "Hire me" tile from image 1 stands next to every shop without an employee.
@@ -205,7 +205,7 @@ Gates are black iron with a gold padlock (image 1).
   for farming cash and chests. The first barrier (combat level 2) is tuned for starter gear plus in-fight abilities.
 * 💡 Barrier of area *a* = combat level **3a − 1**: levels 2, 5, 8 … 20 (7 barriers; area 8 is the last area, so it has no exit gate).
 * ✅ **Later levels are harder and pay more**: enemy HP ≈ ×1.18 and damage ≈ ×1.10 per level, more and
-  tougher enemy types. Reward for a perfect clear: **$538 (level 1) → $65,209 (level 25)**.
+  tougher enemy types. Reward for a perfect clear: **$395 (level 1) → $40,606 (level 25)**.
 
 ### 5.2 Earning cash
 ✅ Defeated enemies drop cash, and **cash piles lie on the ground**. 💡 About 70% of a level's cash comes from
@@ -320,8 +320,8 @@ Damage reduction is capped at 60%.
 
 ### 6.4 Coin upgrades
 * ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 Each level adds +6% weapon damage or armour HP, and +2% of the armour's own damage reduction (e.g. Field Vest 4% → about 4.7% at level 10; cap 60%). Fire rate, bullets and range are fixed per item.
-* 💡 Price: Common level 1→2 = $113, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
-  (e.g. Legendary 49→50 = $416,739).
+* 💡 Price: Common level 1→2 = $84, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
+  (e.g. Legendary 49→50 = $309,733).
 * 💡 **Scrap** unwanted items for cash. The inventory holds 60 items; a drop into a full inventory is paid out as cash.
 
 ---
@@ -332,18 +332,19 @@ Damage reduction is capped at 60%.
 
 | Area | Best-case run R | 4 slots | Gate to next | Area total | Employee (cash) |
 |---|---|---|---|---|---|
-| 1 Boot Camp | $226 | $3,349 | $2,939 | $6,287 | $4,521 |
-| 2 Supply Depot | $452 | $7,237 | $5,880 | $13,117 | $9,046 |
-| 3 Motor Pool | $803 | $11,897 | $10,440 | $22,337 | $16,062 |
-| 4 Airfield | $1,279 | $18,952 | $16,630 | $35,582 | $25,585 |
-| 5 Harbor | $2,356 | $34,898 | $30,623 | $65,521 | $47,113 |
-| 6 Desert Outpost | $4,545 | $67,331 | $59,083 | $126,413 | $90,896 |
-| 7 Mountain Fortress | $7,686 | $113,866 | $99,917 | $213,783 | $153,719 |
-| 8 Command HQ | $14,341 | $212,464 | – (last area) | $212,464 | $286,827 |
+| 1 Boot Camp | $168 | $2,483 | $2,179 | $4,662 | $3,360 |
+| 2 Supply Depot | $349 | $5,578 | $4,532 | $10,110 | $6,980 |
+| 3 Motor Pool | $589 | $8,721 | $7,653 | $16,374 | $11,780 |
+| 4 Airfield | $879 | $13,018 | $11,423 | $24,441 | $17,580 |
+| 5 Harbor | $1,718 | $25,453 | $22,335 | $47,788 | $34,360 |
+| 6 Desert Outpost | $3,072 | $45,511 | $39,936 | $85,447 | $61,440 |
+| 7 Mountain Fortress | $4,824 | $71,459 | $62,706 | $134,165 | $96,480 |
+| 8 Command HQ | $8,958 | $132,716 | – (last area) | $132,716 | $179,160 |
 
 * 💡 Money values grow **×1.6 per area**. Enemies grow too, so upgrades stay necessary.
-* 💡 Pacing estimate (75% of best play, sections kept stocked, combat ignored): **about 26–34 minutes per area,
-  about 3.5 hours for all 8 areas**. Combat cash and section upgrades make real play faster. To make the game
+* 💡 Pacing estimate (75% of best play, sections kept stocked, combat ignored): **about 30–41 minutes per area,
+  about 4.1 hours for all 8 areas**. Missing the boss lowers a run's pay (a random-lane run earns about 40–50% of a
+  perfect one), so players who rarely beat the boss take longer. Combat cash and section upgrades make real play faster. To make the game
   longer, raise `EconomyDefs` gate/slot shares (see `docs/ECONOMY_TABLES.md` §11).
 
 ---
@@ -374,11 +375,11 @@ for each area a:
 
 | Mode | Meaning | Area 1 prices |
 |---|---|---|
-| `"CombinedSections"` 💡 **default** | The first three revenue-section unlocks of an area **together** cost B10 | $586 + $753 + $921 = $2,260 = B10 |
-| `"EachSection"` | **Each** of the first three section unlocks costs B10 | 3 × $2,260 (about 2× slower game) |
+| `"CombinedSections"` 💡 **default** | The first three revenue-section unlocks of an area **together** cost B10 | $434 + $559 + $683 = $1,676 = B10 |
+| `"EachSection"` | **Each** of the first three section unlocks costs B10 | 3 × $1,676 (about 2× slower game) |
 | *upgrade tiers* (not built) | Three upgrade tiers of one section cost B10 | — |
 
-R values: **$226, $452, $803, $1,279, $2,356, $4,545, $7,686, $14,341** (areas 1–8).
+R values: **$168, $349, $589, $879, $1,718, $3,072, $4,824, $8,958** (areas 1–8). They include beating the boss.
 
 ---
 
@@ -387,10 +388,10 @@ R values: **$226, $452, $803, $1,279, $2,356, $4,545, $7,686, $14,341** (areas 1
 ### 9.1 Two payment routes for everything (✅)
 | Item | Robux (fixed ✅) | Cash price (scales with your area ✅) |
 |---|---|---|
-| Employee | 200 ✅ | 20 × R(area) ✅ ($4,521 → $286,827) |
-| 2× Cash 15 / 30 / 60 min | 29 / 49 / 89 💡 | 80% of its value (area 1: $3,115 / $6,230 / $12,459) |
-| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of what it pays **you right now**, never more than 80% of its full value (area 1 with all 4 shops staffed: 1 h = $3,984) |
-| Vehicles (8, one per area ✅) | 49 → 799 💡 | price factor × the gate price of your area (area 1 bike: $1,763) |
+| Employee | 200 ✅ | 20 × R(area) ✅ ($3,360 → $179,160) |
+| 2× Cash 15 / 30 / 60 min | 29 / 49 / 89 💡 | 80% of its value (area 1: $1,870 / $3,740 / $7,481) |
+| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of what it pays **you right now**, never more than 80% of its full value (area 1 with all 4 shops staffed: 1 h = $2,916) |
+| Vehicles (8, one per area ✅) | 49 → 799 💡 | price factor × the gate price of your area (area 1 bike: $1,307) |
 
 * ✅ **Vehicles**: a better one unlocks with each area (Army Bike → Jeep → Supply Truck → Humvee → APC → Light Tank →
   Heavy Tank → Hover Tank). 💡 Ride them around the base (faster: speed 26 → 46) and get a **runner payout bonus**
@@ -407,8 +408,8 @@ R values: **$226, $452, $803, $1,279, $2,356, $4,545, $7,686, $14,341** (areas 1
   hiring employees. 2× does not double time skips.
 * 💡 A time skip's price is based on **what your shops would really pay right now**. The dialog shows "Pays $X now" and
   "up to $V when every shop has an employee". So a cash time skip **always returns +25%** of what you paid.
-  (Example, area 1, 1 h: one shop without an employee pays $24.25, so it is not offered. All four shops staffed pay
-  $4,980 for a price of $3,984.)
+  (Example, area 1, 1 h: one shop without an employee pays $18, so it is not offered. All four shops staffed pay
+  $3,645 for a price of $2,916.)
 
 ### 9.3 Random appearances on the home map
 ✅ 2× boosts and time skips appear randomly; cheaper ones appear more often.

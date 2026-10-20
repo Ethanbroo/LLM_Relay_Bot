@@ -6,27 +6,40 @@
 	white track floor; this module adds everything ON the track:
 
 	  * gate rows   - translucent blue / red / gold panels between dark posts,
-	                  with huge white outlined labels ("+5", "x2", "-3", "÷2", "WEAPON +1")
+	                  with huge white outlined labels ("+5", "x2", "-3", "÷2", "WEAPON +1").
+	                  When the row before a gold weapon gate is crossed, that gate is
+	                  relabelled with the gun you would get ("🔫 SMG"; at the top tier
+	                  "🔫 MAX +$X", the cash it pays instead); rows further ahead keep
+	                  "WEAPON +1" (the gun depends on the gates you take before them)
 	  * cash rows   - stacks of gold coins + green cash bricks. Their VALUE labels
 	                  (and the cash label of a red toll gate) stay hidden until the
 	                  previous row has been crossed (owner request: the far-away
 	                  values cluttered the view); row 1's are visible from the start
 	  * enemy squads- red-uniform soldiers with rifles and a count label
 	  * barricades  - sandbag walls with an HP bar
-	  * the castle  - at the end of the track; the BOSS (RunnerBoss) walks out of it
+	  * the castle  - at the end of the track, with a 13-stud gateway; the BOSS
+	                  (RunnerBoss) waits hidden behind its door and walks out of it
 	  * your squad  - up to 40 green toy soldiers standing NEXT TO the avatar in
 	                  rows of RunnerDefs.FORMATION_WIDTH (front row: 2 troops, the
-	                  avatar, 2 troops; more rows behind), each holding the same gun
+	                  avatar, 2 troops; more rows behind), each holding the same gun.
+	                  Near a track edge the WHOLE formation shifts sideways by whole
+	                  columns (the avatar's own spot stays free), so troops never
+	                  overlap; the avatar itself stays where the player steers
 	  * guns        - the avatar holds the server's "RunnerGun" Tool; we weld the
 	                  part-built gun of the current weapon tier (RunnerGuns) to its
-	                  Handle. Everyone fires that gun at its fireRate (visual cap 4/s
-	                  per unit, <= 90 bullets alive) up to RunnerDefs.GUN_RANGE
+	                  Handle. The avatar and the front row fire at the gun's TRUE
+	                  fireRate (up to FRONT_MAX_RATE = 12/s); the back rows share what
+	                  is left of the bullet budget (BULLET_BUDGET of the pool alive),
+	                  so the pistol, SMG, assault rifle and minigun clearly differ in
+	                  rate, bullet style and speed. Range: RunnerDefs.GUN_RANGE
 	  * effects     - pop text, gate flashes, hit flashes, falling enemies, confetti
 
 	The OUTCOME of every fight comes from RunnerSim (RunnerController passes it
 	in); this module only shows it: enemies fall / barricade HP drains while the
 	squad closes the last GUN_RANGE studs (= RunnerDefs.ENGAGE_SECONDS), and the
 	boss fight follows the BossOutcome exactly (RunnerSim.BossHpAt / AliveAt).
+	RunnerController passes the SERVER's BossOutcome (RunnerFinish reply) so the
+	fight on screen always matches what is paid.
 
 	Public API:
 		local visuals = RunnerVisuals.new(course, slot, character)
@@ -36,7 +49,13 @@
 		visuals:Update(dt, root: BasePart?, moving: boolean)   -- call every frame
 		visuals:Engage(rowIndex, lane, fight: Fight?)   -- shoot that row's option (lane may change)
 		visuals:RowCrossed(rowIndex, lane, outcome?, capacity, fight: Fight?)  -- play the row's result
-		visuals:StartBossFight(outcome: BossOutcome, callbacks) -> number (seconds until onDone)
+		visuals:OpenCastle(maxHp) -> number   -- intro: the door sinks, then the boss
+			appears and walks out; returns its length (RunnerDefs.BOSS_INTRO_SECONDS).
+			Call it on arrival; the fight outcome can follow later. Calling again is a no-op.
+		visuals:StartBossFight(outcome: BossOutcome, callbacks) -> number (seconds from now until onDone)
+			opens the castle first if needed; the fight starts when the intro is
+			over (right away if it already is), then RunnerDefs.BOSS_OUTRO_SECONDS
+			of victory / defeat before onDone.
 			callbacks = { onProgress(alive, hp), onResolved(victory), onDone() }
 		visuals:BossFocus() -> Vector3?   -- boss chest (camera framing)
 		visuals:Destroy()                 -- removes every instance it created, restores the avatar pose
@@ -79,13 +98,22 @@ local P = Config.Palette
 -------------------------------------------------------------------------------
 local MAX_TROOP_MODELS = 40 -- [REQUIREMENT ARCH §0.10] cap rendered troops
 local MAX_ENEMY_MODELS = 12 -- per squad lane [PROPOSAL]
-local MAX_VISUAL_RATE = 4 -- [PROPOSAL] bullets per second per unit drawn (performance cap)
+local FRONT_MAX_RATE = 12 -- [PROPOSAL] avatar + front row fire at the gun's true rate, up to this (shots/s)
+local MIN_BACK_RATE = 0.3 -- [PROPOSAL] back-row troops never fire slower than this (shots/s)
+local BULLET_BUDGET = math.floor(RunnerGuns.POOL_SIZE * 0.8) -- [PROPOSAL] bullets aimed to be alive (rest: boss shots)
 local GATE_HEIGHT = 7
 local POST_HEIGHT = 8.4
 local FORT_DEPTH = 14
-local BOSS_DOOR_TIME = 0.7 -- [PROPOSAL] castle door sinks
-local BOSS_WALK_TIME = 2.2 -- [PROPOSAL] boss walks out of the gate
-local BOSS_OUTRO_TIME = 2.8 -- [PROPOSAL] victory / defeat moment before the summary
+
+-- Boss timing is shared with the economy (RunnerDefs; fallback = same values).
+local function defNumber(name: string, fallback: number): number
+	local value = (RunnerDefs :: any)[name]
+	return if type(value) == "number" and value >= 0 then value else fallback
+end
+local BOSS_INTRO_SECONDS = defNumber("BOSS_INTRO_SECONDS", 2.62) -- door opens + boss walks out
+local BOSS_OUTRO_SECONDS = defNumber("BOSS_OUTRO_SECONDS", 2.8) -- victory / defeat before the summary
+local BOSS_DOOR_TIME = math.min(0.7, BOSS_INTRO_SECONDS * 0.4) -- [PROPOSAL] door sinks (part of the intro)
+local BOSS_WAIT_DEPTH = RunnerModels.FORT_GATE_DEPTH / 2 -- boss waits this deep in the gateway
 local BOSS_STAND = 9 -- boss stops this many studs in front of the castle
 local SQUAD_GAP = 30 -- the avatar stops this many studs in front of the castle
 local DEATH_TIME = 0.45
@@ -371,6 +399,7 @@ export type Visuals = {
 		capacity: number,
 		fight: Fight?
 	) -> (),
+	OpenCastle: (self: Visuals, maxHp: number) -> number,
 	StartBossFight: (self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks) -> number,
 	BossFocus: (self: Visuals) -> Vector3?,
 	Destroy: (self: Visuals) -> (),
@@ -585,14 +614,43 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		rowVisuals[index] = { row = row, options = options, revealed = false, crossed = false }
 	end
 
-	-- Show a row's cash values (owner request: only once the row before it is crossed).
-	local function reveal(index: number)
+	-- Cash a weapon gate pays at the top tier ("Weapon already maxed: bonus
+	-- cash" in RunnerSim: the top weapon's value x the course's value scale).
+	local maxWeaponCash = 0
+	do
+		local ok, scale = pcall(RunnerCourse.ValueScale, course.area, course.level)
+		local top = RunnerDefs.WEAPONS[RunnerDefs.MAX_WEAPON_TIER]
+		if ok and type(scale) == "number" and top then
+			maxWeaponCash = Format.RoundWhole(top.value * scale)
+		end
+	end
+
+	-- What a gold weapon gate gives when crossed with weapon tier `tierNow`.
+	local function weaponGateText(option: Option, tierNow: number): string
+		local maxTier = RunnerDefs.MAX_WEAPON_TIER
+		if tierNow >= maxTier then
+			return "🔫 MAX +" .. Format.Money(maxWeaponCash)
+		end
+		local step = math.max(1, math.floor(option.amount or 1))
+		local def = RunnerDefs.WEAPONS[math.min(maxTier, tierNow + step)]
+		return "🔫 " .. (if def then def.short else option.label)
+	end
+
+	-- Show a row's cash values (owner request: only once the row before it is
+	-- crossed) and name the gun its weapon gates give with the weapon tier the
+	-- squad has now (`tierNow`).
+	local function reveal(index: number, tierNow: number)
 		local rowVisual = rowVisuals[index]
 		if not rowVisual or rowVisual.revealed then
 			return
 		end
 		rowVisual.revealed = true
 		for _, ov in rowVisual.options do
+			local label = ov.label
+			if label and ov.option.op == "weapon" then
+				label.Text = weaponGateText(ov.option, tierNow)
+				Theme.Pop(label)
+			end
 			local gui = ov.cashLabel
 			if gui then
 				gui.Enabled = true
@@ -603,7 +661,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			end
 		end
 	end
-	reveal(1)
+	reveal(1, 1) -- every run starts with the pistol (tier 1)
 
 	---------------------------------------------------------------------------
 	-- The castle. It stands on the server's finish plaza (which starts at the
@@ -679,7 +737,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 	local function avatarMuzzle(root: BasePart): Vector3
 		local handle = avatarGunHandle
 		if handle and handle.Parent and avatarGun and avatarGun.Parent == handle then
-			return (handle.CFrame * RunnerGuns.MuzzleOffset(tier)).Position
+			return RunnerGuns.HandleMuzzle(handle, tier)
 		end
 		return (root.CFrame * CFrame.new(1, 0.4, -1.8)).Position
 	end
@@ -690,6 +748,8 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 	local engaged: { [number]: Engagement } = {}
 	local boss: Boss? = nil
 	local fight: BossFight? = nil
+	local castleOpen = false
+	local castleClock = 0 -- seconds since OpenCastle (the intro is over at BOSS_INTRO_SECONDS)
 	local knockMotor: Motor6D? = nil
 	local knockOriginal: CFrame? = nil
 	local knockT = 0
@@ -803,11 +863,23 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			return
 		end
 		local weapon = RunnerGuns.Weapon(tier)
-		local interval = 1 / math.max(0.1, math.min(weapon.fireRate, MAX_VISUAL_RATE))
+		-- The avatar (unit 0) and the front-row troops (units 1 .. WIDTH-1) fire
+		-- at the gun's true rate. Bullets alive ~ shots/s x flight time (at most
+		-- GUN_RANGE / bulletSpeed), so the back rows share what the budget has left.
+		local trueRate = math.clamp(weapon.fireRate, 0.1, FRONT_MAX_RATE)
+		local flight = GUN_RANGE / math.max(10, weapon.bulletSpeed)
+		local shotsBudget = BULLET_BUDGET / math.max(0.05, flight)
+		local front = math.min(shown + 1, FORMATION_WIDTH)
+		local back = shown + 1 - front
+		local backRate = trueRate
+		if back > 0 then
+			backRate = math.clamp((shotsBudget - front * trueRate) / back, math.min(MIN_BACK_RATE, trueRate), trueRate)
+		end
 		local avatarDown = knockMotor ~= nil
 		for unit = 0, shown do
 			local index = unit + 1
-			local c = fireClocks[index] + dt / interval
+			local rate = if unit < FORMATION_WIDTH then trueRate else backRate
+			local c = fireClocks[index] + dt * rate
 			if c < 1 then
 				fireClocks[index] = c
 				continue
@@ -819,6 +891,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local from: Vector3
 			if unit == 0 then
 				from = avatarMuzzle(root)
+				pool:Flash(from, 0.9, P.CoinShine, 0.06) -- muzzle flash: shows the gun's rate
 			else
 				from = RunnerModels.RigMuzzle(rigs[unit], CFrame.new(positions[unit]))
 			end
@@ -882,7 +955,12 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 	local function updateBoss(dt: number, root: BasePart?)
 		local f = fight
 		local b = boss
-		if not f or not b then
+		if not b then
+			return
+		end
+		castleClock += dt
+		if not f then
+			b:Update(dt) -- intro: walking out, waiting for the fight's outcome
 			return
 		end
 		f.clock += dt
@@ -988,7 +1066,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				f.callbacks.onResolved(victory)
 			end
 		end
-		if f.resolved and not f.done and t >= outcome.duration + BOSS_OUTRO_TIME then
+		if f.resolved and not f.done and t >= outcome.duration + BOSS_OUTRO_SECONDS then
 			f.done = true
 			f.callbacks.onDone()
 		end
@@ -1009,6 +1087,16 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			refreshAvatarGun()
 			local rootPosition = root.CFrame.Position
 			local base = Vector3.new(rootPosition.X, floorY, rootPosition.Z)
+			-- Near a track edge the whole formation moves over by whole columns
+			-- (the same shift for every troop), so no two troops share a spot and
+			-- the avatar's own spot in the front row stays free.
+			local half = math.floor(FORMATION_WIDTH / 2)
+			local minX = centreX - halfTrack + 0.8
+			local maxX = centreX + halfTrack - 0.8
+			local lo = math.ceil((minX - (base.X - half * SPACING_X)) / SPACING_X - 1e-6)
+			local hi = math.floor((maxX - (base.X + half * SPACING_X)) / SPACING_X + 1e-6)
+			local shift = if lo <= hi then math.clamp(0, lo, hi) else 0
+			shift = math.clamp(shift, -half, half)
 			for i = 1, MAX_TROOP_MODELS do
 				local rig = rigs[i]
 				if i <= shown then
@@ -1020,8 +1108,11 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 						dying[i] = nil
 					end
 					local col, line = slotOf(i)
-					local x = math.clamp(base.X + col * SPACING_X, centreX - halfTrack + 0.8, centreX + halfTrack - 0.8)
-					local target = Vector3.new(x, floorY, base.Z + line * SPACING_Z)
+					col += shift
+					if line == 0 and col == 0 then
+						col = shift -- the avatar stands here: take the slot it left free
+					end
+					local target = Vector3.new(base.X + col * SPACING_X, floorY, base.Z + line * SPACING_Z)
 					positions[i] = positions[i]:Lerp(target, alpha)
 					local bob = if moving then math.abs(math.sin(bobClock * 13 + i * 0.7)) * 0.35 else 0
 					RunnerModels.RigCFrames(rig, CFrame.new(positions[i] + Vector3.new(0, bob, 0)), parts, cframes)
@@ -1085,7 +1176,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 		rowVisual.crossed = true
 		engaged[rowIndex] = nil
-		reveal(rowIndex + 1) -- the next row's cash values appear now
+		-- The next row's cash values appear now; its weapon gates name the gun
+		-- for the tier we have after THIS row (SetSquad updates `tier` later).
+		reveal(rowIndex + 1, if outcome then outcome.weaponTier else tier)
 		local optionVisual = rowVisual.options[lane]
 		if not optionVisual then
 			return
@@ -1222,40 +1315,67 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 	end
 
-	-- Plays the boss fight exactly as RunnerSim's BossOutcome says:
-	--   0 .. door + walk         castle door sinks, the boss walks out of the gate
-	--   fight t = 0 .. duration  everyone shoots it, its bar follows BossHpAt(t);
-	--                            each kill k lands at k x interval (troops from the
-	--                            back rows first, the avatar last)
-	--   then BOSS_OUTRO_TIME     victory (boss falls, confetti, coins) or defeat
-	--                            (avatar knocked down, boss roars), then onDone()
-	function self.StartBossFight(_self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks): number
-		if destroyed or fight then
+	local function bossPivot(distance: number): CFrame
+		local p = worldAt(distance, 0, 0)
+		return CFrame.lookAt(p, p + Vector3.new(0, 0, 1)) -- faces the runner (+Z)
+	end
+
+	-- Boss intro (RunnerDefs.BOSS_INTRO_SECONDS in total):
+	--   0 .. BOSS_DOOR_TIME      the castle door sinks into the ground; the boss
+	--                            waits hidden inside the gateway (no HP bar yet)
+	--   then .. intro end        it appears, its HP bar switches on, and it walks
+	--                            out to BOSS_STAND studs in front of the castle
+	function self.OpenCastle(_self: Visuals, maxHp: number): number
+		if destroyed then
 			return 0
 		end
+		if castleOpen then
+			return math.max(0, BOSS_INTRO_SECONDS - castleClock)
+		end
+		castleOpen = true
+		castleClock = 0
 		engaged = {}
-		-- Door sinks into the ground.
+		local sink = fortDoor:GetExtentsSize().Y + 0.2
 		for _, item in fortDoor:GetDescendants() do
 			if item:IsA("BasePart") then
 				Theme.Tween(
 					item,
-					{ CFrame = item.CFrame - Vector3.new(0, 9.6, 0) },
+					{ CFrame = item.CFrame - Vector3.new(0, sink, 0) },
 					BOSS_DOOR_TIME,
 					Enum.EasingStyle.Quad
 				)
 			end
 		end
-		local function bossPivot(distance: number): CFrame
-			local p = worldAt(distance, 0, 0)
-			return CFrame.lookAt(p, p + Vector3.new(0, 0, 1)) -- faces the runner (+Z)
-		end
-		local b = RunnerBoss.new(folder, bossPivot(fortDistance + 3), outcome.hp)
+		local b = RunnerBoss.new(folder, bossPivot(fortDistance + BOSS_WAIT_DEPTH), maxHp)
 		boss = b
-		task.delay(BOSS_DOOR_TIME * 0.6, function()
-			if boss == b then
-				b:WalkTo(bossPivot(fortDistance - BOSS_STAND), BOSS_WALK_TIME)
+		task.delay(BOSS_DOOR_TIME, function()
+			if boss == b and not destroyed then
+				b:Show()
+				b:WalkTo(bossPivot(fortDistance - BOSS_STAND), math.max(0.3, BOSS_INTRO_SECONDS - BOSS_DOOR_TIME))
 			end
 		end)
+		Theme.FloatText(worldAt(fortDistance - 2, 0, 21), "👹 THE BOSS!", P.ButtonRed)
+		return BOSS_INTRO_SECONDS
+	end
+
+	-- Plays the boss fight exactly as the BossOutcome says (RunnerController
+	-- passes the server's):
+	--   intro (OpenCastle)       if it is still playing, the fight waits for it
+	--   fight t = 0 .. duration  everyone shoots it, its bar follows BossHpAt(t);
+	--                            each kill k lands at k x interval (troops from the
+	--                            back rows first, the avatar last)
+	--   then BOSS_OUTRO_SECONDS  victory (boss falls, confetti, coins) or defeat
+	--                            (avatar knocked down, boss roars), then onDone()
+	function self.StartBossFight(_self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks): number
+		if destroyed or fight then
+			return 0
+		end
+		self.OpenCastle(self, outcome.hp) -- no-op when the intro already started
+		local b = boss
+		if b then
+			b:SetMaxHp(outcome.hp)
+			b:SetHp(outcome.hp)
+		end
 
 		-- One boss shot per kill, fired so it lands when the unit dies.
 		local shots: { BossShot } = {}
@@ -1271,19 +1391,18 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				lastTime = fire
 			end
 		end
-		local intro = BOSS_DOOR_TIME * 0.6 + BOSS_WALK_TIME
+		local wait = math.max(0, BOSS_INTRO_SECONDS - castleClock)
 		fight = {
 			outcome = outcome,
 			callbacks = callbacks,
 			clock = 0,
-			fightStart = intro,
+			fightStart = wait,
 			shots = shots,
 			nextShot = 1,
 			resolved = false,
 			done = false,
 		}
-		Theme.FloatText(worldAt(fortDistance - 2, 0, 14), "👹 THE BOSS!", P.ButtonRed)
-		return intro + outcome.duration + BOSS_OUTRO_TIME
+		return wait + outcome.duration + BOSS_OUTRO_SECONDS
 	end
 
 	function self.BossFocus(_self: Visuals): Vector3?

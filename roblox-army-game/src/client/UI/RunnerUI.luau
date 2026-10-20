@@ -7,12 +7,15 @@
 		RunnerUI.ShowHud(level) -> Hud
 			Hud.SetLevel(level)          -- black "Level N" banner (top centre)
 			Hud.SetProgress(fraction)    -- thin progress bar under the banner
-			Hud.SetStats(stats: HudStats) -- live squad panel in the TOP-LEFT corner
-			Hud.SetStatsVisible(visible) -- hidden on the pre-run screen (the cards show the stats)
+			Hud.SetStats(stats: HudStats) -- live squad panel in the BOTTOM-LEFT corner
+			Hud.SetStatsVisible(visible) -- hidden on the pre-run screen (the cards show the
+			                                stats) and on the summary (RunnerController)
 			Hud.PopCash()                -- bounce the money tag (cash picked up)
 			Hud.Destroy()
 			HudStats = { troops, weaponName, weaponTier, maxTier, dps, cash, capacity }
-			  Panel (owner request: stats in a corner, not above the head):
+			  Panel (owner request: stats in a corner, not above the head; bottom-left,
+			  clear of Roblox's chat window in the top-left; the default touch
+			  thumbstick is off during the run):
 			  🪖 troops · 🔫 weapon (tier) · 💥 squad damage per second ·
 			  💰 lime-green money tag "carried / capacity" (reference image 2).
 
@@ -49,7 +52,8 @@
 
 	Screen-size scaling uses Theme.ResponsiveScale on plain holder frames only
 	(one UIScale per object, shared with Theme.Pop / button press animations).
-	The HUD banner and the stats panel sit below Roblox's top bar (Theme.TopInset()).
+	The HUD banner sits below Roblox's top bar (Theme.TopInset()); the stats
+	panel sits in the bottom-left corner.
 ]]
 
 local Players = game:GetService("Players")
@@ -216,13 +220,13 @@ function RunnerUI.ShowHud(level: number): Hud
 	Theme.Corner(fill, 0.5)
 
 	---------------------------------------------------------------------------
-	-- TOP-LEFT squad panel (below Roblox's top bar)
+	-- BOTTOM-LEFT squad panel (the top-left corner is Roblox's chat window)
 	---------------------------------------------------------------------------
 	local corner = Instance.new("Frame")
 	corner.Name = "RunnerStats"
 	corner.BackgroundTransparency = 1
-	corner.AnchorPoint = Vector2.new(0, 0)
-	corner.Position = UDim2.fromOffset(12, Theme.TopInset() + 8)
+	corner.AnchorPoint = Vector2.new(0, 1)
+	corner.Position = UDim2.new(0, 12, 1, -12)
 	corner.Size = UDim2.fromOffset(232, 186)
 	corner.Visible = false
 	corner.Parent = gui

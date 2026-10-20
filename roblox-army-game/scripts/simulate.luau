@@ -83,10 +83,18 @@ emit(string.format("* Reference upgrade levels per area: %d", Config.Benchmark.R
 emit(string.format("* Area cash scale: x%.2f per area", EconomyDefs.AreaScale))
 emit(
 	string.format(
-		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %d s menus and boss fight)",
+		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %.2f s overhead: "
+			.. "%.0f s menus / summary + boss %.2f s intro, up to %d s fight, %.2f s outro)",
 		T,
 		RunnerDefs.BOSS_DISTANCE / RunnerDefs.RUN_SPEED,
+		RunnerDefs.RUN_OVERHEAD_SECONDS,
 		RunnerDefs.RUN_OVERHEAD_SECONDS
+			- RunnerDefs.BOSS_INTRO_SECONDS
+			- RunnerDefs.BOSS_MAX_FIGHT_SECONDS
+			- RunnerDefs.BOSS_OUTRO_SECONDS,
+		RunnerDefs.BOSS_INTRO_SECONDS,
+		RunnerDefs.BOSS_MAX_FIGHT_SECONDS,
+		RunnerDefs.BOSS_OUTRO_SECONDS
 	)
 )
 emit("* Money is whole dollars everywhere (no cents).")
@@ -374,7 +382,9 @@ emit(
 		T
 	)
 )
-emit("Payback = unlock price / income per second while stocked.")
+emit("Payback = unlock price / income per second while stocked. Every sale is whole dollars:")
+emit("the sale interval stretches and the stock (sales per restock) scales the other way, so a")
+emit('full stock lasts the designed time ("Restock every"; +10% per upgrade level).')
 emit()
 header({
 	"Slot",
@@ -387,6 +397,8 @@ header({
 	"Payback",
 	"Restock every",
 	"$/s L10",
+	"Stock L10",
+	"Restock L10",
 	"Upgrade L1->2",
 	"Upgrade L9->10",
 })
@@ -407,6 +419,8 @@ for area = 1, AREAS do
 				minutes(price / s1.incomePerSecond),
 				minutes(s1.stockCapacity * s1.saleInterval),
 				string.format("%.2f", s10.incomePerSecond),
+				s10.stockCapacity,
+				minutes(s10.stockCapacity * s10.saleInterval),
 				money(Economy.SectionUpgradePrice(slotDef.id, 1) :: number),
 				money(Economy.SectionUpgradePrice(slotDef.id, Economy.SectionMaxLevel - 1) :: number),
 			})

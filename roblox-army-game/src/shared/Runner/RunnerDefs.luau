@@ -25,7 +25,10 @@
 		RunnerDefs.TROOP_VALUE, DAMAGE_GATE_AMOUNT, DAMAGE_GATE_VALUE, ...
 		RunnerDefs.BARRICADE_TROOP_LOSS
 		RunnerDefs.BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS, BOSS_HP_SHARE, BOSS_REWARD,
-		RunnerDefs.BOSS_REWARD_ARMY_EXP, RUN_OVERHEAD_SECONDS
+		RunnerDefs.BOSS_REWARD_ARMY_EXP
+		RunnerDefs.BOSS_INTRO_SECONDS     castle door opens + boss walks out (client animation, before the fight)
+		RunnerDefs.BOSS_OUTRO_SECONDS     victory / defeat animation after the fight, before the summary
+		RunnerDefs.RUN_OVERHEAD_SECONDS   seconds of a typical run that are not running (menus + whole boss phase)
 		RunnerDefs.BossKillInterval(units) seconds between boss kills for a squad of `units`
 		RunnerDefs.TroopScale(area)       growth of troop counts (gates, squads) by area
 		RunnerDefs.EnemyHpScale(area)     growth of one enemy soldier's hit points by area
@@ -223,11 +226,24 @@ RunnerDefs.BOSS_KILL_INTERVAL = 0.55 -- [PROPOSAL] seconds between boss kills
 RunnerDefs.BOSS_MAX_FIGHT_SECONDS = 12 -- [PROPOSAL] huge armies: the fight never lasts longer
 RunnerDefs.BOSS_HP_SHARE = 0.999 -- [PROPOSAL] only paths within 0.1% of the best win
 
--- Seconds a typical run takes on top of running: pre-run screen, countdown,
--- the completion summary (~11 s) and the boss fight (at most
--- BOSS_MAX_FIGHT_SECONDS; best-lane fights take ~11-12 s). Used by
--- Economy.RunDurationSeconds.
-RunnerDefs.RUN_OVERHEAD_SECONDS = 11 + RunnerDefs.BOSS_MAX_FIGHT_SECONDS -- [PROPOSAL] 23 s
+-- Boss phase timing shared by the client animation (RunnerVisuals) and the
+-- economy (RUN_OVERHEAD_SECONDS below), so both use the same numbers.
+-- Intro: the castle door sinks (0.7 s; the boss starts walking at 60% of it,
+-- 0.42 s) and the boss walks out of the gate (2.2 s) = 2.62 s.
+RunnerDefs.BOSS_INTRO_SECONDS = 2.62 -- [PROPOSAL]
+-- Outro: victory (boss falls, confetti, coins) or defeat moment before the summary.
+RunnerDefs.BOSS_OUTRO_SECONDS = 2.8 -- [PROPOSAL]
+
+-- Seconds a typical run takes on top of running: pre-run screen, countdown
+-- and the completion summary (~11 s, [PROPOSAL] estimate of time spent in
+-- menus), plus the whole boss phase: intro (BOSS_INTRO_SECONDS), the fight
+-- (at most BOSS_MAX_FIGHT_SECONDS; best-lane fights take ~11-12 s) and the
+-- outro (BOSS_OUTRO_SECONDS). Used by Economy.RunDurationSeconds (2x boost
+-- value, section income via PassiveShare).
+RunnerDefs.RUN_OVERHEAD_SECONDS = 11 -- [PROPOSAL] 11 + 2.62 + 12 + 2.8 = 28.42 s
+	+ RunnerDefs.BOSS_INTRO_SECONDS
+	+ RunnerDefs.BOSS_MAX_FIGHT_SECONDS
+	+ RunnerDefs.BOSS_OUTRO_SECONDS
 
 -- Seconds between boss kills for a squad of `units`:
 -- min(BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS / units).

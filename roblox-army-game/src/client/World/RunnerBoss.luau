@@ -8,10 +8,15 @@
 	soldier, horned helmet, angry face and a huge cannon on its right arm.
 	All parts are Anchored and moved with workspace:BulkMoveTo every frame.
 	It is visual only: RunnerVisuals drives it from RunnerSim's BossOutcome.
+	It is about 11.7 studs tall (horns, mid-stride), so RunnerModels.Fort's
+	gateway is 13 studs high.
 
 	Public API:
 		local boss = RunnerBoss.new(parent, pivot: CFrame, maxHp)
-			pivot = its feet, LookVector = where it faces
+			pivot = its feet, LookVector = where it faces. Created HIDDEN (every
+			part invisible, HP bar off) so it can wait behind the castle door.
+		boss:Show()                    make it visible + switch its HP bar on (walk-out)
+		boss:SetMaxHp(maxHp)           new max HP (bar shows hp / maxHp)
 		boss:WalkTo(pivot, duration)   walk (swinging legs) to a new pivot
 		boss:Attack() -> Vector3       cannon recoil; returns the muzzle position
 		boss:Hit()                     short white flash (throttled)
@@ -38,6 +43,8 @@ local RunnerModels = require(script.Parent.RunnerModels)
 local P = Config.Palette
 
 export type Boss = {
+	Show: (self: Boss) -> (),
+	SetMaxHp: (self: Boss, maxHp: number) -> (),
 	WalkTo: (self: Boss, pivot: CFrame, duration: number) -> (),
 	Attack: (self: Boss) -> Vector3,
 	Hit: (self: Boss) -> (),
@@ -158,6 +165,7 @@ function RunnerBoss.new(parent: Instance, pivot: CFrame, maxHp: number): Boss
 	local groups: { string } = {}
 	local offsets: { CFrame } = {}
 	local helmet: BasePart? = nil
+	local maxHpNow = maxHp
 	for _, piece in PIECES do
 		local part = RunnerModels.Part({
 			Name = piece.name,
@@ -190,6 +198,7 @@ function RunnerBoss.new(parent: Instance, pivot: CFrame, maxHp: number): Boss
 	table.insert(offsets, CFrame.new(0, -6.85, 0) * ALONG_ARM)
 	for _, part in parts do
 		part.CastShadow = true
+		part.Transparency = 1 -- hidden until Show() (it waits behind the castle door)
 	end
 
 	local highlight = Instance.new("Highlight")
@@ -213,6 +222,7 @@ function RunnerBoss.new(parent: Instance, pivot: CFrame, maxHp: number): Boss
 		AlwaysOnTop = true,
 		MaxDistance = 500,
 	})
+	gui.Enabled = false -- switched on by Show() when it walks out
 	Theme.Label({
 		Text = "👹 BOSS",
 		TextColor3 = P.White,
@@ -259,15 +269,31 @@ function RunnerBoss.new(parent: Instance, pivot: CFrame, maxHp: number): Boss
 	local lastFlash = 0
 	local dying: number? = nil -- seconds since Die()
 	local roaring = false
+	local shown = false
 
 	local self = {} :: Boss
 
 	function self.SetHp(_self: Boss, hp: number)
-		local f = if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 0
+		local f = if maxHpNow > 0 then math.clamp(hp / maxHpNow, 0, 1) else 0
 		fill.Size = UDim2.new(f, -math.floor(6 * f + 0.5), 1, -6)
 		fill.Visible = f > 0
 		fill.BackgroundColor3 = P.ButtonRed:Lerp(P.MoneyGreen, f)
-		hpLabel.Text = hpText(hp) .. " / " .. hpText(maxHp)
+		hpLabel.Text = hpText(hp) .. " / " .. hpText(maxHpNow)
+	end
+
+	function self.SetMaxHp(_self: Boss, newMax: number)
+		maxHpNow = math.max(0, newMax)
+	end
+
+	function self.Show(_self: Boss)
+		if shown or destroyed or dying ~= nil then
+			return
+		end
+		shown = true
+		for _, part in parts do
+			part.Transparency = 0
+		end
+		gui.Enabled = true
 	end
 
 	function self.WalkTo(_self: Boss, target: CFrame, duration: number)

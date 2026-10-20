@@ -7,7 +7,7 @@ is a design assumption that can be tuned.
 * Benchmark mode: **CombinedSections** (Config.Benchmark.Mode)
 * Reference upgrade levels per area: 4
 * Area cash scale: x1.60 per area
-* Typical run duration (RunDurationSeconds): 59.25 s (36.25 s running + 23 s menus and boss fight)
+* Typical run duration (RunDurationSeconds): 64.67 s (36.25 s running + 28.42 s overhead: 11 s menus / summary + boss 2.62 s intro, up to 12 s fight, 2.80 s outro)
 * Money is whole dollars everywhere (no cents).
 
 ## 1. 10-run benchmark
@@ -114,53 +114,55 @@ choices per course. Payout as a share of the best case.
 
 ## 4. Revenue sections
 
-Passive target: a full area of level-1 sections = 36% of the active runner rate R / 59.2 s.
-Payback = unlock price / income per second while stocked.
+Passive target: a full area of level-1 sections = 39% of the active runner rate R / 64.7 s.
+Payback = unlock price / income per second while stocked. Every sale is whole dollars:
+the sale interval stretches and the stock (sales per restock) scales the other way, so a
+full stock lasts the designed time ("Restock every"; +10% per upgrade level).
 
-| Slot | Name | Unlock | $/sale | Every | Stock | $/s L1 | Payback | Restock every | $/s L10 | Upgrade L1->2 | Upgrade L9->10 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| a1s1 | Ration Stand | $434 | $1 | 5.6s | 25 | 0.18 | 40.5 min | 2.3 min | 0.50 | $152 | $3,893 |
-| a1s2 | Boot Shop | $559 | $1 | 4.4s | 29 | 0.23 | 40.6 min | 2.1 min | 0.64 | $196 | $5,014 |
-| a1s3 | Canteen | $683 | $1 | 3.6s | 33 | 0.28 | 40.6 min | 2.0 min | 0.79 | $239 | $6,127 |
-| a1s4 | Barber Hut | $807 | $2 | 6.0s | 37 | 0.33 | 40.5 min | 3.7 min | 0.93 | $282 | $7,239 |
-| a2s1 | Ammo Store | $930 | $2 | 3.5s | 25 | 0.57 | 27.4 min | 1.5 min | 1.58 | $326 | $8,342 |
-| a2s2 | Uniform Shop | $1,162 | $3 | 4.2s | 29 | 0.71 | 27.4 min | 2.1 min | 1.98 | $407 | $10,423 |
-| a2s3 | Med Tent | $1,394 | $4 | 4.7s | 33 | 0.85 | 27.4 min | 2.6 min | 2.37 | $488 | $12,504 |
-| a3s1 | Fuel Station | $1,526 | $3 | 4.8s | 25 | 0.63 | 40.6 min | 2.0 min | 1.75 | $534 | $13,688 |
-| a3s2 | Tire Shop | $1,962 | $4 | 5.0s | 29 | 0.81 | 40.6 min | 2.4 min | 2.25 | $687 | $17,599 |
-| a3s3 | Repair Garage | $2,399 | $5 | 5.1s | 33 | 0.98 | 40.6 min | 2.8 min | 2.76 | $840 | $21,519 |
-| a3s4 | Car Wash | $2,834 | $7 | 6.0s | 37 | 1.16 | 40.6 min | 3.7 min | 3.26 | $992 | $25,421 |
-| a4s1 | Parachute Shop | $2,278 | $4 | 4.3s | 25 | 0.93 | 40.6 min | 1.8 min | 2.62 | $797 | $20,434 |
-| a4s2 | Radar Tower | $2,929 | $6 | 5.0s | 29 | 1.20 | 40.6 min | 2.4 min | 3.36 | $1,025 | $26,273 |
-| a4s3 | Hangar Cafe | $3,580 | $8 | 5.4s | 33 | 1.47 | 40.6 min | 3.0 min | 4.11 | $1,253 | $32,113 |
-| a4s4 | Flight School | $4,231 | $10 | 5.8s | 37 | 1.74 | 40.6 min | 3.6 min | 4.86 | $1,481 | $37,953 |
-| a5s1 | Fish Market | $4,454 | $7 | 3.8s | 25 | 1.83 | 40.6 min | 1.6 min | 5.11 | $1,559 | $39,953 |
-| a5s2 | Boat Rentals | $5,727 | $11 | 4.7s | 29 | 2.35 | 40.6 min | 2.3 min | 6.58 | $2,004 | $51,372 |
-| a5s3 | Dock Warehouse | $7,000 | $15 | 5.2s | 33 | 2.87 | 40.6 min | 2.9 min | 8.04 | $2,450 | $62,791 |
-| a5s4 | Lighthouse Shop | $8,272 | $20 | 5.9s | 37 | 3.39 | 40.6 min | 3.6 min | 9.50 | $2,895 | $74,201 |
-| a6s1 | Water Depot | $7,964 | $13 | 4.0s | 25 | 3.27 | 40.6 min | 1.7 min | 9.15 | $2,787 | $71,438 |
-| a6s2 | Supply Bazaar | $10,240 | $19 | 4.5s | 29 | 4.20 | 40.6 min | 2.2 min | 11.76 | $3,584 | $91,854 |
-| a6s3 | Solar Farm | $12,516 | $27 | 5.3s | 33 | 5.13 | 40.6 min | 2.9 min | 14.37 | $4,381 | $112,270 |
-| a6s4 | Oasis Cafe | $14,791 | $35 | 5.8s | 37 | 6.07 | 40.6 min | 3.6 min | 16.99 | $5,177 | $132,677 |
-| a7s1 | Climbing Gear | $12,506 | $21 | 4.1s | 25 | 5.13 | 40.6 min | 1.7 min | 14.36 | $4,377 | $112,180 |
-| a7s2 | Hot Cocoa Hut | $16,078 | $30 | 4.5s | 29 | 6.59 | 40.6 min | 2.2 min | 18.47 | $5,627 | $144,222 |
-| a7s3 | Ski Rental | $19,651 | $42 | 5.2s | 33 | 8.06 | 40.6 min | 2.9 min | 22.57 | $6,878 | $176,272 |
-| a7s4 | Armory | $23,224 | $55 | 5.8s | 37 | 9.53 | 40.6 min | 3.6 min | 26.67 | $8,128 | $208,322 |
-| a8s1 | Medal Shop | $23,225 | $38 | 4.0s | 25 | 9.52 | 40.6 min | 1.7 min | 26.67 | $8,129 | $208,331 |
-| a8s2 | War Room Cafe | $29,861 | $56 | 4.6s | 29 | 12.25 | 40.6 min | 2.2 min | 34.29 | $10,451 | $267,857 |
-| a8s3 | Satellite Uplink | $36,497 | $78 | 5.2s | 33 | 14.97 | 40.6 min | 2.9 min | 41.91 | $12,774 | $327,382 |
-| a8s4 | Officer Club | $43,133 | $103 | 5.8s | 37 | 17.69 | 40.6 min | 3.6 min | 49.53 | $15,097 | $386,908 |
+| Slot | Name | Unlock | $/sale | Every | Stock | $/s L1 | Payback | Restock every | $/s L10 | Stock L10 | Restock L10 | Upgrade L1->2 | Upgrade L9->10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a1s1 | Ration Stand | $434 | $1 | 5.6s | 18 | 0.18 | 40.8 min | 1.7 min | 0.50 | 47 | 3.2 min | $152 | $3,893 |
+| a1s2 | Boot Shop | $559 | $1 | 4.4s | 30 | 0.23 | 40.9 min | 2.2 min | 0.64 | 54 | 4.2 min | $196 | $5,014 |
+| a1s3 | Canteen | $683 | $1 | 3.6s | 48 | 0.28 | 40.9 min | 2.9 min | 0.78 | 64 | 5.5 min | $239 | $6,127 |
+| a1s4 | Barber Hut | $807 | $2 | 6.1s | 35 | 0.33 | 40.8 min | 3.5 min | 0.92 | 75 | 6.8 min | $282 | $7,239 |
+| a2s1 | Ammo Store | $930 | $2 | 3.6s | 28 | 0.56 | 27.6 min | 1.7 min | 1.57 | 50 | 3.2 min | $326 | $8,342 |
+| a2s2 | Uniform Shop | $1,162 | $3 | 4.3s | 31 | 0.70 | 27.6 min | 2.2 min | 1.96 | 55 | 4.2 min | $407 | $10,423 |
+| a2s3 | Med Tent | $1,394 | $4 | 4.8s | 36 | 0.84 | 27.6 min | 2.9 min | 2.36 | 64 | 5.4 min | $488 | $12,504 |
+| a3s1 | Fuel Station | $1,526 | $2 | 3.2s | 31 | 0.62 | 40.9 min | 1.7 min | 1.74 | 47 | 3.2 min | $534 | $13,688 |
+| a3s2 | Tire Shop | $1,962 | $4 | 5.0s | 27 | 0.80 | 40.9 min | 2.3 min | 2.24 | 57 | 4.2 min | $687 | $17,599 |
+| a3s3 | Repair Garage | $2,399 | $5 | 5.1s | 34 | 0.98 | 40.9 min | 2.9 min | 2.74 | 64 | 5.5 min | $840 | $21,519 |
+| a3s4 | Car Wash | $2,834 | $7 | 6.1s | 35 | 1.15 | 40.9 min | 3.5 min | 3.23 | 69 | 6.8 min | $992 | $25,421 |
+| a4s1 | Parachute Shop | $2,278 | $4 | 4.3s | 23 | 0.93 | 40.9 min | 1.7 min | 2.60 | 49 | 3.1 min | $797 | $20,434 |
+| a4s2 | Radar Tower | $2,929 | $5 | 4.2s | 32 | 1.19 | 40.9 min | 2.2 min | 3.34 | 56 | 4.2 min | $1,025 | $26,273 |
+| a4s3 | Hangar Cafe | $3,580 | $8 | 5.5s | 31 | 1.46 | 40.9 min | 2.8 min | 4.08 | 63 | 5.4 min | $1,253 | $32,113 |
+| a4s4 | Flight School | $4,231 | $10 | 5.8s | 37 | 1.72 | 40.9 min | 3.6 min | 4.82 | 70 | 6.8 min | $1,481 | $37,953 |
+| a5s1 | Fish Market | $4,454 | $7 | 3.9s | 26 | 1.81 | 40.9 min | 1.7 min | 5.08 | 48 | 3.2 min | $1,559 | $39,953 |
+| a5s2 | Boat Rentals | $5,727 | $11 | 4.7s | 28 | 2.33 | 40.9 min | 2.2 min | 6.53 | 55 | 4.2 min | $2,004 | $51,372 |
+| a5s3 | Dock Warehouse | $7,000 | $15 | 5.3s | 33 | 2.85 | 40.9 min | 2.9 min | 7.98 | 63 | 5.4 min | $2,450 | $62,791 |
+| a5s4 | Lighthouse Shop | $8,272 | $20 | 5.9s | 36 | 3.37 | 40.9 min | 3.6 min | 9.43 | 70 | 6.8 min | $2,895 | $74,201 |
+| a6s1 | Water Depot | $7,964 | $13 | 4.0s | 25 | 3.24 | 40.9 min | 1.7 min | 9.08 | 48 | 3.2 min | $2,787 | $71,438 |
+| a6s2 | Supply Bazaar | $10,240 | $19 | 4.6s | 29 | 4.17 | 40.9 min | 2.2 min | 11.67 | 55 | 4.2 min | $3,584 | $91,854 |
+| a6s3 | Solar Farm | $12,516 | $26 | 5.1s | 34 | 5.09 | 40.9 min | 2.9 min | 14.27 | 63 | 5.4 min | $4,381 | $112,270 |
+| a6s4 | Oasis Cafe | $14,791 | $35 | 5.8s | 37 | 6.02 | 40.9 min | 3.6 min | 16.86 | 70 | 6.8 min | $5,177 | $132,677 |
+| a7s1 | Climbing Gear | $12,506 | $20 | 3.9s | 25 | 5.09 | 40.9 min | 1.6 min | 14.25 | 48 | 3.2 min | $4,377 | $112,180 |
+| a7s2 | Hot Cocoa Hut | $16,078 | $30 | 4.6s | 29 | 6.55 | 40.9 min | 2.2 min | 18.33 | 55 | 4.2 min | $5,627 | $144,222 |
+| a7s3 | Ski Rental | $19,651 | $42 | 5.2s | 33 | 8.00 | 40.9 min | 2.9 min | 22.40 | 63 | 5.4 min | $6,878 | $176,272 |
+| a7s4 | Armory | $23,224 | $55 | 5.8s | 37 | 9.45 | 40.9 min | 3.6 min | 26.47 | 70 | 6.8 min | $8,128 | $208,322 |
+| a8s1 | Medal Shop | $23,225 | $38 | 4.0s | 25 | 9.45 | 40.9 min | 1.7 min | 26.47 | 47 | 3.1 min | $8,129 | $208,331 |
+| a8s2 | War Room Cafe | $29,861 | $56 | 4.6s | 29 | 12.16 | 40.9 min | 2.2 min | 34.03 | 55 | 4.2 min | $10,451 | $267,857 |
+| a8s3 | Satellite Uplink | $36,497 | $77 | 5.2s | 33 | 14.86 | 40.9 min | 2.9 min | 41.60 | 63 | 5.5 min | $12,774 | $327,382 |
+| a8s4 | Officer Club | $43,133 | $102 | 5.8s | 37 | 17.56 | 40.9 min | 3.6 min | 49.16 | 70 | 6.8 min | $15,097 | $386,908 |
 
 | Area | Area passive $/s (L1) | Active $/s (R/T) | Passive / active | ReferencePassiveRate (all areas <=) |
 | --- | --- | --- | --- | --- |
-| 1 | 1.02 | 2.84 | 36% | 1.02 |
-| 2 | 2.12 | 5.89 | 36% | 3.14 |
-| 3 | 3.58 | 9.94 | 36% | 6.72 |
-| 4 | 5.34 | 14.84 | 36% | 12.06 |
-| 5 | 10.44 | 29.00 | 36% | 22.50 |
-| 6 | 18.67 | 51.85 | 36% | 41.16 |
-| 7 | 29.31 | 81.42 | 36% | 70.47 |
-| 8 | 54.43 | 151.19 | 36% | 124.90 |
+| 1 | 1.01 | 2.60 | 39% | 1.01 |
+| 2 | 2.10 | 5.40 | 39% | 3.12 |
+| 3 | 3.55 | 9.11 | 39% | 6.67 |
+| 4 | 5.30 | 13.59 | 39% | 11.97 |
+| 5 | 10.36 | 26.57 | 39% | 22.33 |
+| 6 | 18.53 | 47.50 | 39% | 40.86 |
+| 7 | 29.09 | 74.59 | 39% | 69.95 |
+| 8 | 54.02 | 138.52 | 39% | 123.97 |
 
 ## 5. Employees
 
@@ -185,15 +187,15 @@ employees); the actual cash price follows the rule in 6.1.
 
 | Boost | Robux | Weight | Area 1 value / price | Area 4 value / price | Area 8 value / price | Value / price |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2x Cash (15 min) | 29 | 30 | $2,552 / $2,041 | $13,352 / $10,681 | $136,071 / $108,856 | 1.250 |
-| 2x Cash (30 min) | 49 | 12 | $5,104 / $4,083 | $26,704 / $21,363 | $272,142 / $217,713 | 1.250 |
-| 2x Cash (60 min) | 89 | 4 | $10,208 / $8,166 | $53,408 / $42,726 | $544,284 / $435,427 | 1.250 |
-| Time Skip 1h | 25 | 30 | $3,675 / $2,940 | $43,419 / $34,735 | $449,652 / $359,721 | 1.250 |
-| Time Skip 2h | 45 | 18 | $7,349 / $5,879 | $86,837 / $69,469 | $899,304 / $719,443 | 1.250 |
-| Time Skip 4h | 79 | 10 | $14,699 / $11,759 | $173,675 / $138,940 | $1.8M / $1.44M | 1.250 |
-| Time Skip 8h | 149 | 5 | $29,398 / $23,518 | $347,350 / $277,880 | $3.6M / $2.88M | 1.250 |
-| Time Skip 12h | 199 | 2.5 | $44,097 / $35,277 | $521,025 / $416,820 | $5.4M / $4.32M | 1.250 |
-| Time Skip 24h | 349 | 1 | $88,194 / $70,555 | $1.04M / $833,640 | $10.8M / $8.63M | 1.250 |
+| 2x Cash (15 min) | 29 | 30 | $2,338 / $1,870 | $12,233 / $9,786 | $124,667 / $99,733 | 1.250 |
+| 2x Cash (30 min) | 49 | 12 | $4,676 / $3,740 | $24,466 / $19,572 | $249,334 / $199,467 | 1.250 |
+| 2x Cash (60 min) | 89 | 4 | $9,352 / $7,481 | $48,931 / $39,144 | $498,667 / $398,933 | 1.250 |
+| Time Skip 1h | 25 | 30 | $3,647 / $2,917 | $43,095 / $34,476 | $446,297 / $357,037 | 1.250 |
+| Time Skip 2h | 45 | 18 | $7,295 / $5,836 | $86,190 / $68,952 | $892,594 / $714,075 | 1.250 |
+| Time Skip 4h | 79 | 10 | $14,589 / $11,671 | $172,379 / $137,903 | $1.79M / $1.43M | 1.250 |
+| Time Skip 8h | 149 | 5 | $29,179 / $23,343 | $344,758 / $275,806 | $3.57M / $2.86M | 1.250 |
+| Time Skip 12h | 199 | 2.5 | $43,768 / $35,014 | $517,137 / $413,709 | $5.36M / $4.28M | 1.250 |
+| Time Skip 24h | 349 | 1 | $87,536 / $70,028 | $1.03M / $827,420 | $10.7M / $8.57M | 1.250 |
 
 ### 6.1 Time-skip cash price (what your shops would pay right now)
 
@@ -209,12 +211,12 @@ Example, area-1 player: (a) only the first shop, full stock, no employee;
 
 | Boost | Reference V / old price | (a) pays / price / offered | (b) pays / price / offered |
 | --- | --- | --- | --- |
-| Time Skip 1h | $3,675 / $2,940 | $25 / $20 / no | $3,673 / $2,938 / yes |
-| Time Skip 2h | $7,349 / $5,879 | $25 / $20 / no | $7,348 / $5,878 / yes |
-| Time Skip 4h | $14,699 / $11,759 | $25 / $20 / no | $14,697 / $11,757 / yes |
-| Time Skip 8h | $29,398 / $23,518 | $25 / $20 / no | $29,396 / $23,516 / yes |
-| Time Skip 12h | $44,097 / $35,277 | $25 / $20 / no | $44,093 / $35,274 / yes |
-| Time Skip 24h | $88,194 / $70,555 | $25 / $20 / no | $88,191 / $70,552 / yes |
+| Time Skip 1h | $3,647 / $2,917 | $18 / $14 / no | $3,645 / $2,916 / yes |
+| Time Skip 2h | $7,295 / $5,836 | $18 / $14 / no | $7,293 / $5,834 / yes |
+| Time Skip 4h | $14,589 / $11,671 | $18 / $14 / no | $14,587 / $11,669 / yes |
+| Time Skip 8h | $29,179 / $23,343 | $18 / $14 / no | $29,177 / $23,341 / yes |
+| Time Skip 12h | $43,768 / $35,014 | $18 / $14 / no | $43,766 / $35,012 / yes |
+| Time Skip 24h | $87,536 / $70,028 | $18 / $14 / no | $87,533 / $70,026 / yes |
 
 ## 7. Vehicles
 
@@ -310,12 +312,12 @@ weapon lane loses the boss (see 2.2), so 75% is a good but not perfect player.
 
 | Area | Runs @100% | Time @100% | Runs @75% | Time @75% | Total @75% |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 29 | 28.6 min | 39 | 38.5 min | 0.6 h |
-| 2 | 25 | 24.7 min | 33 | 32.6 min | 1.2 h |
-| 3 | 23 | 22.7 min | 30 | 29.6 min | 1.7 h |
-| 4 | 22 | 21.7 min | 30 | 29.6 min | 2.2 h |
-| 5 | 22 | 21.7 min | 29 | 28.6 min | 2.6 h |
-| 6 | 22 | 21.7 min | 30 | 29.6 min | 3.1 h |
-| 7 | 23 | 22.7 min | 29 | 28.6 min | 3.6 h |
-| 8 | 9 | 8.9 min | 13 | 12.8 min | 3.8 h |
+| 1 | 29 | 31.3 min | 38 | 41.0 min | 0.7 h |
+| 2 | 25 | 26.9 min | 33 | 35.6 min | 1.3 h |
+| 3 | 22 | 23.7 min | 29 | 31.3 min | 1.8 h |
+| 4 | 21 | 22.6 min | 29 | 31.3 min | 2.3 h |
+| 5 | 22 | 23.7 min | 28 | 30.2 min | 2.8 h |
+| 6 | 21 | 22.6 min | 29 | 31.3 min | 3.3 h |
+| 7 | 22 | 23.7 min | 29 | 31.3 min | 3.9 h |
+| 8 | 9 | 9.7 min | 12 | 12.9 min | 4.1 h |
 
