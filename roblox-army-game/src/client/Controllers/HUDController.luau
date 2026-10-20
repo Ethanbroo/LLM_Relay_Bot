@@ -18,7 +18,9 @@
 		HUD:SetMenuVisible(visible)   -- e.g. hide while a big panel is open
 ]]
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 
 local Client = script.Parent.Parent
 local State = require(Client.State)
@@ -74,12 +76,22 @@ end
 
 function HUD:Init(_registry: { [string]: any })
 	gui = Theme.ScreenGui("HUD", 5)
+	-- [PROPOSAL] Roblox's player list sits in the top-right corner, exactly where
+	-- the reference images put the cash pill. The game has no leaderboard stats,
+	-- so hide the list (players can still be seen in the Roblox menu).
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+	end)
 
 	local topRight = Instance.new("Frame")
 	topRight.Name = "TopRight"
 	topRight.BackgroundTransparency = 1
 	topRight.AnchorPoint = Vector2.new(1, 0)
-	topRight.Position = UDim2.new(1, -18, 0, 16)
+	-- Below Roblox's top bar (the HUD gui ignores the inset).
+	topRight.Position = UDim2.new(1, -18, 0, Theme.TopInset() + 8)
+	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(function()
+		topRight.Position = UDim2.new(1, -18, 0, Theme.TopInset() + 8)
+	end)
 	topRight.Size = UDim2.fromOffset(250, 400)
 	topRight.Parent = gui
 	Theme.ResponsiveScale(topRight)
@@ -120,7 +132,14 @@ function HUD:Start()
 		setCash(snapshot.cash)
 		refreshMenu()
 	end)
-	State.ModeChanged:Connect(refreshMenu)
+	State.ModeChanged:Connect(function(newMode: string)
+		-- Dialogs opened in the base (hire, shop, arena menu, ...) must not stay
+		-- over the run / fight screens.
+		if newMode ~= "Base" then
+			Theme.CloseModals("Base")
+		end
+		refreshMenu()
+	end)
 	Net.On("Notify", function(text: string, kind: string?)
 		Theme.Toast(text, kind)
 	end)

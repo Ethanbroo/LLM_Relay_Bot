@@ -35,6 +35,7 @@ end
 local function openPanel()
 	local _, content, close = Theme.Panel({
 		Name = "DevPanel",
+		Context = "Base",
 		Title = "Studio test tools",
 		HeaderColor = P.ButtonGrey,
 		HeaderDarkColor = P.ButtonGreyDark,

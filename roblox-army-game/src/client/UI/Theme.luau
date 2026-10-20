@@ -15,13 +15,14 @@
 		Theme.Button({ Text, Color?, DarkColor?, OnClick, MaxTextSize?, ... }) -> TextButton
 		Theme.SetButtonEnabled(button, enabled)
 		Theme.Card({ Title, HeaderColor?, HeaderDarkColor?, BodyColor?, BodyDarkColor?, ... }) -> (card, body)
-		Theme.Panel({ Title, HeaderColor?, OnClose?, Size? }) -> (panel, content, close)
+		Theme.Panel({ Title, Name?, Context?, HeaderColor?, OnClose?, Size?, Gui? }) -> (panel, content, close)
+		Theme.IsModalOpen() -> boolean, Theme.CloseModals(context?), Theme.TopInset() -> number
 		Theme.CoinIcon({ ... }) -> Frame
 		Theme.CashPill({ ... }) -> (Frame, setAmount(number))
 		Theme.MoneyTag({ Text, ... }) -> (Frame, setText(string))
 		Theme.Banner({ Text, ... }) -> (Frame, setText(string))
-		Theme.PurchaseDialog({ Title, Description, RobuxPrice?, RobuxEnabled?, CashPrice?, OnRobux?, OnCash? })
-		Theme.Confirm({ Title, Body, ConfirmText?, OnConfirm })
+		Theme.PurchaseDialog({ Title, Description, RobuxPrice?, RobuxEnabled?, CashPrice?, OnRobux?, OnCash?, Context? })
+		Theme.Confirm({ Title, Body, ConfirmText?, OnConfirm, Name?, Context? })
 		Theme.Toast(text, kind?)
 		Theme.FloatText(worldPosition, text, color?)
 		Theme.Billboard({ Adornee?, Parent, Size, StudsOffset?, AlwaysOnTop?, MaxDistance? }) -> BillboardGui
@@ -31,6 +32,7 @@
 		Theme.Corner/Stroke/Gradient/Padding/List/AspectRatio helpers
 ]]
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -179,22 +181,35 @@ function Theme.Tween(
 	return tween
 end
 
+-- Every object gets at most ONE UIScale (Roblox applies only one per object).
+-- It is shared by the press / pop animations and Theme.ResponsiveScale; the
+-- animations scale relative to its "BaseScale" attribute (1 unless the object
+-- is responsive, then the screen-size factor).
+local SCALE_NAME = "ThemeScale"
+
 local function getScale(gui: GuiObject): UIScale
-	local scale = gui:FindFirstChild("ThemePopScale") :: UIScale?
+	local scale = gui:FindFirstChild(SCALE_NAME) :: UIScale?
 	if not scale then
 		local created = Instance.new("UIScale")
-		created.Name = "ThemePopScale"
+		created.Name = SCALE_NAME
+		created:SetAttribute("BaseScale", 1)
 		created.Parent = gui
 		scale = created
 	end
 	return scale :: UIScale
 end
 
+local function baseScaleOf(scale: UIScale): number
+	local base = scale:GetAttribute("BaseScale")
+	return if type(base) == "number" then base else 1
+end
+
 -- Quick "bounce" used when something is bought / appears.
 function Theme.Pop(gui: GuiObject)
 	local scale = getScale(gui)
-	scale.Scale = 0.85
-	Theme.Tween(scale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
+	local base = baseScaleOf(scale)
+	scale.Scale = base * 0.85
+	Theme.Tween(scale, { Scale = base }, 0.35, Enum.EasingStyle.Back)
 end
 
 function Theme.RarityColor(rarity: number): Color3
@@ -208,13 +223,17 @@ end
 
 -- Shrinks UI on small (phone) screens, grows it a little on big screens.
 function Theme.ResponsiveScale(gui: GuiObject, baseHeight: number?): UIScale
-	local scale = Instance.new("UIScale")
-	scale.Name = "ResponsiveScale"
-	scale.Parent = gui
+	local scale = getScale(gui)
+	if scale:GetAttribute("Responsive") then
+		return scale -- already responsive
+	end
+	scale:SetAttribute("Responsive", true)
 	local function update()
 		local camera = Workspace.CurrentCamera
 		local height = if camera then camera.ViewportSize.Y else 800
-		scale.Scale = math.clamp(height / (baseHeight or 820), 0.55, 1.25)
+		local base = math.clamp(height / (baseHeight or 820), 0.55, 1.25)
+		scale:SetAttribute("BaseScale", base)
+		scale.Scale = base
 	end
 	update()
 	local camera = Workspace.CurrentCamera
@@ -325,13 +344,13 @@ function Theme.Button(props: Props): TextButton
 
 	local scale = getScale(button)
 	button.MouseButton1Down:Connect(function()
-		Theme.Tween(scale, { Scale = 0.94 }, 0.08)
+		Theme.Tween(scale, { Scale = baseScaleOf(scale) * 0.94 }, 0.08)
 	end)
 	button.MouseButton1Up:Connect(function()
-		Theme.Tween(scale, { Scale = 1 }, 0.12, Enum.EasingStyle.Back)
+		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12, Enum.EasingStyle.Back)
 	end)
 	button.MouseLeave:Connect(function()
-		Theme.Tween(scale, { Scale = 1 }, 0.12)
+		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12)
 	end)
 	if props.OnClick then
 		button.Activated:Connect(function()
@@ -615,9 +634,56 @@ local function getModalGui(): ScreenGui
 	return modalGui :: ScreenGui
 end
 
+-- Every open panel / dialog, so controllers can avoid stacking dialogs and
+-- close the ones that belong to a mode the player just left.
+type OpenModal = { name: string, context: string?, close: () -> () }
+local openModals: { [Instance]: OpenModal } = {}
+
+-- True while any Theme.Panel / PurchaseDialog / Confirm is on screen.
+function Theme.IsModalOpen(): boolean
+	return next(openModals) ~= nil
+end
+
+-- Close every open dialog whose props.Context equals `context`
+-- (or every open dialog when `context` is nil).
+function Theme.CloseModals(context: string?)
+	local toClose = {}
+	for _, entry in openModals do
+		if context == nil or entry.context == context then
+			table.insert(toClose, entry.close)
+		end
+	end
+	for _, close in toClose do
+		close()
+	end
+end
+
+-- Height of Roblox's top bar (menu / chat buttons). UI placed near the top of
+-- a Theme.ScreenGui (which ignores the inset) should start below this.
+function Theme.TopInset(): number
+	local ok, inset = pcall(function()
+		return GuiService.TopbarInset.Height
+	end)
+	if ok and type(inset) == "number" and inset > 0 then
+		return inset
+	end
+	return 58
+end
+
 -- Centered modal panel with a dimmed background and a red close button.
 -- Returns (panel, content, close()).
+-- props.Name: opening a panel closes an already-open panel with the same Name
+--             (so pressing a prompt twice never stacks two copies).
+-- props.Context: e.g. "Base" — HUDController closes "Base" dialogs when the
+--             player leaves the base (starts a run or a fight).
 function Theme.Panel(props: Props): (Frame, Frame, () -> ())
+	local panelName: string = props.Name or "Panel"
+	for _, entry in openModals do
+		if entry.name == panelName then
+			entry.close()
+			break
+		end
+	end
 	local gui = props.Gui or getModalGui()
 	local shade = Instance.new("TextButton")
 	shade.Name = (props.Name or "Panel") .. "Shade"
@@ -652,11 +718,17 @@ function Theme.Panel(props: Props): (Frame, Frame, () -> ())
 			return
 		end
 		closed = true
+		openModals[shade] = nil
 		shade:Destroy()
 		if props.OnClose then
 			props.OnClose()
 		end
 	end
+	openModals[shade] = { name = panelName, context = props.Context, close = close }
+	-- If something destroys the panel directly, forget it too.
+	shade.Destroying:Connect(function()
+		openModals[shade] = nil
+	end)
 
 	if props.Closable ~= false then
 		local closeButton = Theme.Button({
@@ -683,6 +755,7 @@ end
 function Theme.PurchaseDialog(props: Props): () -> ()
 	local _, content, close = Theme.Panel({
 		Name = "PurchaseDialog",
+		Context = props.Context,
 		Title = props.Title or "Buy",
 		HeaderColor = props.HeaderColor or P.OfferPurple,
 		HeaderDarkColor = props.HeaderDarkColor or P.OfferPurpleDark,
@@ -778,7 +851,8 @@ end
 
 function Theme.Confirm(props: Props): () -> ()
 	local _, content, close = Theme.Panel({
-		Name = "Confirm",
+		Name = props.Name or "Confirm",
+		Context = props.Context,
 		Title = props.Title or "Are you sure?",
 		Size = UDim2.fromOffset(480, 300),
 		OnClose = props.OnClose,
