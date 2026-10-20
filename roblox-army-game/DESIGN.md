@@ -193,13 +193,101 @@ enemies and 30% from ground piles. You keep collected cash even if you lose.
    silver on a win, gold for barrier wins and every 5th arena level.
 
 ### 5.5 Enemies and abilities
-COMBAT_DETAILS_PLACEHOLDER
+💡 **Enemy types** (`Shared/Combat/CombatDefs.luau`). Base stats are for level 1:
+
+| Enemy | Appears from | Behaviour | HP / damage |
+|---|---|---|---|
+| Rifleman | level 1 | Keeps its distance, aims for 0.55 s, then fires a slow bullet (22 studs/s) | 30 / 8 |
+| Charger | level 1 | Crouches for 0.7 s ("!" warning), then dashes at you; melee hit | 42 / 12 |
+| Grenadier | level 3 | Lobs a grenade; a **red circle** shows where it lands 0.9 s before it explodes | 34 / 15 |
+| Gunner | level 5 | Fires a fan of 3–5 bullets | 58 / 6 per bullet |
+| Sniper | level 7 | Shows a **laser sight** for 1 s, then fires one fast shot along it | 26 / 20 |
+| **Officer (boss)** | last wave of every barrier fight, every 5th arena level | Rings of 14 bullets, plus an aimed 5-bullet burst every third attack | grows with level |
+
+* 💡 Waves: arena levels have 3 waves, plus 1 every 4 levels (max 6). Barrier fights have 4 waves, with the boss in the last.
+* 💡 Per level: enemy HP ×1.18, damage ×1.10, more enemies, and more of the dangerous types.
+  Bullets stay slow enough to dodge (15–28 studs/s).
+* 💡 Cover blocks (crates, sandbags, brick walls) in every arena stop bullets from both sides.
+
+💡 **In-fight abilities** (pick 1 of 3 after each wave; **they reset when the fight ends**):
+
+| Ability | Effect | Max |
+|---|---|---|
+| 🔱 Multishot | +1 bullet every shot | 3 |
+| 🗡️ Pierce | Bullets pass through 1 more enemy | 3 |
+| 🔁 Ricochet | Bullets bounce to 1 more enemy | 3 |
+| ⚡ Attack Speed+ | +15% fire rate | 5 |
+| 💥 Attack+ | +20% damage | 5 |
+| 🎯 Crit+ | +10% critical-hit chance | 4 |
+| ❤️ Max HP+ | +20% max HP (and heals that much) | 5 |
+| 🩹 Heal | Restore 40% of max HP | – |
+| 🛡️ Shield | Start every wave with a shield that blocks 1 hit | 2 |
+| 💨 Dodge | +10% chance to ignore a hit (max 40%) | 4 |
+| 👟 Swift | +8% move speed | 3 |
+| 🧛 Vampire | Heal 2% of max HP per kill | 3 |
+| 💣 Explosive | Bullets splash 30% damage around the target | 2 |
+| 🌿 Regen | Heal 1% of max HP every second | 3 |
+| 🌵 Thorns | Melee attackers take 50% of their damage back | 2 |
 
 ---
 
 ## 6. Equipment, chests, rarity and upgrades
 
-GEAR_DETAILS_PLACEHOLDER
+✅ Lasting combat progression = **armour and weapons from chests**, upgraded with **coins**.
+
+### 6.1 Items (`Shared/Combat/EquipmentDefs.luau`)
+💡 Two slots: **weapon** and **armour**. Everyone starts with a Common Service Pistol and a Common Field Vest.
+Stats below are for a Common level-1 item.
+
+| Weapon | Damage | Shots/s | Special |
+|---|---|---|---|
+| Service Pistol | 10 | 2 | starter |
+| SMG | 5.5 | 5 | small spread |
+| Shotgun | 7 × 3 pellets | 1.4 | wide spread, short range |
+| Assault Rifle | 9 | 3.2 | long range |
+| Sniper Rifle | 40 | 0.7 | very long range, built-in **pierce**, +10% crit |
+| Minigun | 3.2 | 10 | spray |
+| Rocket Launcher | 30 | 0.8 | built-in **explosive** |
+
+| Armour | Bonus HP | Damage reduction | Special |
+|---|---|---|---|
+| Field Vest | +20 | 4% | starter |
+| Kevlar Vest | +35 | 10% | – |
+| Ghillie Suit | +15 | 3% | +1 speed, built-in **dodge** |
+| Riot Armour | +40 | 20% | −2 speed |
+| Medic Rig | +25 | 6% | built-in **regen** |
+| Exo Suit | +30 | 8% | +3 speed |
+| Juggernaut | +90 | 15% | −4 speed |
+
+### 6.2 Rarity
+✅ Higher rarity = better stats and abilities, and rarer.
+
+| Rarity | Stat multiplier | Max level | Bonus perks (abilities) |
+|---|---|---|---|
+| Common | ×1.0 | 10 | 0 |
+| Uncommon | ×1.25 | 20 | 0 |
+| Rare | ×1.6 | 30 | 1 |
+| Epic | ×2.1 | 40 | 2 |
+| Legendary | ×2.8 | 50 | 3, including the item's **signature** perk (e.g. Rocket "Big Boom") |
+
+💡 Perks are rolled when the item drops and use the same effects as the in-fight abilities
+(multishot, pierce, ricochet, crit, rapid fire, explosive, regen, shield, dodge, thorns, swift, vampire).
+Damage reduction is capped at 60%.
+
+### 6.3 Chests
+✅ A chest after **every** combat game, with a random weapon or armour (50/50). ✅ Rarer = less likely.
+
+| Chest | When 💡 | Common | Uncommon | Rare | Epic | Legendary |
+|---|---|---|---|---|---|---|
+| Wooden | defeat (with at least 1 kill) | 62% | 27% | 8% | 2.5% | 0.5% |
+| Silver | arena win | 45% | 32% | 15% | 6% | 2% |
+| Golden | barrier win / every 5th arena level | 36% | 30% | 20% | 10% | 4% |
+
+### 6.4 Coin upgrades
+* ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 +6% item stats per level.
+* 💡 Price: Common level 1→2 = $113, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
+  (e.g. Legendary 49→50 = $416,739).
+* 💡 **Scrap** unwanted items for cash. The inventory holds 60 items; a drop into a full inventory is paid out as cash.
 
 ---
 
