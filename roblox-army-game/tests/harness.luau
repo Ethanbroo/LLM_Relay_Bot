@@ -133,11 +133,22 @@ local function serviceProxy(name: string)
 	})
 end
 
+-- Extra services visible to EVERY loaded module (set by scripts that need
+-- e.g. a Workspace stand-in; tests normally leave this empty).
+local extraServices: { [string]: any } = {}
+
 local fakeGame = {
 	GetService = function(_self, name)
+		if extraServices[name] then
+			return extraServices[name]
+		end
 		return serviceProxy(name)
 	end,
 }
+
+function Harness.setServices(services: { [string]: any })
+	extraServices = services
+end
 
 local function loadModule(path: string): any
 	local file = resolveFile(path)
@@ -156,6 +167,7 @@ local function loadModule(path: string): any
 		script = makeProxy(file),
 		require = customRequire,
 		game = fakeGame,
+		Instance = roblox.Instance,
 		Color3 = roblox.Color3,
 		Vector3 = roblox.Vector3,
 		Vector2 = roblox.Vector2,
