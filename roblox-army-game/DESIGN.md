@@ -50,7 +50,7 @@ were measured from the pixels, not guessed (section 10).
 | Employees | Remove restocking | Sections never stop; required for full time-skip value |
 | Repeated arena combat | Cash (about 3 runs per level) + a chest every game | Gear for harder barriers |
 | Armour and weapons (chests, coin upgrades) | HP, damage, fire rate, perks | Beats the barrier squads, which get harder every area |
-| Harder combat levels | Higher cash rewards (+18–25% per level) | Combat stays worth playing as prices rise |
+| Harder combat levels | Higher cash rewards (+17–26% per level) | Combat stays worth playing as prices rise |
 
 ---
 
@@ -111,7 +111,10 @@ above the squad, a black "Level N" banner, orange/blue cards on the left, and th
 |---|---|---|---|---|
 | **Starting troops** | 3 | +1 troop | level 50 | $90 at level 0, ×1.17 per level |
 | **Damage** | 10 | +4% | level 50 | same as troops |
-| **Coin-carrying capacity** | $60 (×1.6 per area) | +6% | level 50 | 90% of the troops price |
+| **Coin-carrying capacity** | $60 in area 1 | +6% | level 50 | 90% of the troops price |
+
+💡 Carry capacity is re-based per area: an un-upgraded player carries $60 / $77 / $104 in areas 1 / 2 / 3, and a player at the
+reference upgrade level carries $60 × 1.6^(area − 1). This keeps the capacity upgrade meaningful in every area.
 
 ✅ **Permanent upgrades vs in-run pickups** are kept separate: the pre-run cards are titled **PERMANENT UPGRADES**.
 The summary lists **Collected this run** (troops, weapons, damage gates, cash), which reset every run.
@@ -169,7 +172,7 @@ Gates are black iron with a gold padlock (image 1).
 * ❓ **Q6 — The first barrier.** 💡 **Barrier fights are always available at every gate, including area 1**,
   and you can retry them freely. What unlocks in area 2 is the **repeatable Combat Arena**: free level choice
   for farming cash and chests. The first barrier (combat level 2) is tuned for starter gear plus in-fight abilities.
-* 💡 Barrier of area *a* = combat level **3a − 1** (levels 2, 5, 8 … 23).
+* 💡 Barrier of area *a* = combat level **3a − 1**: levels 2, 5, 8 … 20 (7 barriers; area 8 is the last area, so it has no exit gate).
 * ✅ **Later levels are harder and pay more**: enemy HP ≈ ×1.18 and damage ≈ ×1.10 per level, more and
   tougher enemy types. Reward for a perfect clear: **$538 (level 1) → $65,209 (level 25)**.
 
@@ -202,11 +205,11 @@ enemies and 30% from ground piles. You keep collected cash even if you lose.
 | Grenadier | level 3 | Lobs a grenade; a **red circle** shows where it lands 0.9 s before it explodes | 34 / 15 |
 | Gunner | level 5 | Fires a fan of 3–5 bullets | 58 / 6 per bullet |
 | Sniper | level 7 | Shows a **laser sight** for 1 s, then fires one fast shot along it | 26 / 20 |
-| **Officer (boss)** | last wave of every barrier fight, every 5th arena level | Rings of 14 bullets, plus an aimed 5-bullet burst every third attack | grows with level |
+| **Officer (boss)** | last wave of every barrier fight, every 5th arena level | Rings of 14 bullets; every third attack is an aimed 5-bullet burst instead | grows with level |
 
 * 💡 Waves: arena levels have 3 waves, plus 1 every 4 levels (max 6). Barrier fights have 4 waves, with the boss in the last.
 * 💡 Per level: enemy HP ×1.18, damage ×1.10, more enemies, and more of the dangerous types.
-  Bullets stay slow enough to dodge (15–28 studs/s).
+  Bullets stay slow enough to dodge (17–26 studs/s). The exception is the Sniper's single shot (46–55 studs/s), which is telegraphed by its laser sight first.
 * 💡 Cover blocks (crates, sandbags, brick walls) in every arena stop bullets from both sides.
 
 💡 **In-fight abilities** (pick 1 of 3 after each wave; **they reset when the fight ends**):
@@ -284,7 +287,7 @@ Damage reduction is capped at 60%.
 | Golden | barrier win / every 5th arena level | 36% | 30% | 20% | 10% | 4% |
 
 ### 6.4 Coin upgrades
-* ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 +6% item stats per level.
+* ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 Each level adds +6% weapon damage or armour HP, and +2% to armour damage reduction (cap 60%). Fire rate, bullets and range are fixed per item.
 * 💡 Price: Common level 1→2 = $113, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
   (e.g. Legendary 49→50 = $416,739).
 * 💡 **Scrap** unwanted items for cash. The inventory holds 60 items; a drop into a full inventory is paid out as cash.
@@ -323,10 +326,13 @@ for each area a:
     upgrades  = ReferenceUpgrades(a)          -- 💡 every permanent upgrade at level (a-1) × 4
     stats     = RunnerStats(upgrades, a)
     for run k in 0..9:
-        course   = RunnerCourse.Generate(a, level = 1 + 10(a-1) + k)   -- the same deterministic courses players get
+        course   = RunnerCourse.Generate(a, level = 1 + 10(a-1) + k)   -- the same course generator players use
         best[k]  = RunnerSim.BestCase(course, stats).total             -- exact optimum over every lane choice
     B10(a) = sum(best)      R(a) = B10(a) / 10
 ```
+* The runner level is global and rises with every run, so players in area 2 and later usually play *later* levels of an
+  area than the 10 benchmark levels. Those levels pay up to +20% more and have stronger enemies. **R is the best-case
+  estimate at an area's first levels, not a cap** on what a player can earn.
 * **BestCase is exact.** It explores every lane choice with dynamic programming. A choice is dropped only if another
   choice is at least as good on troops, weapon tier, damage, cash carried and banked value at the same time.
   Payout can only rise with each of these, so no better path is ever discarded. (Largest search: 29 states.)
