@@ -59,7 +59,7 @@
         </Color3>
         <float name="Density">0.2</float>
         <float name="Glare">0</float>
-        <float name="Haze">0.6</float>
+        <float name="Haze">1.4</float>
         <float name="Offset">0.25</float>
       </Properties>
     </Item>
@@ -6294,7 +6294,7 @@ return BaseService
 		  Lifetime seconds. Walking into it (client) opens a Robux-or-cash dialog.
 
 	Requests (Net actions):
-		BuyBoostOffer(offerId: string, route: "cash" | "robux")
+		BuyBoostOffer(offerId: string, route: "cash" | "robux", shownPrice: number?)
 			Offer must be alive and the player within OFFER_RANGE studs.
 			"cash"  -> pays BoostService:GetCashPrice(player, boostId), applies it.
 			"robux" -> reserves the offer for 60 s and opens the Roblox purchase
@@ -6771,7 +6771,10 @@ end
 -- Requests
 -------------------------------------------------------------------------------
 
-local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Result
+-- shownPrice (optional): the cash price the client's dialog displayed. The
+-- server never charges more than that; if the price went up in the meantime
+-- (stock restocked, new area) the purchase is refused so the player can look again.
+local function buyBoostOffer(player: Player, offerId: any, route: any, shownPrice: any): Net.Result
 	if type(offerId) ~= "string" or #offerId > 40 then
 		return Net.Fail("Bad offer")
 	end
@@ -6819,6 +6822,9 @@ local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Resu
 		if not isFiniteNumber(price) or price <= 0 then
 			return Net.Fail("This boost cannot be bought with cash")
 		end
+		if isFiniteNumber(shownPrice) and price > (shownPrice :: number) + 0.01 then
+			return Net.Fail("The price just changed, please check it again")
+		end
 		local ds = dataService()
 		if not ds or not ds:SpendCash(player, price) then
 			return Net.Fail("Not enough cash")
@@ -6833,7 +6839,14 @@ local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Resu
 		return Net.Ok({ boostId = def.id, price = price })
 	end
 
-	-- Robux route.
+	-- Robux route. A time skip is only sold for Robux while it is worth buying
+	-- (same rule as offering it), so a Robux skip never pays (almost) nothing.
+	if def.kind == "timeskip" then
+		local preview = BoostService:GetTimeSkipPreview(player, def.id)
+		if not Economy.TimeSkipWorthOffering(def.id, data.base.highestArea, preview) then
+			return Net.Fail("Your shops would earn too little right now. Hire employees or restock first!")
+		end
+	end
 	local productId = Config.ProductIds[def.id] or 0
 	if productId == 0 then
 		return Net.Fail("Robux purchases are not set up yet")
@@ -8925,6 +8938,9 @@ local dirtySync: { [Player]: boolean } = {}
 local loading: { [Player]: boolean } = {}
 local loadedFromStore: { [Player]: boolean } = {}
 local lockLost: { [Player]: boolean } = {}
+-- Set while a player's final (lock-releasing) save runs: no other save may
+-- start for them, so a late autosave can never take the lock back.
+local releasing: { [Player]: boolean } = {}
 
 local MAX_RECEIPTS = 60
 local LOAD_WAIT_LIMIT = 60 -- live servers: seconds to wait for the DataStore before asking to rejoin
@@ -9012,6 +9028,10 @@ local function loadWithLock(activeStore: DataStore, player: Player): PlayerData?
 			loaded = nil
 			blocked = false
 			activeStore:UpdateAsync(key, function(old: any)
+				-- UpdateAsync may run this callback more than once (write
+				-- conflicts): only the LAST run decides the outcome.
+				loaded = nil
+				blocked = false
 				if old ~= nil and not forceTakeover and lockedByOther(old._lock) then
 					blocked = true
 					return nil -- cancel the write: another server still owns this save
@@ -9103,10 +9123,14 @@ function DataService:Start()
 			end
 			if sinceSave >= Config.AutosaveInterval then
 				sinceSave = 0
-				for player in dirtySave do
-					task.spawn(function()
-						self:SaveNow(player)
-					end)
+				-- Save every loaded profile (not only changed ones) so each
+				-- session lock is refreshed and never looks abandoned.
+				for player in profiles do
+					if not releasing[player] then
+						task.spawn(function()
+							self:SaveNow(player)
+						end)
+					end
 				end
 			end
 		end
@@ -9120,6 +9144,7 @@ function DataService:Start()
 		for _, player in Players:GetPlayers() do
 			pending += 1
 			task.spawn(function()
+				releasing[player] = true
 				self:_saveRecord(player, true)
 				pending -= 1
 			end)
@@ -9176,9 +9201,12 @@ function DataService:_load(player: Player)
 		-- Left while loading: give the lock back so the next server is not delayed.
 		if loadedFromStore[player] then
 			profiles[player] = data
+			releasing[player] = true
 			self:_saveRecord(player, true)
+			releasing[player] = nil
 			profiles[player] = nil
 			loadedFromStore[player] = nil
+			dirtySave[player] = nil
 		end
 		return
 	end
@@ -9194,7 +9222,9 @@ function DataService:_release(player: Player)
 		return
 	end
 	self.PlayerRemoving:Fire(player, data)
+	releasing[player] = true
 	self:_saveRecord(player, true)
+	releasing[player] = nil
 	profiles[player] = nil
 	dirtySave[player] = nil
 	dirtySync[player] = nil
@@ -9218,7 +9248,9 @@ end
 function DataService:GetLoadedPlayers(): { Player }
 	local list = {}
 	for player in profiles do
-		table.insert(list, player)
+		if not releasing[player] then
+			table.insert(list, player)
+		end
 	end
 	return list
 end
@@ -9297,14 +9329,21 @@ function DataService:_saveRecord(player: Player, release: boolean): boolean
 	if not data or not activeStore or not loadedFromStore[player] or lockLost[player] then
 		return false
 	end
+	if releasing[player] and not release then
+		return false -- the final save is running; nothing may be written after it
+	end
 	dirtySave[player] = nil
 	local cancelled = false
 	local ok = withRetries("save " .. player.Name, function()
 		cancelled = false
 		activeStore:UpdateAsync(keyFor(player), function(old: any)
+			cancelled = false
 			if type(old) == "table" and lockedByOther(old._lock) then
 				cancelled = true
 				return nil -- another server owns this save now: never overwrite it
+			end
+			if releasing[player] and not release then
+				return nil -- the player started leaving while this save waited
 			end
 			(data :: any)._lock = if release then nil else { jobId = game.JobId, t = os.time() }
 			return data
@@ -9316,7 +9355,7 @@ function DataService:_saveRecord(player: Player, release: boolean): boolean
 		warn(("[DataService] %s's save is owned by another server; this server stops saving it"):format(player.Name))
 		return false
 	end
-	if not ok then
+	if not ok and profiles[player] and not releasing[player] then
 		dirtySave[player] = true
 	end
 	return ok
@@ -10552,9 +10591,11 @@ local function applyLighting()
 	-- Keep the air clear and bright (no heavy fog), like both reference images.
 	Lighting.FogEnd = 100000
 
-	-- Bright cyan sky like the runner reference (image 2) instead of Roblox's
-	-- default cloudy skybox. A thin Atmosphere tints the horizon; Density stays
-	-- low so the base and the arenas keep their saturated toy colours.
+	-- Cyan sky like the runner reference (image 2). Custom skybox images would
+	-- need uploaded assets, so Roblox's built-in sky textures stay and a cyan
+	-- Atmosphere tints them (strong Haze colours the sky and the far horizon,
+	-- like the track fading into light cyan in image 2). Density stays low so
+	-- the base and the arenas keep their saturated toy colours up close.
 	local atmo = Lighting:FindFirstChild("BaseAtmosphere")
 	if not (atmo and atmo:IsA("Atmosphere")) then
 		local created = Instance.new("Atmosphere")
@@ -10568,10 +10609,10 @@ local function applyLighting()
 	atmosphere.Color = P.Sky
 	atmosphere.Decay = P.Sea
 	atmosphere.Glare = 0
-	atmosphere.Haze = 0.6 -- [PROPOSAL]
+	atmosphere.Haze = 1.4 -- [PROPOSAL] (lower it if the far track looks too faded)
 
-	-- A Sky without textures (no asset IDs): no sun / moon / stars, so the
-	-- Atmosphere colour fills the whole sky.
+	-- Built-in sky textures (no uploads), with no sun / moon / stars, which the
+	-- reference images do not show.
 	local sk = Lighting:FindFirstChild("BaseSky")
 	if not (sk and sk:IsA("Sky")) then
 		local created = Instance.new("Sky")
@@ -11822,7 +11863,13 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	local ds = dataService()
-	if not ds or not ds:Get(player) then
+	if not ds then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	-- Roblox re-delivers unfinished purchases right as the player joins, while
+	-- their save may still be loading (up to ~20 s if another server is still
+	-- finishing its save). Wait for it instead of failing straight away.
+	if not ds:Get(player) and not ds:WaitFor(player, 45) then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	if ds:HasReceipt(player, purchaseId) then
@@ -15109,9 +15156,16 @@ local function offerDescription(def: Config.BoostDef, preview: number?, value: n
 			Format.Money(value)
 		)
 	end
+	local now = preview or 0
+	if now >= value then
+		return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nPays %s now."):format(
+			def.hours or 0,
+			Format.Money(now)
+		)
+	end
 	return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nPays %s now (up to %s when every shop has an employee)."):format(
 		def.hours or 0,
-		Format.Money(preview or 0),
+		Format.Money(now),
 		Format.Money(value)
 	)
 end
@@ -15140,7 +15194,7 @@ local function openOfferDialog(offer: BoostOfferVisuals.Offer): boolean
 		CashPrice = price,
 		CashAffordable = price > 0 and data.cash + 1e-6 >= price,
 		Footnote = if def.kind == "timeskip"
-			then "Cash price = 80% of what it pays you now (+25%)"
+			then "Cash price = 80% of what it pays (never more than 80% of its full value), so you get +25% back"
 			else "Cash price = 80% of its value: buying with cash still pays back +25% if you use it fully",
 		Context = "Base",
 		OnClose = function()
@@ -15152,7 +15206,7 @@ local function openOfferDialog(offer: BoostOfferVisuals.Offer): boolean
 			request("offer:" .. offerId, "BuyBoostOffer", offerId, "robux")
 		end,
 		OnCash = function()
-			local result = request("offer:" .. offerId, "BuyBoostOffer", offerId, "cash")
+			local result = request("offer:" .. offerId, "BuyBoostOffer", offerId, "cash", price)
 			if result and result.ok then
 				BoostOfferVisuals.Remove(offerId)
 			end
@@ -19006,8 +19060,12 @@ local function boostDetailText(def: Config.BoostDef, preview: number?, reference
 			Format.Money(reference)
 		)
 	end
+	local now = preview or 0
+	if now >= reference then
+		return ("Pays %s now"):format(Format.Money(now))
+	end
 	return ("Pays %s now  •  up to %s when every shop has an employee"):format(
-		Format.Money(preview or 0),
+		Format.Money(now),
 		Format.Money(reference)
 	)
 end
@@ -19562,6 +19620,15 @@ local function getScale(gui: GuiObject): UIScale
 	return scale :: UIScale
 end
 
+-- The running pop / press animation of each UIScale, so a screen resize can
+-- stop it (otherwise it would finish at the old size).
+local scaleTweens: { [UIScale]: Tween } = setmetatable({} :: any, { __mode = "k" })
+
+local function tweenScale(scale: UIScale, target: number, duration: number, style: Enum.EasingStyle?)
+	local tween = Theme.Tween(scale, { Scale = target }, duration, style)
+	scaleTweens[scale] = tween
+end
+
 local function baseScaleOf(scale: UIScale): number
 	local base = scale:GetAttribute("BaseScale")
 	return if type(base) == "number" then base else 1
@@ -19572,7 +19639,7 @@ function Theme.Pop(gui: GuiObject)
 	local scale = getScale(gui)
 	local base = baseScaleOf(scale)
 	scale.Scale = base * 0.85
-	Theme.Tween(scale, { Scale = base }, 0.35, Enum.EasingStyle.Back)
+	tweenScale(scale, base, 0.35, Enum.EasingStyle.Back)
 end
 
 function Theme.RarityColor(rarity: number): Color3
@@ -19595,6 +19662,11 @@ function Theme.ResponsiveScale(gui: GuiObject, baseHeight: number?): UIScale
 		local camera = Workspace.CurrentCamera
 		local height = if camera then camera.ViewportSize.Y else 800
 		local base = math.clamp(height / (baseHeight or 820), 0.55, 1.25)
+		local running = scaleTweens[scale]
+		if running then
+			running:Cancel()
+			scaleTweens[scale] = nil
+		end
 		scale:SetAttribute("BaseScale", base)
 		scale.Scale = base
 	end
@@ -19707,13 +19779,13 @@ function Theme.Button(props: Props): TextButton
 
 	local scale = getScale(button)
 	button.MouseButton1Down:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) * 0.94 }, 0.08)
+		tweenScale(scale, baseScaleOf(scale) * 0.94, 0.08)
 	end)
 	button.MouseButton1Up:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12, Enum.EasingStyle.Back)
+		tweenScale(scale, baseScaleOf(scale), 0.12, Enum.EasingStyle.Back)
 	end)
 	button.MouseLeave:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12)
+		tweenScale(scale, baseScaleOf(scale), 0.12)
 	end)
 	if props.OnClick then
 		button.Activated:Connect(function()

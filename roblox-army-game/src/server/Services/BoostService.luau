@@ -27,7 +27,7 @@
 		  Lifetime seconds. Walking into it (client) opens a Robux-or-cash dialog.
 
 	Requests (Net actions):
-		BuyBoostOffer(offerId: string, route: "cash" | "robux")
+		BuyBoostOffer(offerId: string, route: "cash" | "robux", shownPrice: number?)
 			Offer must be alive and the player within OFFER_RANGE studs.
 			"cash"  -> pays BoostService:GetCashPrice(player, boostId), applies it.
 			"robux" -> reserves the offer for 60 s and opens the Roblox purchase
@@ -504,7 +504,10 @@ end
 -- Requests
 -------------------------------------------------------------------------------
 
-local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Result
+-- shownPrice (optional): the cash price the client's dialog displayed. The
+-- server never charges more than that; if the price went up in the meantime
+-- (stock restocked, new area) the purchase is refused so the player can look again.
+local function buyBoostOffer(player: Player, offerId: any, route: any, shownPrice: any): Net.Result
 	if type(offerId) ~= "string" or #offerId > 40 then
 		return Net.Fail("Bad offer")
 	end
@@ -552,6 +555,9 @@ local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Resu
 		if not isFiniteNumber(price) or price <= 0 then
 			return Net.Fail("This boost cannot be bought with cash")
 		end
+		if isFiniteNumber(shownPrice) and price > (shownPrice :: number) + 0.01 then
+			return Net.Fail("The price just changed, please check it again")
+		end
 		local ds = dataService()
 		if not ds or not ds:SpendCash(player, price) then
 			return Net.Fail("Not enough cash")
@@ -566,7 +572,14 @@ local function buyBoostOffer(player: Player, offerId: any, route: any): Net.Resu
 		return Net.Ok({ boostId = def.id, price = price })
 	end
 
-	-- Robux route.
+	-- Robux route. A time skip is only sold for Robux while it is worth buying
+	-- (same rule as offering it), so a Robux skip never pays (almost) nothing.
+	if def.kind == "timeskip" then
+		local preview = BoostService:GetTimeSkipPreview(player, def.id)
+		if not Economy.TimeSkipWorthOffering(def.id, data.base.highestArea, preview) then
+			return Net.Fail("Your shops would earn too little right now. Hire employees or restock first!")
+		end
+	end
 	local productId = Config.ProductIds[def.id] or 0
 	if productId == 0 then
 		return Net.Fail("Robux purchases are not set up yet")

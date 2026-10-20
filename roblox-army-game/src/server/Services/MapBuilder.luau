@@ -763,9 +763,11 @@ local function applyLighting()
 	-- Keep the air clear and bright (no heavy fog), like both reference images.
 	Lighting.FogEnd = 100000
 
-	-- Bright cyan sky like the runner reference (image 2) instead of Roblox's
-	-- default cloudy skybox. A thin Atmosphere tints the horizon; Density stays
-	-- low so the base and the arenas keep their saturated toy colours.
+	-- Cyan sky like the runner reference (image 2). Custom skybox images would
+	-- need uploaded assets, so Roblox's built-in sky textures stay and a cyan
+	-- Atmosphere tints them (strong Haze colours the sky and the far horizon,
+	-- like the track fading into light cyan in image 2). Density stays low so
+	-- the base and the arenas keep their saturated toy colours up close.
 	local atmo = Lighting:FindFirstChild("BaseAtmosphere")
 	if not (atmo and atmo:IsA("Atmosphere")) then
 		local created = Instance.new("Atmosphere")
@@ -779,10 +781,10 @@ local function applyLighting()
 	atmosphere.Color = P.Sky
 	atmosphere.Decay = P.Sea
 	atmosphere.Glare = 0
-	atmosphere.Haze = 0.6 -- [PROPOSAL]
+	atmosphere.Haze = 1.4 -- [PROPOSAL] (lower it if the far track looks too faded)
 
-	-- A Sky without textures (no asset IDs): no sun / moon / stars, so the
-	-- Atmosphere colour fills the whole sky.
+	-- Built-in sky textures (no uploads), with no sun / moon / stars, which the
+	-- reference images do not show.
 	local sk = Lighting:FindFirstChild("BaseSky")
 	if not (sk and sk:IsA("Sky")) then
 		local created = Instance.new("Sky")

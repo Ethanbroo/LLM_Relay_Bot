@@ -48,7 +48,7 @@ were measured from the pixels, not guessed (section 10).
 | Permanent runner upgrades | Troops, damage, carry capacity | Bigger runs: an upgraded player earns 2–6× more per run than an un-upgraded one from area 2 on |
 | Revenue sections + section upgrades | Passive income (about 32% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
 | Employees | Remove restocking | Sections never stop; required for full time-skip value |
-| Repeated arena combat | Cash (about 3 runs per level) + a chest every game | Gear for harder barriers |
+| Repeated arena combat | Cash (about 3 runs per level) + a chest after every real fight (§12.7) | Gear for harder barriers |
 | Armour and weapons (chests, coin upgrades) | HP, damage, fire rate, perks | Beats the barrier squads, which get harder every area |
 | Harder combat levels | Higher cash rewards (+17–26% per level) | Combat stays worth playing as prices rise |
 
@@ -279,7 +279,7 @@ Stats below are for a Common level-1 item.
 Damage reduction is capped at 60%.
 
 ### 6.3 Chests
-✅ A chest after **every** combat game, with a random weapon or armour (50/50). ✅ Rarer = less likely.
+✅ A chest after **every** combat game: every win, and every loss with at least 1 kill or 20 s of fighting (§12.7). It holds a random weapon or armour (50/50). ✅ Rarer = less likely.
 
 | Chest | When 💡 | Common | Uncommon | Rare | Epic | Legendary |
 |---|---|---|---|---|---|---|
@@ -288,7 +288,7 @@ Damage reduction is capped at 60%.
 | Golden | barrier win / every 5th arena level | 36% | 30% | 20% | 10% | 4% |
 
 ### 6.4 Coin upgrades
-* ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 Each level adds +6% weapon damage or armour HP, and +2% to armour damage reduction (cap 60%). Fire rate, bullets and range are fixed per item.
+* ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 Each level adds +6% weapon damage or armour HP, and +2% of the armour's own damage reduction (e.g. Field Vest 4% → about 4.7% at level 10; cap 60%). Fire rate, bullets and range are fixed per item.
 * 💡 Price: Common level 1→2 = $113, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
   (e.g. Legendary 49→50 = $416,739).
 * 💡 **Scrap** unwanted items for cash. The inventory holds 60 items; a drop into a full inventory is paid out as cash.
@@ -425,7 +425,7 @@ Colours were measured from the reference pixels (`Config.Palette`).
 | Lego hedge / yellow wall / red wall | (88,192,64) / (234,182,26) / (226,36,42) | image 1 |
 | Unlock pad fill / border / price | (244,250,250) / (84,212,84) / gold | image 1 |
 | Gold padlock / iron gate | (254,210,62)-ish / (40,40,46) | image 1 |
-| Sea / sky | (16,168,250) / (52,194,250) | images 1+2 |
+| Sea / sky | (16,168,250) / (52,194,250): the sky is Roblox's built-in sky tinted cyan by an Atmosphere (custom sky images would need uploads) | images 1+2 |
 | Track / stripes | (236,246,255) / (212,234,252) | image 2 |
 | Gate red / blue (at 45% transparency) | (238,40,60) / (78,145,242) | image 2 |
 | Money tag | lime (108,240,84) | image 2 |

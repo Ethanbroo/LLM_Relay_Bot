@@ -115,9 +115,16 @@ local function offerDescription(def: Config.BoostDef, preview: number?, value: n
 			Format.Money(value)
 		)
 	end
+	local now = preview or 0
+	if now >= value then
+		return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nPays %s now."):format(
+			def.hours or 0,
+			Format.Money(now)
+		)
+	end
 	return ("Instantly collects %d hours of your shops' revenue. Shops with an employee pay the whole time, the others until their stock runs out.\nPays %s now (up to %s when every shop has an employee)."):format(
 		def.hours or 0,
-		Format.Money(preview or 0),
+		Format.Money(now),
 		Format.Money(value)
 	)
 end
@@ -146,7 +153,7 @@ local function openOfferDialog(offer: BoostOfferVisuals.Offer): boolean
 		CashPrice = price,
 		CashAffordable = price > 0 and data.cash + 1e-6 >= price,
 		Footnote = if def.kind == "timeskip"
-			then "Cash price = 80% of what it pays you now (+25%)"
+			then "Cash price = 80% of what it pays (never more than 80% of its full value), so you get +25% back"
 			else "Cash price = 80% of its value: buying with cash still pays back +25% if you use it fully",
 		Context = "Base",
 		OnClose = function()
@@ -158,7 +165,7 @@ local function openOfferDialog(offer: BoostOfferVisuals.Offer): boolean
 			request("offer:" .. offerId, "BuyBoostOffer", offerId, "robux")
 		end,
 		OnCash = function()
-			local result = request("offer:" .. offerId, "BuyBoostOffer", offerId, "cash")
+			local result = request("offer:" .. offerId, "BuyBoostOffer", offerId, "cash", price)
 			if result and result.ok then
 				BoostOfferVisuals.Remove(offerId)
 			end

@@ -66,6 +66,9 @@ local dirtySync: { [Player]: boolean } = {}
 local loading: { [Player]: boolean } = {}
 local loadedFromStore: { [Player]: boolean } = {}
 local lockLost: { [Player]: boolean } = {}
+-- Set while a player's final (lock-releasing) save runs: no other save may
+-- start for them, so a late autosave can never take the lock back.
+local releasing: { [Player]: boolean } = {}
 
 local MAX_RECEIPTS = 60
 local LOAD_WAIT_LIMIT = 60 -- live servers: seconds to wait for the DataStore before asking to rejoin
@@ -153,6 +156,10 @@ local function loadWithLock(activeStore: DataStore, player: Player): PlayerData?
 			loaded = nil
 			blocked = false
 			activeStore:UpdateAsync(key, function(old: any)
+				-- UpdateAsync may run this callback more than once (write
+				-- conflicts): only the LAST run decides the outcome.
+				loaded = nil
+				blocked = false
 				if old ~= nil and not forceTakeover and lockedByOther(old._lock) then
 					blocked = true
 					return nil -- cancel the write: another server still owns this save
@@ -244,10 +251,14 @@ function DataService:Start()
 			end
 			if sinceSave >= Config.AutosaveInterval then
 				sinceSave = 0
-				for player in dirtySave do
-					task.spawn(function()
-						self:SaveNow(player)
-					end)
+				-- Save every loaded profile (not only changed ones) so each
+				-- session lock is refreshed and never looks abandoned.
+				for player in profiles do
+					if not releasing[player] then
+						task.spawn(function()
+							self:SaveNow(player)
+						end)
+					end
 				end
 			end
 		end
@@ -261,6 +272,7 @@ function DataService:Start()
 		for _, player in Players:GetPlayers() do
 			pending += 1
 			task.spawn(function()
+				releasing[player] = true
 				self:_saveRecord(player, true)
 				pending -= 1
 			end)
@@ -317,9 +329,12 @@ function DataService:_load(player: Player)
 		-- Left while loading: give the lock back so the next server is not delayed.
 		if loadedFromStore[player] then
 			profiles[player] = data
+			releasing[player] = true
 			self:_saveRecord(player, true)
+			releasing[player] = nil
 			profiles[player] = nil
 			loadedFromStore[player] = nil
+			dirtySave[player] = nil
 		end
 		return
 	end
@@ -335,7 +350,9 @@ function DataService:_release(player: Player)
 		return
 	end
 	self.PlayerRemoving:Fire(player, data)
+	releasing[player] = true
 	self:_saveRecord(player, true)
+	releasing[player] = nil
 	profiles[player] = nil
 	dirtySave[player] = nil
 	dirtySync[player] = nil
@@ -359,7 +376,9 @@ end
 function DataService:GetLoadedPlayers(): { Player }
 	local list = {}
 	for player in profiles do
-		table.insert(list, player)
+		if not releasing[player] then
+			table.insert(list, player)
+		end
 	end
 	return list
 end
@@ -438,14 +457,21 @@ function DataService:_saveRecord(player: Player, release: boolean): boolean
 	if not data or not activeStore or not loadedFromStore[player] or lockLost[player] then
 		return false
 	end
+	if releasing[player] and not release then
+		return false -- the final save is running; nothing may be written after it
+	end
 	dirtySave[player] = nil
 	local cancelled = false
 	local ok = withRetries("save " .. player.Name, function()
 		cancelled = false
 		activeStore:UpdateAsync(keyFor(player), function(old: any)
+			cancelled = false
 			if type(old) == "table" and lockedByOther(old._lock) then
 				cancelled = true
 				return nil -- another server owns this save now: never overwrite it
+			end
+			if releasing[player] and not release then
+				return nil -- the player started leaving while this save waited
 			end
 			(data :: any)._lock = if release then nil else { jobId = game.JobId, t = os.time() }
 			return data
@@ -457,7 +483,7 @@ function DataService:_saveRecord(player: Player, release: boolean): boolean
 		warn(("[DataService] %s's save is owned by another server; this server stops saving it"):format(player.Name))
 		return false
 	end
-	if not ok then
+	if not ok and profiles[player] and not releasing[player] then
 		dirtySave[player] = true
 	end
 	return ok

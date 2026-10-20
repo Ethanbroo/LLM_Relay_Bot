@@ -363,8 +363,12 @@ local function boostDetailText(def: Config.BoostDef, preview: number?, reference
 			Format.Money(reference)
 		)
 	end
+	local now = preview or 0
+	if now >= reference then
+		return ("Pays %s now"):format(Format.Money(now))
+	end
 	return ("Pays %s now  •  up to %s when every shop has an employee"):format(
-		Format.Money(preview or 0),
+		Format.Money(now),
 		Format.Money(reference)
 	)
 end

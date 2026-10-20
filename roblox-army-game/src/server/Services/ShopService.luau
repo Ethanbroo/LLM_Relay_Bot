@@ -218,7 +218,13 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	local ds = dataService()
-	if not ds or not ds:Get(player) then
+	if not ds then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	-- Roblox re-delivers unfinished purchases right as the player joins, while
+	-- their save may still be loading (up to ~20 s if another server is still
+	-- finishing its save). Wait for it instead of failing straight away.
+	if not ds:Get(player) and not ds:WaitFor(player, 45) then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	if ds:HasReceipt(player, purchaseId) then

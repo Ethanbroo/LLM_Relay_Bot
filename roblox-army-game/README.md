@@ -93,6 +93,7 @@ The source is a [Rojo](https://rojo.space) project; the `.rbxlx` file is built f
 ```bash
 bash scripts/check.sh          # type-check (luau-lsp + Roblox API), Lune tests, build
 lune run scripts/simulate      # economy simulation → docs/ECONOMY_TABLES.md
+lune run scripts/test-saving   # save-system simulation (locks, slow DataStore, races)
 rojo serve                     # live-sync into Studio with the Rojo plugin
 ```
 

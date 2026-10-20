@@ -199,6 +199,15 @@ local function getScale(gui: GuiObject): UIScale
 	return scale :: UIScale
 end
 
+-- The running pop / press animation of each UIScale, so a screen resize can
+-- stop it (otherwise it would finish at the old size).
+local scaleTweens: { [UIScale]: Tween } = setmetatable({} :: any, { __mode = "k" })
+
+local function tweenScale(scale: UIScale, target: number, duration: number, style: Enum.EasingStyle?)
+	local tween = Theme.Tween(scale, { Scale = target }, duration, style)
+	scaleTweens[scale] = tween
+end
+
 local function baseScaleOf(scale: UIScale): number
 	local base = scale:GetAttribute("BaseScale")
 	return if type(base) == "number" then base else 1
@@ -209,7 +218,7 @@ function Theme.Pop(gui: GuiObject)
 	local scale = getScale(gui)
 	local base = baseScaleOf(scale)
 	scale.Scale = base * 0.85
-	Theme.Tween(scale, { Scale = base }, 0.35, Enum.EasingStyle.Back)
+	tweenScale(scale, base, 0.35, Enum.EasingStyle.Back)
 end
 
 function Theme.RarityColor(rarity: number): Color3
@@ -232,6 +241,11 @@ function Theme.ResponsiveScale(gui: GuiObject, baseHeight: number?): UIScale
 		local camera = Workspace.CurrentCamera
 		local height = if camera then camera.ViewportSize.Y else 800
 		local base = math.clamp(height / (baseHeight or 820), 0.55, 1.25)
+		local running = scaleTweens[scale]
+		if running then
+			running:Cancel()
+			scaleTweens[scale] = nil
+		end
 		scale:SetAttribute("BaseScale", base)
 		scale.Scale = base
 	end
@@ -344,13 +358,13 @@ function Theme.Button(props: Props): TextButton
 
 	local scale = getScale(button)
 	button.MouseButton1Down:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) * 0.94 }, 0.08)
+		tweenScale(scale, baseScaleOf(scale) * 0.94, 0.08)
 	end)
 	button.MouseButton1Up:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12, Enum.EasingStyle.Back)
+		tweenScale(scale, baseScaleOf(scale), 0.12, Enum.EasingStyle.Back)
 	end)
 	button.MouseLeave:Connect(function()
-		Theme.Tween(scale, { Scale = baseScaleOf(scale) }, 0.12)
+		tweenScale(scale, baseScaleOf(scale), 0.12)
 	end)
 	if props.OnClick then
 		button.Activated:Connect(function()
