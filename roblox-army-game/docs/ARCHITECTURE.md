@@ -138,7 +138,8 @@ Economy.BarrierCombatLevel(area: number): number       -- combat level of the ba
 Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): number? -- nil when at the rarity's max level
 Economy.RunDurationSeconds(): number                   -- typical run length incl. menus (used for 2x boost value)
 ```
-`area` is the 1-based index into `Config.Areas`. Every price is rounded to cents.
+`area` is the 1-based index into `Config.Areas`. Every price and payout is a whole number of dollars
+(`Format.RoundWhole`, owner request: no cents anywhere); only rates per second stay fractional.
 
 ### 4.2 ECON → RUNNER: runner course + resolver (pure, deterministic)
 
@@ -151,7 +152,7 @@ export type Option = {
 	width: number,           -- studs
 	op: string?,             -- gate: "add" | "mul" | "sub" | "div" | "weapon" | "damage"
 	amount: number?,         -- +N troops, xN, -N, /N, +tiers, +damage fraction (0.2 = +20%)
-	label: string,           -- what the gate panel shows: "+5", "x2", "-3", "÷2", "RIFLE", "+20% DMG", "$12.50"
+	label: string,           -- what the gate panel shows: "+5", "x2", "-3", "÷2", "RIFLE", "+20% DMG", "$12"
 	tone: string,            -- "positive" (blue) | "negative" (red) | "weapon" (gold) | "cash" | "enemy"
 	cash: number?,           -- cash row: value of the cash stack in this lane
 	enemies: number?,        -- squad row: number of enemy soldiers
@@ -161,7 +162,7 @@ export type Option = {
 export type Row = { index: number, kind: string, distance: number, options: { Option } }
 -- kind = "gate" | "cash" | "squad" | "barricade"
 export type Course = { area: number, level: number, seed: number, length: number, rows: { Row },
-	boss: { distance: number, hp: number, reward: number } }
+	boss: { distance: number, hp: number, reward: number } }  -- hp is always 0: boss HP = RunnerSim.BossHp(course, stats)
 RunnerCourse.Generate(area: number, level: number): Course
 
 -- Shared/Runner/RunnerSim.luau
@@ -176,7 +177,13 @@ export type Result = { troops: number, weaponTier: number, damageMult: number,
 RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): Result
 	-- choices[i] = lane picked in row i; missing / invalid lane -> lane 1
 RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })  -- exact optimum + its choices
-RunnerSim.MinDuration(course: Course): number  -- fastest legal completion time (anti-cheat)
+RunnerSim.MinDuration(course: Course): number  -- fastest legal completion time (anti-cheat, running part only)
+RunnerSim.UnitDps(stats: Stats, weaponTier: number, damageMult: number): number  -- one unit's damage per second
+RunnerSim.BossHp(course: Course, stats: Stats): number      -- BOSS_HP_SHARE x the most boss damage any lane path can deal
+RunnerSim.BossFight(units: number, unitDps: number, bossHp: number): BossOutcome  -- exact closed form
+RunnerSim.BossHpAt(outcome: BossOutcome, t: number): number, RunnerSim.AliveAt(outcome: BossOutcome, t: number): number
+-- Result also carries: boss: BossOutcome { hp, victory, units, unitDps, interval, killed, survivors,
+--   duration, damageDealt, hpLeft }, unitDps: number. result.troops = units alive AFTER the boss (0 on defeat).
 ```
 The completion summary lists `result.lines` (each upgrade collected with its cash value,
 troops, carried cash vs capacity, enemies, boss) and `result.total`.
@@ -288,28 +295,36 @@ are written by the lead after the build — do not create them.
   **weapon** gates (`+1 weapon tier`: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket)
   and **damage** gates (`+20% DMG`); **cash** rows (3 lanes of cash stacks, the
   amount carried is capped by coin-carrying capacity); **enemy squads** (troops
-  fight: firepower = troops × damage kills enemies, survivors cost troops 1:1);
-  **barricades** (HP; destroyed if firepower ≥ HP, else lose 25% of troops).
-  Final **enemy base (boss)**: the remaining squad fires; reward × fraction destroyed.
-* Troops follow the avatar in a blob formation (Count-Masters style), green money
-  tag above the squad (image 2) shows carried cash; a troop count label too.
+  fight: every unit fires the same gun; squad damage = units × UnitDps × ENGAGE_SECONDS
+  (guns reach GUN_RANGE = 1.5 rows) kills enemies, survivors cost troops 1:1);
+  **barricades** (HP; destroyed if that damage ≥ HP, else lose 25% of troops).
+  Cash-row values are hidden until the previous row is crossed.
+  Final **castle boss** (owner request): walks out of the castle with a head HP bar and
+  kills one unit per interval (troops first, the avatar last); HP = BOSS_HP_SHARE × the
+  best path's potential damage, so only the best lanes win. Reward only on victory.
+* Gun: RunnerService equips a "RunnerGun" Tool (invisible Handle) at RunnerGo; the client
+  welds the current tier's part-built gun (RunnerGuns) to it. Troops stand beside the
+  avatar in rows of 5 (2 + avatar + 2, new rows behind) holding the same gun. Run stats
+  (troops, gun, squad DPS, carried / capacity cash) sit in a bottom-left screen panel.
 * Permanent upgrades (bought on the pre-run screen or anywhere): **Starting troops**,
   **Damage**, **Coin-carrying capacity**. Each level is a *small* improvement.
   In-run pickups only last for that run.
 * Completion summary: every upgrade collected with its cash value, troops ×
-  value, cash carried vs capacity, enemies defeated, enemy base bonus, vehicle
+  value, cash carried vs capacity, enemies defeated, boss line, vehicle
   bonus, 2x boost, **total**. Then back to base.
 * Server authority: `RunnerPrepare` generates the course (server) and teleports
   to the track start; `RunnerGo` locks stats + start time; `RunnerFinish(runId, choices)`
-  re-simulates with `RunnerSim.Resolve`, rejects runs faster than `MinDuration × 0.9`,
-  pays `total × (1 + vehicle bonus)` as boostable cash, increments `runner.level`.
+  re-simulates with `RunnerSim.Resolve` (lanes checked against the server-observed path),
+  rejects runs faster than `MinDuration × 0.9`, pays `result.total` (already includes the
+  vehicle bonus) as boostable cash, increments `runner.level`. The client sends RunnerFinish
+  when the squad reaches the castle and animates the SERVER's boss outcome.
 
 ### 6.2 Base, revenue sections, employees (BASE)
 * 8 areas × 4 slots (`Config.Areas`). Area 2 slot 4 is the Combat Arena (kind `"arena"`).
-* Locked slot → green unlock pad with gold price text (image 1 "$1562.50"); a
+* Locked slot → green unlock pad with gold price text (image 1 "$1562.50", shown as "$1,563"); a
   ProximityPrompt "Unlock" buys it (`UnlockSlot`). Slots of `highestArea` and below.
 * Unlocked revenue section → stylised building (BuildingFactory by `slot.style`,
-  `slot.color`, sign with `slot.name` + `slot.icon`), billboard with income/s and a
+  `slot.color`, sign with `slot.name` + `slot.icon`), billboard with income per minute and a
   stock bar. Every `saleInterval` seconds a sale pays `incomePerSale` (boostable)
   and uses 1 stock. **At 0 stock the section stops** ("OUT OF STOCK!" red billboard)
   **until restocked manually** (ProximityPrompt "Restock", hold 1 s, must be near
@@ -391,5 +406,5 @@ are written by the lead after the build — do not create them.
   around the island.
 * Runner: white track with very light blue stripes, sea on both sides, translucent
   red/blue gate panels (Transparency ~0.45) with dark posts and big white outlined
-  text, green money tag, black "Level N" banner, orange/blue cards on the left.
+  text, lime-green cash style, black "Level N" banner, orange/blue cards on the left.
 * Text everywhere: FredokaOne, white with dark outline; prices gold or green.

@@ -46,7 +46,7 @@ were measured from the pixels, not guessed (section 10).
 | Source of power | What it improves | Why it matters for later areas |
 |---|---|---|
 | Permanent runner upgrades | Troops, damage, carry capacity | Bigger runs: an upgraded player earns 2–6× more per run than an un-upgraded one from area 2 on |
-| Revenue sections + section upgrades | Passive income (about 32% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
+| Revenue sections + section upgrades | Passive income (about 36% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
 | Employees | Remove restocking | Sections never stop; required for full time-skip value |
 | Repeated arena combat | Cash (about 3 runs per level) + a chest after every real fight (§12.7) | Gear for harder barriers |
 | Armour and weapons (chests, coin upgrades) | HP, damage, fire rate, perks | Beats the barrier squads, which get harder every area |
@@ -60,34 +60,65 @@ were measured from the pixels, not guessed (section 10).
 * ✅ You control **your own Roblox avatar**. It runs forward automatically; you only steer **left/right**
   (A/D or ←/→, drag on phones, gamepad stick).
 * ✅ During the run you collect **troops** and **weapon upgrades** for that round only.
-* 💡 A course has **18 rows** across a 900-stud white track over the sea, then an **enemy base** at the end.
-  A run lasts about **36 seconds** of running (about 52 s with menus).
+* 💡 A course has **18 rows** across a 900-stud white track over the sea, then the **castle boss**.
+  A run is about **36 seconds** of running, plus the boss fight and menus (RUN_LENGTH_PLACEHOLDER).
 
 | Row type | Lanes | What happens |
 |---|---|---|
 | **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red) |
-| **Weapon / damage gate** | 2 | Gold **WEAPON +1** (Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
-| **Cash row** | 3 | Stacks of cash, small/medium/large |
-| **Enemy squad** | 1–2 | Your squad fires first; survivors cost troops 1-for-1 |
-| **Barricade** | 2 | Weak or strong; destroyed if your firepower is high enough (cash), otherwise you lose 25% of troops |
-| **Enemy base (end)** | – | Your remaining squad fires for 5 s; the base pays by the share destroyed |
+| **Weapon / damage gate** | 2 | Gold weapon gate (shows the gun you will get: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
+| **Cash row** | 3 | Stacks of cash, small/medium/large. **Their values only appear once you pass the row before** (owner request: no clutter far ahead) |
+| **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1 |
+| **Barricade** | 2 | Weak or strong; destroyed if your squad's damage in range is high enough (cash), otherwise you lose 25% of troops |
+| **Castle boss (end)** | – | See 2.3 |
 
 ❓ **Q2 — Original maths modifiers.** 💡 *Kept.* **+, ×, −, ÷ change the troop count** (the troops replace the
 coins of the original game). Exactly two **×2** gates appear per course, so troop counts stay readable.
-Red gates can also carry cash ("toll gates": −3 troops but +$14.50), which gives a real choice.
+Red gates can also carry cash ("toll gates": −3 troops but +$15), which gives a real choice.
 Weapons and damage use their own gold gates, not maths.
 
-### 2.2 Payout and completion summary
-✅ After every run a summary lists **every upgrade obtained with its cash value**, and **the total**.
+### 2.2 Guns and the squad (owner requests)
+* ✅ **Your avatar holds a gun** that changes at every gold weapon gate. ✅ **Every troop stands beside you and fires
+  the same gun** with the same fire rate and damage.
+* ✅ **Range = an option and a half**: guns reach 1.5 rows (67.5 studs). A squad therefore shoots a squad or barricade
+  for about 2.8 s before reaching it.
+* ✅ **Formation**: rows of **5** — 2 troops, you in the middle, 2 troops — and every extra 5 start a new row behind.
+
+| Gun | Damage per bullet | Bullets per second | Damage per second (per unit) | Bullets |
+|---|---|---|---|---|
+| Pistol | 10 | 2 | 20 | small yellow |
+| Rifle | 18 | 1.5 | 27 | long tracer |
+| SMG | 5 | 7 | 35 | small fast orange |
+| Assault Rifle | 9 | 5 | 45 | orange tracers |
+| Minigun | 6 | 10 | 60 | thin bright streams |
+| Rocket | 150 | 0.5 | 75 | big rocket, smoke, explosion |
+
+* 💡 Squad damage per second = units × gun damage × fire rate × your permanent damage upgrade × damage gates.
+* ✅ Run stats (troops, gun, squad damage per second, cash carried / capacity) are shown in a **screen corner**
+  (bottom-left), not above your head.
+
+### 2.3 The castle boss (owner request)
+* ✅ At the end a **boss walks out of the castle** with a **health bar on its head**.
+* ✅ It **damages your units**: every ~0.55 s it kills one unit — **troops first, you last**.
+* ✅ It is **only defeated if you chose all the best lanes**. 💡 Its HP is 99.9% of the most damage *any* lane choice
+  could deal, so only the best army (most troops × best gun and damage) beats it. In testing, about 1–4 of every
+  2,000 random lane choices win, and those tie the best army.
+* 💡 Win: the boss reward (about a quarter of a perfect run). Lose: the boss wipes your squad, so the troop payout and
+  the boss reward are lost, but you keep your cash, weapon and enemy rewards.
+* 💡 Even a perfect run ends with only a few troops left: the boss's HP equals the best possible damage, so it falls
+  just before it would finish your squad.
+
+### 2.4 Payout and completion summary
+✅ After every run a summary lists **every upgrade obtained with its cash value**, and **the total** (whole dollars).
 
 | Summary line | 💡 How it is valued (area 1 values; ×1.6 per area) |
 |---|---|
 | Weapon: Rifle / SMG / Assault Rifle / Minigun / Rocket | $8 / $12 / $18 / $25 / $35 for each tier reached |
 | +20% Damage (each damage gate) | $9 |
-| Troops at finish × N | $1.50 per troop alive at the finish. The line also shows how many you started with from permanent upgrades and how many you gained or lost this run |
+| Troops at finish × N | about $1.50 per troop still alive after the boss (line rounded to whole dollars). It also shows how many you started with from permanent upgrades, gained this run and lost to the boss |
 | Cash carried | Cash you picked up, **capped by your coin-carrying capacity** (overflow shown as lost) |
-| Enemies defeated × N | $0.50 per soldier, plus barricade rewards |
-| Enemy base destroyed X% | Up to $60 × the share destroyed |
+| Enemies defeated × N | $1 per soldier, plus barricade rewards |
+| Boss defeated! / Defeated by the boss | the boss reward on a win, $0 on a loss |
 | Vehicle bonus | +2% to +20%, from your equipped vehicle |
 | 2× CASH | Doubles the total while a 2× boost is active |
 
@@ -95,10 +126,10 @@ Weapons and damage use their own gold gates, not maths.
 **Coin-carrying capacity caps the cash you pick up on the track** (not the troop or upgrade values), so
 the capacity upgrade always matters.
 
-### 2.3 Visuals
+### 2.5 Visuals
 ✅ Matches the colours and saturation of reference image 2 (section 10): cyan sky and sea, white track with faint
-blue stripes, translucent red/blue gates with dark posts and huge outlined numbers, a lime-green money tag
-above the squad, a black "Level N" banner, orange/blue cards on the left, and the tutorial hand with ←→.
+blue stripes, translucent red/blue gates with dark posts and huge outlined numbers, lime-green cash style, a black
+"Level N" banner, orange/blue cards on the left, and the tutorial hand with ←→.
 
 ---
 
@@ -481,7 +512,7 @@ Every requirement in the brief, and where it lives in the game (checked by an in
 | 2 | Runner: control your own avatar, move left/right | `Client/Controllers/RunnerController` (`step`, `connectInput`: A/D, arrows, drag, stick) | ✅ |
 | 3 | Collect troops and weapon upgrades for that round | `Shared/Runner/RunnerCourse.Generate` (troop gates, gold WEAPON +1 / +20% DMG gates); `RunnerSim.Resolve` | ✅ |
 | 4 | Keep / clarify + × − ÷ | `RunnerCourse` troopGate (`add`/`mul`/`sub`/`div` act on troop count); §2.1 Q2 | ✅ |
-| 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, enemies, base, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
+| 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, enemies, boss, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
 | 6 | Permanent upgrades before a run: starting troops, damage, carry capacity, small steps, kept | `RunnerUI.ShowPrepare` (PERMANENT UPGRADES cards); `RunnerService.onBuyUpgrade`; `Economy.RunnerUpgradePrice/RunnerStats` (+1 troop, +4%, +6%; max 50) | ✅ |
 | 7 | Keep permanent upgrades distinct from in-run pickups | Separate pre-run cards; summary headings "COLLECTED THIS RUN" vs "PERMANENT UPGRADES" | ✅ (the troops line shows starting troops vs troops gained this run) |
 | 8 | Runner matches reference colours/saturation | `Config.Palette`, `Client/World/RunnerVisuals`, `RunnerService.buildTrack`, `MapBuilder.fillWater/applyLighting` | ✅ track, gates, sea, UI, plus a cyan `Atmosphere` sky (`MapBuilder.applyLighting`) |

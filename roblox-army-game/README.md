@@ -3,7 +3,8 @@
 A complete Roblox game built from your design brief (`docs/BRIEF.md`):
 
 1. **Army Run** – your avatar runs down a track, steering left/right through
-   `+ × − ÷` troop gates, weapon gates, cash, enemy squads and an enemy base.
+   `+ × − ÷` troop gates, weapon gates, cash and enemy squads, with a gun in your hand and
+   your troops shooting beside you, up to a castle boss that only perfect lane choices beat.
 2. **Base tycoon** – 8 areas × 4 unlocks, shops that earn money, manual restocking,
    employees (200 Robux **or** 20 runs of cash), gates with padlocks.
 3. **Battle mode** (Archero 2 style) – dodge bullets, auto-shoot when standing still,
