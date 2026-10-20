@@ -1,0 +1,3484 @@
+<roblox version="4">
+  <Item class="Lighting" referent="0">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <Color3 name="Ambient">
+        <R>0.55</R>
+        <G>0.57</G>
+        <B>0.62</B>
+      </Color3>
+      <float name="Brightness">3</float>
+      <float name="ClockTime">13.5</float>
+      <float name="EnvironmentDiffuseScale">0.6</float>
+      <float name="EnvironmentSpecularScale">0.3</float>
+      <bool name="GlobalShadows">true</bool>
+      <Color3 name="OutdoorAmbient">
+        <R>0.62</R>
+        <G>0.68</G>
+        <B>0.78</B>
+      </Color3>
+      <float name="ShadowSoftness">0.35</float>
+      <token name="Technology">3</token>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="1">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="2">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="Folder" referent="3">
+        <Properties>
+          <string name="Name">Combat</string>
+        </Properties>
+        <Item class="ModuleScript" referent="4">
+          <Properties>
+            <string name="Name">EquipmentDefs</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	EquipmentDefs  (STUB written by the lead — GEAR replaces the bodies, keeps the types/signatures)
+	See docs/ARCHITECTURE.md §4.5.
+]]
+
+local Shared = script.Parent.Parent
+local Rng = require(Shared.Rng)
+local Types = require(Shared.Types)
+
+export type CombatStats = {
+	maxHp: number,
+	damage: number,
+	fireRate: number,
+	projectiles: number,
+	spreadDeg: number,
+	projectileSpeed: number,
+	range: number,
+	critChance: number,
+	critMult: number,
+	damageReduction: number,
+	moveSpeed: number,
+	perks: { [string]: number },
+}
+
+export type ItemDef = {
+	id: string,
+	name: string,
+	slot: string, -- "weapon" | "armour"
+	icon: string,
+	description: string,
+}
+
+local EquipmentDefs = {}
+
+EquipmentDefs.Items = {
+	w_pistol = { id = "w_pistol", name = "Service Pistol", slot = "weapon", icon = "🔫", description = "" },
+	a_vest = { id = "a_vest", name = "Field Vest", slot = "armour", icon = "🦺", description = "" },
+} :: { [string]: ItemDef }
+
+EquipmentDefs.PERKS = {} :: { [string]: { name: string, description: string } }
+
+function EquipmentDefs.LoadoutStats(_data: Types.PlayerData): CombatStats
+	return {
+		maxHp = 100,
+		damage = 10,
+		fireRate = 2,
+		projectiles = 1,
+		spreadDeg = 0,
+		projectileSpeed = 70,
+		range = 60,
+		critChance = 0.05,
+		critMult = 2,
+		damageReduction = 0,
+		moveSpeed = 20,
+		perks = {},
+	}
+end
+
+function EquipmentDefs.RollChest(_chestTier: string, _rng: Rng.Rng): Types.Item
+	return { id = "w_pistol", rarity = 1, level = 1 }
+end
+
+return EquipmentDefs
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
+          <string name="Name">Config</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Config
+	Global, requirement-level configuration for Army Run Tycoon.
+
+	Every value tagged [REQUIREMENT] comes straight from the design brief.
+	Every value tagged [PROPOSAL] is a design assumption that can be changed
+	here without touching gameplay code (see DESIGN.md, "Points to resolve").
+
+	Detailed balancing numbers (incomes, scaling curves, price splits) live in
+	Shared/EconomyDefs.luau so that this file stays readable.
+]]
+
+local Config = {}
+
+Config.GameName = "Army Run Tycoon"
+
+-------------------------------------------------------------------------------
+-- Currency
+-------------------------------------------------------------------------------
+-- [PROPOSAL] "cash", "coins" and "money" in the brief are treated as ONE earned
+-- currency, shown as "$" with a gold coin icon (exactly like both reference
+-- images). Robux is the only other currency.
+Config.Currency = {
+	Name = "Cash",
+	Symbol = "$",
+}
+
+-------------------------------------------------------------------------------
+-- Palette (sampled from the two reference images)
+-------------------------------------------------------------------------------
+-- Image 1 (base / tycoon) and image 2 (runner) share the same bright, highly
+-- saturated "toy" look: sky-blue floors, white lane lines, Lego-stud hedges,
+-- chunky white text with dark outlines, black pills for currency.
+Config.Palette = {
+	-- Shared UI
+	White = Color3.fromRGB(255, 255, 255),
+	TextStroke = Color3.fromRGB(28, 30, 46),
+	PillBlack = Color3.fromRGB(22, 22, 28),
+	Coin = Color3.fromRGB(255, 202, 32),
+	CoinDark = Color3.fromRGB(226, 146, 0),
+	CoinShine = Color3.fromRGB(255, 236, 140),
+	MoneyGreen = Color3.fromRGB(48, 210, 62),
+	MoneyGreenDark = Color3.fromRGB(26, 150, 40),
+	CardOrange = Color3.fromRGB(255, 166, 28),
+	CardOrangeDark = Color3.fromRGB(236, 118, 8),
+	CardBlue = Color3.fromRGB(40, 152, 246),
+	CardBlueDark = Color3.fromRGB(22, 98, 222),
+	CardPink = Color3.fromRGB(255, 108, 224),
+	CardPinkDark = Color3.fromRGB(214, 62, 186),
+	CardOutline = Color3.fromRGB(24, 34, 62),
+	ButtonGreen = Color3.fromRGB(64, 214, 76),
+	ButtonGreenDark = Color3.fromRGB(30, 158, 46),
+	ButtonRed = Color3.fromRGB(255, 82, 92),
+	ButtonRedDark = Color3.fromRGB(196, 38, 54),
+	ButtonGrey = Color3.fromRGB(150, 160, 178),
+	ButtonGreyDark = Color3.fromRGB(96, 104, 122),
+	Robux = Color3.fromRGB(0, 176, 111),
+	RobuxDark = Color3.fromRGB(0, 122, 76),
+	OfferPurple = Color3.fromRGB(122, 64, 236),
+	OfferPurpleDark = Color3.fromRGB(78, 30, 172),
+	PanelBlue = Color3.fromRGB(64, 160, 248),
+	PanelBlueDark = Color3.fromRGB(30, 104, 214),
+	Shade = Color3.fromRGB(10, 14, 30),
+
+	-- Runner (image 2)
+	Sky = Color3.fromRGB(60, 186, 250),
+	Sea = Color3.fromRGB(30, 162, 240),
+	TrackWhite = Color3.fromRGB(242, 248, 255),
+	TrackStripe = Color3.fromRGB(224, 237, 252),
+	TrackRail = Color3.fromRGB(206, 226, 249),
+	GatePositive = Color3.fromRGB(80, 168, 255),
+	GateNegative = Color3.fromRGB(255, 94, 110),
+	GateWeapon = Color3.fromRGB(255, 198, 44),
+	GatePost = Color3.fromRGB(46, 50, 66),
+	EnemyRed = Color3.fromRGB(214, 52, 52),
+	TroopGreen = Color3.fromRGB(78, 150, 62),
+	TroopGreenDark = Color3.fromRGB(52, 104, 42),
+
+	-- Base (image 1)
+	BaseFloor = Color3.fromRGB(110, 176, 246),
+	BasePath = Color3.fromRGB(162, 204, 250),
+	BaseLine = Color3.fromRGB(236, 245, 255),
+	PlotOutline = Color3.fromRGB(172, 206, 248),
+	PlotInner = Color3.fromRGB(122, 184, 247),
+	Hedge = Color3.fromRGB(92, 200, 58),
+	HedgeDark = Color3.fromRGB(68, 168, 44),
+	Grass = Color3.fromRGB(126, 218, 88),
+	WallYellow = Color3.fromRGB(246, 182, 26),
+	WallRed = Color3.fromRGB(232, 52, 46),
+	GateIron = Color3.fromRGB(40, 40, 46),
+	Padlock = Color3.fromRGB(250, 198, 30),
+	PadFill = Color3.fromRGB(234, 255, 226),
+	PadBorder = Color3.fromRGB(76, 202, 76),
+	PriceGold = Color3.fromRGB(255, 214, 60),
+	HireTile = Color3.fromRGB(76, 112, 166),
+	Pink = Color3.fromRGB(240, 72, 160),
+	Wood = Color3.fromRGB(150, 92, 52),
+
+	-- Rarities (Common -> Legendary)
+	Rarity = {
+		Color3.fromRGB(176, 184, 196),
+		Color3.fromRGB(92, 210, 92),
+		Color3.fromRGB(62, 156, 255),
+		Color3.fromRGB(178, 92, 255),
+		Color3.fromRGB(255, 194, 26),
+	},
+}
+
+-- Chunky rounded font that matches both reference images.
+Config.Font = Enum.Font.FredokaOne
+
+-------------------------------------------------------------------------------
+-- Areas (stages) and their four unlock slots
+-------------------------------------------------------------------------------
+-- [REQUIREMENT] Many areas, each with four unlockable cash-revenue sections.
+-- [REQUIREMENT] At the second stage, the repeatable combat mode takes one of
+-- the four unlocks.
+-- [PROPOSAL] Area 2 therefore has three revenue sections + the Combat Arena
+-- (slot 4). The arena counts as the area's fourth (active) cash source.
+--
+-- slot.kind: "revenue" | "arena"
+-- slot.style: building look used by the client BuildingFactory
+-- slot.incomeWeight: relative income of this section inside its area
+export type SlotDef = {
+	id: string,
+	kind: string,
+	name: string,
+	style: string,
+	icon: string,
+	color: Color3,
+	incomeWeight: number,
+}
+
+export type AreaDef = {
+	name: string,
+	wall: string, -- Palette key of the perimeter hedge/wall colour
+	accent: Color3,
+	slots: { SlotDef },
+}
+
+local function slot(
+	id: string,
+	kind: string,
+	name: string,
+	style: string,
+	icon: string,
+	color: Color3,
+	weight: number
+): SlotDef
+	return {
+		id = id,
+		kind = kind,
+		name = name,
+		style = style,
+		icon = icon,
+		color = color,
+		incomeWeight = weight,
+	}
+end
+
+local C = Color3.fromRGB
+
+Config.Areas = {
+	{
+		name = "Boot Camp",
+		wall = "Hedge",
+		accent = C(92, 200, 58),
+		slots = {
+			slot("a1s1", "revenue", "Ration Stand", "stand", "🍞", C(255, 170, 60), 0.7),
+			slot("a1s2", "revenue", "Boot Shop", "shop", "🥾", C(150, 100, 60), 0.9),
+			slot("a1s3", "revenue", "Canteen", "diner", "🍔", C(240, 72, 160), 1.1),
+			slot("a1s4", "revenue", "Barber Hut", "hut", "💈", C(70, 140, 255), 1.3),
+		},
+	},
+	{
+		name = "Supply Depot",
+		wall = "WallYellow",
+		accent = C(246, 182, 26),
+		slots = {
+			slot("a2s1", "revenue", "Ammo Store", "shop", "🎯", C(214, 80, 52), 0.8),
+			slot("a2s2", "revenue", "Uniform Shop", "shop", "🎽", C(78, 150, 62), 1.0),
+			slot("a2s3", "revenue", "Med Tent", "tent", "🩹", C(255, 255, 255), 1.2),
+			slot("a2s4", "arena", "Combat Arena", "arena", "⚔️", C(255, 82, 92), 0),
+		},
+	},
+	{
+		name = "Motor Pool",
+		wall = "WallRed",
+		accent = C(232, 52, 46),
+		slots = {
+			slot("a3s1", "revenue", "Fuel Station", "station", "⛽", C(255, 210, 40), 0.7),
+			slot("a3s2", "revenue", "Tire Shop", "shop", "🛞", C(60, 60, 70), 0.9),
+			slot("a3s3", "revenue", "Repair Garage", "garage", "🔧", C(90, 120, 150), 1.1),
+			slot("a3s4", "revenue", "Car Wash", "garage", "🧽", C(80, 200, 255), 1.3),
+		},
+	},
+	{
+		name = "Airfield",
+		wall = "Hedge",
+		accent = C(92, 200, 58),
+		slots = {
+			slot("a4s1", "revenue", "Parachute Shop", "tent", "🪂", C(255, 120, 40), 0.7),
+			slot("a4s2", "revenue", "Radar Tower", "tower", "📡", C(200, 210, 220), 0.9),
+			slot("a4s3", "revenue", "Hangar Cafe", "hangar", "☕", C(150, 100, 60), 1.1),
+			slot("a4s4", "revenue", "Flight School", "hangar", "✈️", C(62, 156, 255), 1.3),
+		},
+	},
+	{
+		name = "Harbor",
+		wall = "WallYellow",
+		accent = C(246, 182, 26),
+		slots = {
+			slot("a5s1", "revenue", "Fish Market", "stand", "🐟", C(80, 170, 255), 0.7),
+			slot("a5s2", "revenue", "Boat Rentals", "hut", "🚤", C(255, 255, 255), 0.9),
+			slot("a5s3", "revenue", "Dock Warehouse", "garage", "📦", C(160, 110, 70), 1.1),
+			slot("a5s4", "revenue", "Lighthouse Shop", "tower", "🗼", C(232, 52, 46), 1.3),
+		},
+	},
+	{
+		name = "Desert Outpost",
+		wall = "WallRed",
+		accent = C(232, 52, 46),
+		slots = {
+			slot("a6s1", "revenue", "Water Depot", "station", "💧", C(80, 200, 255), 0.7),
+			slot("a6s2", "revenue", "Supply Bazaar", "tent", "🧺", C(240, 190, 90), 0.9),
+			slot("a6s3", "revenue", "Solar Farm", "station", "☀️", C(255, 214, 60), 1.1),
+			slot("a6s4", "revenue", "Oasis Cafe", "diner", "🥤", C(92, 210, 92), 1.3),
+		},
+	},
+	{
+		name = "Mountain Fortress",
+		wall = "Hedge",
+		accent = C(92, 200, 58),
+		slots = {
+			slot("a7s1", "revenue", "Climbing Gear", "shop", "🧗", C(255, 120, 40), 0.7),
+			slot("a7s2", "revenue", "Hot Cocoa Hut", "hut", "☕", C(150, 92, 52), 0.9),
+			slot("a7s3", "revenue", "Ski Rental", "shop", "🎿", C(80, 170, 255), 1.1),
+			slot("a7s4", "revenue", "Armory", "garage", "🛡️", C(90, 100, 120), 1.3),
+		},
+	},
+	{
+		name = "Command HQ",
+		wall = "WallYellow",
+		accent = C(246, 182, 26),
+		slots = {
+			slot("a8s1", "revenue", "Medal Shop", "shop", "🎖️", C(255, 194, 26), 0.7),
+			slot("a8s2", "revenue", "War Room Cafe", "diner", "🗺️", C(78, 150, 62), 0.9),
+			slot("a8s3", "revenue", "Satellite Uplink", "tower", "🛰️", C(200, 210, 220), 1.1),
+			slot("a8s4", "revenue", "Officer Club", "hangar", "🎩", C(122, 64, 236), 1.3),
+		},
+	},
+} :: { AreaDef }
+
+Config.SlotsPerArea = 4 -- [REQUIREMENT]
+
+-- The Combat Arena unlock (repeatable combat mode). [REQUIREMENT: stage 2]
+Config.ArenaSlotId = "a2s4"
+Config.ArenaArea = 2
+
+-------------------------------------------------------------------------------
+-- 10-run benchmark  [REQUIREMENT + OPEN QUESTION 3]
+-------------------------------------------------------------------------------
+-- The army runner estimates best-case cash accumulation across 10 simulated
+-- runs (B10). B10 is the baseline for "three area upgrades".
+--
+-- Because the brief does not say what "three area upgrades" are, the mapping
+-- is a switch instead of a silent choice:
+--   "CombinedSections" [DEFAULT PROPOSAL]: the first three revenue-section
+--       unlocks of an area cost B10 *together* (split by EconomyDefs).
+--   "EachSection": each of the first three revenue-section unlocks costs B10.
+-- (A third reading, "three upgrade tiers of one section", is described in
+-- DESIGN.md but not implemented.)
+Config.Benchmark = {
+	Runs = 10, -- [REQUIREMENT]
+	Mode = "CombinedSections",
+	-- [PROPOSAL] Player upgrade level assumed by the simulation: each of the
+	-- three permanent runner upgrades is at (area - 1) * this value.
+	ReferenceUpgradeLevelsPerArea = 4,
+}
+
+-------------------------------------------------------------------------------
+-- Employees  [REQUIREMENT]
+-------------------------------------------------------------------------------
+Config.Employee = {
+	Robux = 200, -- [REQUIREMENT]
+	RunsEquivalent = 20, -- [REQUIREMENT] cash price = earnings of 20 runs
+	-- [PROPOSAL] "20 runs" = 20 x the best-case single-run benchmark of the
+	-- area the section belongs to (B10 / 10). "SectionArea" keeps old sections
+	-- cheap to automate; "PlayerArea" would re-price them as you progress.
+	PriceScalesWith = "SectionArea",
+}
+
+-------------------------------------------------------------------------------
+-- Coin route for Robux items  [REQUIREMENT + OPEN QUESTION 10]
+-------------------------------------------------------------------------------
+-- [PROPOSAL definition] "Efficiency" = net in-game cash a purchase gives you.
+--   Robux route: you receive the item's full value V and spend no cash -> +V.
+--   Coin route:  you receive V and spend P -> net V - P.
+-- "80% less efficient" => V - P = 0.2 * V  =>  P = 0.8 * V.
+-- That is still "slightly profitable if used properly" (+25% return).
+-- Applies to boosts (2x multipliers, time skips), whose value is measurable.
+-- Vehicles and employees use their own anchors (see EconomyDefs / DESIGN.md).
+Config.CoinRoute = {
+	NetGainShare = 0.2,
+}
+
+-------------------------------------------------------------------------------
+-- Boosts  [REQUIREMENT: 2x multipliers + 1-24h time skips, luck-based]
+-------------------------------------------------------------------------------
+-- [PROPOSAL] 2x doubles ALL cash earned (runner payouts, section revenue,
+-- combat cash) for the duration, counted in play-time (only ticks while you
+-- are in the game). Durations stack; the multiplier itself does not (max 2x).
+-- [PROPOSAL] Time skips instantly pay the revenue your automatic sections
+-- would earn in that many hours. Sections with an employee pay for the full
+-- period; sections without one pay only until their stock runs out.
+-- weight: relative chance of appearing on the home map (rarer = more valuable).
+export type BoostDef = {
+	id: string,
+	kind: string, -- "multiplier" | "timeskip"
+	name: string,
+	minutes: number?,
+	hours: number?,
+	robux: number,
+	weight: number,
+	rarity: number,
+}
+
+Config.Boosts = {
+	{ id = "x2_15", kind = "multiplier", name = "2x Cash (15 min)", minutes = 15, robux = 29, weight = 30, rarity = 1 },
+	{ id = "x2_30", kind = "multiplier", name = "2x Cash (30 min)", minutes = 30, robux = 49, weight = 12, rarity = 2 },
+	{ id = "x2_60", kind = "multiplier", name = "2x Cash (60 min)", minutes = 60, robux = 89, weight = 4, rarity = 3 },
+	{ id = "skip_1", kind = "timeskip", name = "Time Skip 1h", hours = 1, robux = 25, weight = 30, rarity = 1 },
+	{ id = "skip_2", kind = "timeskip", name = "Time Skip 2h", hours = 2, robux = 45, weight = 18, rarity = 2 },
+	{ id = "skip_4", kind = "timeskip", name = "Time Skip 4h", hours = 4, robux = 79, weight = 10, rarity = 3 },
+	{ id = "skip_8", kind = "timeskip", name = "Time Skip 8h", hours = 8, robux = 149, weight = 5, rarity = 4 },
+	{ id = "skip_12", kind = "timeskip", name = "Time Skip 12h", hours = 12, robux = 199, weight = 2.5, rarity = 4 },
+	{ id = "skip_24", kind = "timeskip", name = "Time Skip 24h", hours = 24, robux = 349, weight = 1, rarity = 5 },
+} :: { BoostDef }
+
+-- [PROPOSAL] Random home-map appearances are purchase OFFERS (like the purple
+-- "+$357.1" bubble in image 1): walk into one to open a Robux-or-cash dialog.
+Config.BoostOffers = {
+	MinInterval = 150, -- seconds between offers (per player)
+	MaxInterval = 300,
+	Lifetime = 90, -- seconds an offer stays on the map
+	MaxActive = 2,
+}
+
+-------------------------------------------------------------------------------
+-- Vehicles  [REQUIREMENT: better vehicles as areas unlock]
+-------------------------------------------------------------------------------
+-- [PROPOSAL] A vehicle is ridden around the base (faster movement) and gives a
+-- small bonus to runner payouts. Coin price scales with the player's current
+-- area (EconomyDefs.VehiclePriceFactor x that area's gate price).
+export type VehicleDef = {
+	id: string,
+	name: string,
+	area: number, -- becomes available once this area is unlocked
+	robux: number,
+	speed: number, -- WalkSpeed while riding
+	runnerBonus: number, -- +x runner payout (0.02 = +2%)
+	priceFactor: number,
+	color: Color3,
+	style: string,
+}
+
+Config.Vehicles = {
+	{ id = "bike", name = "Army Bike", area = 1, robux = 49, speed = 26, runnerBonus = 0.02, priceFactor = 0.6, color = C(78, 150, 62), style = "bike" },
+	{ id = "jeep", name = "Jeep", area = 2, robux = 99, speed = 30, runnerBonus = 0.04, priceFactor = 0.8, color = C(110, 140, 70), style = "jeep" },
+	{ id = "truck", name = "Supply Truck", area = 3, robux = 149, speed = 32, runnerBonus = 0.06, priceFactor = 1.0, color = C(255, 140, 40), style = "truck" },
+	{ id = "humvee", name = "Humvee", area = 4, robux = 199, speed = 34, runnerBonus = 0.08, priceFactor = 1.25, color = C(196, 170, 110), style = "jeep" },
+	{ id = "apc", name = "APC", area = 5, robux = 299, speed = 36, runnerBonus = 0.10, priceFactor = 1.5, color = C(90, 110, 80), style = "apc" },
+	{ id = "tank", name = "Light Tank", area = 6, robux = 399, speed = 38, runnerBonus = 0.12, priceFactor = 1.8, color = C(70, 130, 70), style = "tank" },
+	{ id = "heavytank", name = "Heavy Tank", area = 7, robux = 549, speed = 40, runnerBonus = 0.15, priceFactor = 2.2, color = C(60, 70, 80), style = "tank" },
+	{ id = "hovertank", name = "Hover Tank", area = 8, robux = 799, speed = 46, runnerBonus = 0.20, priceFactor = 2.6, color = C(122, 64, 236), style = "hover" },
+} :: { VehicleDef }
+
+-------------------------------------------------------------------------------
+-- Rarities (combat equipment)  [REQUIREMENT: higher rarity = better + rarer]
+-------------------------------------------------------------------------------
+export type RarityDef = {
+	name: string,
+	weight: number, -- base chest weight
+	statMult: number,
+	maxLevel: number,
+	perkSlots: number,
+}
+
+Config.Rarities = {
+	{ name = "Common", weight = 60, statMult = 1.0, maxLevel = 10, perkSlots = 0 },
+	{ name = "Uncommon", weight = 25, statMult = 1.25, maxLevel = 20, perkSlots = 0 },
+	{ name = "Rare", weight = 10, statMult = 1.6, maxLevel = 30, perkSlots = 1 },
+	{ name = "Epic", weight = 4, statMult = 2.1, maxLevel = 40, perkSlots = 2 },
+	{ name = "Legendary", weight = 1, statMult = 2.8, maxLevel = 50, perkSlots = 3 },
+} :: { RarityDef }
+
+-------------------------------------------------------------------------------
+-- Developer Products (Robux)
+-------------------------------------------------------------------------------
+-- HOW TO SET UP: publish the place, then Creator Hub > your experience >
+-- Monetization > Developer Products > Create. Make one product per key below
+-- with the Robux price shown in this file, and paste its ID here.
+-- 0 = not set up yet: the Robux button is shown greyed out ("Robux not set up").
+Config.ProductIds = {
+	Employee = 0,
+	x2_15 = 0,
+	x2_30 = 0,
+	x2_60 = 0,
+	skip_1 = 0,
+	skip_2 = 0,
+	skip_4 = 0,
+	skip_8 = 0,
+	skip_12 = 0,
+	skip_24 = 0,
+	vehicle_bike = 0,
+	vehicle_jeep = 0,
+	vehicle_truck = 0,
+	vehicle_humvee = 0,
+	vehicle_apc = 0,
+	vehicle_tank = 0,
+	vehicle_heavytank = 0,
+	vehicle_hovertank = 0,
+} :: { [string]: number }
+
+-------------------------------------------------------------------------------
+-- Misc
+-------------------------------------------------------------------------------
+Config.MaxSlots = 12 -- simultaneous runner tracks / combat arenas per server
+Config.DataStoreName = "ArmyRunTycoon_v1"
+Config.AutosaveInterval = 120
+
+return Config
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="6">
+        <Properties>
+          <string name="Name">Economy</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Economy  (STUB written by the lead — ECON replaces the bodies, keeps every signature)
+	See docs/ARCHITECTURE.md §4.1.
+]]
+
+local Economy = {}
+
+Economy.SectionMaxLevel = 10
+Economy.RunnerUpgradeMaxLevel = 50
+
+function Economy.RunBenchmark(_area: number): number
+	return 100
+end
+
+function Economy.TenRunBenchmark(area: number): number
+	return Economy.RunBenchmark(area) * 10
+end
+
+function Economy.BenchmarkDetails(_area: number): { upgradeLevel: number, runs: { { level: number, payout: number } }, total: number }
+	return { upgradeLevel = 0, runs = {}, total = 0 }
+end
+
+function Economy.ReferenceUpgrades(_area: number): { troops: number, damage: number, capacity: number }
+	return { troops = 0, damage = 0, capacity = 0 }
+end
+
+function Economy.SlotUnlockPrice(_slotId: string): number
+	return 100
+end
+
+function Economy.GatePrice(area: number): number
+	return 1000 * area
+end
+
+function Economy.SectionStats(_slotId: string, _level: number): { incomePerSale: number, saleInterval: number, stockCapacity: number, incomePerSecond: number }
+	return { incomePerSale = 1, saleInterval = 5, stockCapacity = 20, incomePerSecond = 0.2 }
+end
+
+function Economy.SectionUpgradePrice(_slotId: string, _currentLevel: number): number?
+	return 100
+end
+
+function Economy.EmployeeCashPrice(_slotId: string, _playerHighestArea: number): number
+	return 2000
+end
+
+function Economy.ReferencePassiveRate(_area: number): number
+	return 1
+end
+
+function Economy.RunnerUpgradePrice(_kind: string, _currentLevel: number): number?
+	return 50
+end
+
+function Economy.RunnerStats(_upgrades: { troops: number, damage: number, capacity: number }, _area: number): { startTroops: number, damage: number, capacity: number }
+	return { startTroops = 3, damage = 10, capacity = 60 }
+end
+
+function Economy.RunnerUpgradeEffect(_kind: string, _level: number): string
+	return ""
+end
+
+function Economy.BoostValue(_boostId: string, _playerArea: number): number
+	return 100
+end
+
+function Economy.BoostCoinPrice(_boostId: string, _playerArea: number): number
+	return 80
+end
+
+function Economy.VehicleCoinPrice(_vehicleId: string, _playerArea: number): number
+	return 1000
+end
+
+function Economy.CombatLevelReward(_level: number): number
+	return 100
+end
+
+function Economy.BarrierCombatLevel(area: number): number
+	return area
+end
+
+function Economy.EquipmentUpgradePrice(_rarity: number, _currentLevel: number): number?
+	return 50
+end
+
+function Economy.RunDurationSeconds(): number
+	return 60
+end
+
+return Economy
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="7">
+        <Properties>
+          <string name="Name">Format</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Format
+	Number / time formatting shared by every UI.
+]]
+
+local Format = {}
+
+local SUFFIXES = { "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+
+local function withCommas(integer: number): string
+	local s = tostring(math.floor(math.abs(integer)))
+	local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	if out:sub(1, 1) == "," then
+		out = out:sub(2)
+	end
+	return out
+end
+
+-- Short number: 950 -> "950", 1520 -> "1.52K", 2500000 -> "2.5M".
+function Format.Short(n: number): string
+	local negative = n < 0
+	n = math.abs(n)
+	local text: string
+	if n < 1000 then
+		text = if n == math.floor(n) then tostring(n) else string.format("%.1f", n)
+	else
+		local index = math.min(math.floor(math.log10(n) / 3), #SUFFIXES)
+		local scaled = n / 10 ^ (index * 3)
+		local digits = if scaled < 10 then "%.2f" elseif scaled < 100 then "%.1f" else "%.0f"
+		text = string.format(digits, scaled):gsub("%.?0+$", "") .. SUFFIXES[index]
+	end
+	return (if negative then "-" else "") .. text
+end
+
+-- Money like the reference images: "$0.00", "$1,562.50", then "$1.25M".
+function Format.Money(n: number): string
+	local negative = n < 0
+	n = math.abs(n)
+	local text: string
+	if n < 1e6 then
+		local cents = math.floor(n * 100 + 0.5)
+		local whole = math.floor(cents / 100)
+		text = withCommas(whole) .. string.format(".%02d", cents % 100)
+	else
+		text = Format.Short(n)
+	end
+	return (if negative then "-$" else "$") .. text
+end
+
+function Format.Robux(n: number): string
+	return "R$ " .. withCommas(n)
+end
+
+-- 75 -> "1:15", 3700 -> "1:01:40"
+function Format.Clock(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	local h = math.floor(seconds / 3600)
+	local m = math.floor((seconds % 3600) / 60)
+	local s = seconds % 60
+	if h > 0 then
+		return string.format("%d:%02d:%02d", h, m, s)
+	end
+	return string.format("%d:%02d", m, s)
+end
+
+-- 90 -> "1m 30s", 7200 -> "2h", 5400 -> "1h 30m"
+function Format.Duration(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	local h = math.floor(seconds / 3600)
+	local m = math.floor((seconds % 3600) / 60)
+	local s = seconds % 60
+	if h > 0 then
+		return if m > 0 then string.format("%dh %dm", h, m) else string.format("%dh", h)
+	elseif m > 0 then
+		return if s > 0 then string.format("%dm %ds", m, s) else string.format("%dm", m)
+	end
+	return string.format("%ds", s)
+end
+
+function Format.Percent(fraction: number): string
+	local p = fraction * 100
+	if p == math.floor(p) then
+		return string.format("%d%%", p)
+	end
+	return string.format("%.1f%%", p)
+end
+
+-- Round money to cents (all stored cash values go through this).
+function Format.RoundCents(n: number): number
+	return math.floor(n * 100 + 0.5) / 100
+end
+
+return Format
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="8">
+        <Properties>
+          <string name="Name">Layout</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Layout
+	Single source of truth for world-space positions so that the server
+	(validation, static map) and the client (progression visuals) agree.
+
+	World map (top view, +X to the right, +Z towards the camera):
+
+	   Combat arenas      z = -700   (one per player slot, x = slot * 170)
+	   Home base          z = 0      (areas 1..N laid out along +X)
+	   Runner tracks      z = +700 .. +1600 (one per slot, run towards -Z)
+]]
+
+local Layout = {}
+
+-- Home base -------------------------------------------------------------------
+Layout.AREA_SIZE = 160 -- each area is a 160 x 160 stud square
+Layout.AREA_PITCH = 184 -- centre-to-centre distance (24-stud gate corridor)
+Layout.FLOOR_Y = 0 -- top surface of all floors
+Layout.PATH_WIDTH = 28 -- central cross-shaped walkway
+Layout.PLOT_SIZE = 56 -- each unlock slot is a 56 x 56 plot
+Layout.GATE_WIDTH = 20 -- opening in the hedge between two areas
+Layout.WALL_HEIGHT = 6
+Layout.INTERACT_RANGE = 16 -- server-side proximity check for base actions
+
+-- Slot offsets from the area centre: 1 = north-west, 2 = north-east,
+-- 3 = south-west, 4 = south-east.
+Layout.SLOT_OFFSETS = {
+	Vector3.new(-42, 0, -42),
+	Vector3.new(42, 0, -42),
+	Vector3.new(-42, 0, 42),
+	Vector3.new(42, 0, 42),
+}
+
+function Layout.AreaCenter(area: number): Vector3
+	return Vector3.new((area - 1) * Layout.AREA_PITCH, Layout.FLOOR_Y, 0)
+end
+
+-- Which area a world position belongs to (nil = outside the base).
+function Layout.AreaAt(position: Vector3, areaCount: number): number?
+	for area = 1, areaCount do
+		local c = Layout.AreaCenter(area)
+		local half = Layout.AREA_SIZE / 2
+		if math.abs(position.X - c.X) <= half and math.abs(position.Z - c.Z) <= half then
+			return area
+		end
+	end
+	return nil
+end
+
+function Layout.SlotCenter(area: number, slotIndex: number): Vector3
+	return Layout.AreaCenter(area) + Layout.SLOT_OFFSETS[slotIndex]
+end
+
+-- Point on the plot edge that faces the central walkway (where restock and
+-- upgrade prompts sit, so the player never has to walk into the building).
+function Layout.SlotFrontPosition(area: number, slotIndex: number): Vector3
+	local offset = Layout.SLOT_OFFSETS[slotIndex]
+	local towardsPathX = -math.sign(offset.X)
+	return Layout.SlotCenter(area, slotIndex)
+		+ Vector3.new(towardsPathX * (Layout.PLOT_SIZE / 2 - 6), 0, 0)
+end
+
+-- Where the "Hire me" tile / employee stands for a revenue section.
+function Layout.SlotHirePosition(area: number, slotIndex: number): Vector3
+	local offset = Layout.SLOT_OFFSETS[slotIndex]
+	local towardsPathX = -math.sign(offset.X)
+	local towardsPathZ = -math.sign(offset.Z)
+	return Layout.SlotCenter(area, slotIndex)
+		+ Vector3.new(towardsPathX * (Layout.PLOT_SIZE / 2 - 6), 0, towardsPathZ * (Layout.PLOT_SIZE / 2 - 8))
+end
+
+-- The gate that leads FROM `area` TO `area + 1` (on the east edge of `area`).
+function Layout.GatePosition(area: number): Vector3
+	return Layout.AreaCenter(area) + Vector3.new(Layout.AREA_PITCH / 2, 0, 0)
+end
+
+function Layout.SpawnPosition(): Vector3
+	return Layout.AreaCenter(1) + Vector3.new(0, 0, 58)
+end
+
+-- Big "ARMY RUN" pad in area 1 that starts the runner.
+function Layout.RunnerPortalPosition(): Vector3
+	return Layout.AreaCenter(1) + Vector3.new(0, 0, -60)
+end
+
+-- Runner -------------------------------------------------------------------------
+Layout.RUNNER_TRACK_WIDTH = 24
+Layout.RUNNER_TRACK_LENGTH = 900
+Layout.RUNNER_START_Z = 1600
+Layout.RUNNER_SLOT_SPACING = 80
+
+-- CFrame at the start of a player's runner track, facing down the track (-Z).
+function Layout.RunnerTrackStart(slotIndex: number): CFrame
+	local p = Vector3.new(slotIndex * Layout.RUNNER_SLOT_SPACING, Layout.FLOOR_Y, Layout.RUNNER_START_Z)
+	return CFrame.lookAt(p, p + Vector3.new(0, 0, -1))
+end
+
+-- World position of a point on a track: `distance` studs from the start and
+-- `lateral` studs to the right of the centre line (right = +X).
+function Layout.RunnerPoint(slotIndex: number, distance: number, lateral: number): Vector3
+	return Vector3.new(
+		slotIndex * Layout.RUNNER_SLOT_SPACING + lateral,
+		Layout.FLOOR_Y,
+		Layout.RUNNER_START_Z - distance
+	)
+end
+
+-- Combat -----------------------------------------------------------------------
+Layout.ARENA_SIZE_X = 80
+Layout.ARENA_SIZE_Z = 110
+Layout.ARENA_SLOT_SPACING = 170
+Layout.ARENA_Z = -700
+
+function Layout.ArenaCenter(slotIndex: number): Vector3
+	return Vector3.new(slotIndex * Layout.ARENA_SLOT_SPACING, Layout.FLOOR_Y, Layout.ARENA_Z)
+end
+
+return Layout
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
+          <string name="Name">Net</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Net
+	All client <-> server traffic goes through here.
+
+	Requests (client -> server, with a reply):
+		-- server
+		Net.Handle("BuyRunnerUpgrade", function(player, kind) ... return Net.Ok({ level = 3 }) end)
+		-- client
+		local result = Net.Request("BuyRunnerUpgrade", "troops")
+		if result.ok then ... else warn(result.err) end
+
+	Handlers return a table (Net.Ok / Net.Fail) or nil (= ok). A handler that
+	errors returns { ok = false, err = "Something went wrong" } to the client.
+
+	Push events (server -> client, or client -> server):
+		Net.Fire("Notify", player, "Hello", "success")   -- server -> one client
+		Net.FireAll("Notify", "Server message")          -- server -> all clients
+		Net.FireServer("Name", ...)                      -- client -> server
+		Net.On("Notify", function(...) end)              -- listen on either side
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+export type Result = { ok: boolean, err: string?, [string]: any }
+
+local Net = {}
+
+-- Every RemoteEvent the game uses. Add new names here (server creates them).
+Net.EVENTS = {
+	"Sync", -- server -> client: full PlayerData snapshot
+	"Notify", -- server -> client: (text, kind) toast
+	"Fx", -- server -> client: (kind, payload) world effects (floating text...)
+	"Runner", -- server -> client: (msg, payload)
+	"Combat", -- both ways: (msg, payload) reliable combat events
+	"Base", -- server -> client: (msg, payload)
+	"Boost", -- server -> client: (msg, payload) random offers / timers
+	"Shop", -- server -> client: (msg, payload)
+	"Inventory", -- server -> client: (msg, payload)
+	"Vehicle", -- server -> client: (msg, payload)
+}
+
+-- High-frequency, droppable events.
+Net.UNRELIABLE = {
+	"CombatSnap", -- server -> client: combat entity snapshot (~20 Hz)
+}
+
+local FOLDER_NAME = "Remotes"
+local ACTION_NAME = "Action"
+local IS_SERVER = RunService:IsServer()
+
+local folder: Folder? = nil
+local handlers: { [string]: (Player, ...any) -> any } = {}
+
+-- Per-player request budget (token bucket) to stop remote spam.
+local RATE_PER_SECOND = 25
+local BURST = 40
+local buckets: { [Player]: { tokens: number, last: number } } = {}
+
+local function getFolder(): Folder
+	local cached = folder
+	if cached then
+		return cached
+	end
+	local result: Folder
+	if IS_SERVER then
+		local existing = ReplicatedStorage:FindFirstChild(FOLDER_NAME)
+		if existing and existing:IsA("Folder") then
+			result = existing
+		else
+			result = Instance.new("Folder")
+			result.Name = FOLDER_NAME
+			result.Parent = ReplicatedStorage
+		end
+	else
+		result = ReplicatedStorage:WaitForChild(FOLDER_NAME) :: Folder
+	end
+	folder = result
+	return result
+end
+
+local function getRemote(name: string): Instance
+	local f = getFolder()
+	if IS_SERVER then
+		local remote = f:FindFirstChild(name)
+		if not remote then
+			error(("Net: unknown remote '%s' (add it to Net.EVENTS)"):format(name))
+		end
+		return remote
+	end
+	return f:WaitForChild(name)
+end
+
+function Net.Ok(payload: { [string]: any }?): Result
+	local result = (payload or {}) :: Result
+	result.ok = true
+	return result
+end
+
+function Net.Fail(message: string): Result
+	return { ok = false, err = message }
+end
+
+-- Server: create every remote. Called once by Server/Main before services load.
+function Net.Setup()
+	assert(IS_SERVER, "Net.Setup is server-only")
+	local f = getFolder()
+	for _, name in Net.EVENTS do
+		if not f:FindFirstChild(name) then
+			local remote = Instance.new("RemoteEvent")
+			remote.Name = name
+			remote.Parent = f
+		end
+	end
+	for _, name in Net.UNRELIABLE do
+		if not f:FindFirstChild(name) then
+			local remote = Instance.new("UnreliableRemoteEvent")
+			remote.Name = name
+			remote.Parent = f
+		end
+	end
+	local action = f:FindFirstChild(ACTION_NAME) :: RemoteFunction?
+	if not action then
+		local created = Instance.new("RemoteFunction")
+		created.Name = ACTION_NAME
+		created.Parent = f
+		action = created
+	end
+	(action :: RemoteFunction).OnServerInvoke = function(player: Player, actionName: any, ...: any): Result
+		if type(actionName) ~= "string" then
+			return Net.Fail("Bad request")
+		end
+		-- rate limit
+		local now = os.clock()
+		local bucket = buckets[player]
+		if not bucket then
+			bucket = { tokens = BURST, last = now }
+			buckets[player] = bucket
+		end
+		bucket.tokens = math.min(BURST, bucket.tokens + (now - bucket.last) * RATE_PER_SECOND)
+		bucket.last = now
+		if bucket.tokens < 1 then
+			return Net.Fail("Slow down!")
+		end
+		bucket.tokens -= 1
+
+		local handler = handlers[actionName]
+		if not handler then
+			return Net.Fail("Unknown action " .. actionName)
+		end
+		local ok, result = pcall(handler, player, ...)
+		if not ok then
+			warn(("[Net] action %s failed for %s: %s"):format(actionName, player.Name, tostring(result)))
+			return Net.Fail("Something went wrong")
+		end
+		if result == nil then
+			return Net.Ok()
+		end
+		if type(result) ~= "table" then
+			return Net.Ok({ value = result })
+		end
+		if result.ok == nil then
+			result.ok = true
+		end
+		return result
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		buckets[player] = nil
+	end)
+end
+
+-- Server: register a request handler.
+function Net.Handle(actionName: string, handler: (Player, ...any) -> any)
+	assert(IS_SERVER, "Net.Handle is server-only")
+	if handlers[actionName] then
+		warn("[Net] handler replaced: " .. actionName)
+	end
+	handlers[actionName] = handler
+end
+
+-- Client: send a request and wait for the reply. Never errors.
+function Net.Request(actionName: string, ...: any): Result
+	assert(not IS_SERVER, "Net.Request is client-only")
+	local remote = getRemote(ACTION_NAME) :: RemoteFunction
+	local args = table.pack(...)
+	local ok, result = pcall(function()
+		return remote:InvokeServer(actionName, table.unpack(args, 1, args.n))
+	end)
+	if not ok then
+		return Net.Fail("Connection problem")
+	end
+	if type(result) ~= "table" then
+		return Net.Fail("Bad reply")
+	end
+	return result :: Result
+end
+
+-- Server: fire one client.
+function Net.Fire(eventName: string, player: Player, ...: any)
+	local remote = getRemote(eventName) :: any
+	remote:FireClient(player, ...)
+end
+
+-- Server: fire every client.
+function Net.FireAll(eventName: string, ...: any)
+	local remote = getRemote(eventName) :: any
+	remote:FireAllClients(...)
+end
+
+-- Client: fire the server.
+function Net.FireServer(eventName: string, ...: any)
+	local remote = getRemote(eventName) :: any
+	remote:FireServer(...)
+end
+
+-- Listen to an event. Server callbacks receive (player, ...).
+function Net.On(eventName: string, callback: (...any) -> ()): RBXScriptConnection
+	local remote = getRemote(eventName) :: any
+	if IS_SERVER then
+		return remote.OnServerEvent:Connect(callback)
+	end
+	return remote.OnClientEvent:Connect(callback)
+end
+
+-- Server convenience: toast message for one player.
+-- kind: "info" | "success" | "error" | "cash"
+function Net.Notify(player: Player, text: string, kind: string?)
+	Net.Fire("Notify", player, text, kind or "info")
+end
+
+return Net
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="10">
+        <Properties>
+          <string name="Name">Rng</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Rng
+	Deterministic seeded random numbers (Park-Miller "minimal standard").
+	Identical results in Roblox and in the Lune test runner, so the server,
+	the client and the economy simulation all see the same runner course.
+
+		local rng = Rng.new(1234)
+		rng:Next()          -- [0, 1)
+		rng:Int(1, 6)       -- 1..6 inclusive
+		rng:Weighted(list, function(item) return item.weight end)
+]]
+
+export type Rng = {
+	Next: (self: Rng) -> number,
+	Int: (self: Rng, min: number, max: number) -> number,
+	Range: (self: Rng, min: number, max: number) -> number,
+	Chance: (self: Rng, p: number) -> boolean,
+	Pick: <T>(self: Rng, list: { T }) -> T,
+	Weighted: <T>(self: Rng, list: { T }, weightOf: (T) -> number) -> (T, number),
+	Shuffle: <T>(self: Rng, list: { T }) -> { T },
+}
+
+local MODULUS = 2147483647
+local MULTIPLIER = 48271
+
+local Rng = {}
+
+function Rng.new(seed: number): Rng
+	local state: number = math.floor(math.abs(seed)) % MODULUS
+	if state == 0 then
+		state = 1
+	end
+
+	local function nextNumber(): number
+		state = (state * MULTIPLIER) % MODULUS
+		return (state - 1) / (MODULUS - 1)
+	end
+
+	local function int(min: number, max: number): number
+		return min + math.floor(nextNumber() * (max - min + 1))
+	end
+
+	local rng = {}
+
+	function rng.Next(_self: Rng): number
+		return nextNumber()
+	end
+
+	function rng.Int(_self: Rng, min: number, max: number): number
+		return int(min, max)
+	end
+
+	function rng.Range(_self: Rng, min: number, max: number): number
+		return min + nextNumber() * (max - min)
+	end
+
+	function rng.Chance(_self: Rng, p: number): boolean
+		return nextNumber() < p
+	end
+
+	function rng.Pick<T>(_self: Rng, list: { T }): T
+		return list[int(1, #list)]
+	end
+
+	function rng.Weighted<T>(_self: Rng, list: { T }, weightOf: (T) -> number): (T, number)
+		local total = 0
+		for _, item in list do
+			total += math.max(0, weightOf(item))
+		end
+		local roll = nextNumber() * total
+		for index, item in list do
+			roll -= math.max(0, weightOf(item))
+			if roll < 0 then
+				return item, index
+			end
+		end
+		return list[#list], #list
+	end
+
+	function rng.Shuffle<T>(_self: Rng, list: { T }): { T }
+		for i = #list, 2, -1 do
+			local j = int(1, i)
+			list[i], list[j] = list[j], list[i]
+		end
+		return list
+	end
+
+	-- Warm up so nearby seeds diverge quickly.
+	for _ = 1, 3 do
+		nextNumber()
+	end
+	return (rng :: any) :: Rng
+end
+
+return Rng
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="11">
+        <Properties>
+          <string name="Name">Runner</string>
+        </Properties>
+        <Item class="ModuleScript" referent="12">
+          <Properties>
+            <string name="Name">RunnerCourse</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	RunnerCourse  (STUB written by the lead — ECON replaces the body, keeps the types/signature)
+	See docs/ARCHITECTURE.md §4.2.
+]]
+
+export type Option = {
+	lane: number,
+	x: number,
+	width: number,
+	op: string?,
+	amount: number?,
+	label: string,
+	tone: string,
+	cash: number?,
+	enemies: number?,
+	hp: number?,
+	reward: number?,
+}
+
+export type Row = { index: number, kind: string, distance: number, options: { Option } }
+
+export type Course = {
+	area: number,
+	level: number,
+	seed: number,
+	length: number,
+	rows: { Row },
+	boss: { distance: number, hp: number, reward: number },
+}
+
+local RunnerCourse = {}
+
+function RunnerCourse.Generate(area: number, level: number): Course
+	return { area = area, level = level, seed = level, length = 900, rows = {}, boss = { distance = 880, hp = 100, reward = 10 } }
+end
+
+return RunnerCourse
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="13">
+          <Properties>
+            <string name="Name">RunnerSim</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	RunnerSim  (STUB written by the lead — ECON replaces the bodies, keeps the types/signatures)
+	See docs/ARCHITECTURE.md §4.2.
+]]
+
+local RunnerCourse = require(script.Parent.RunnerCourse)
+
+export type Stats = { startTroops: number, damage: number, capacity: number, payoutBonus: number? }
+
+export type RowOutcome = {
+	row: number,
+	lane: number,
+	kind: string,
+	label: string,
+	troopsBefore: number,
+	troopsAfter: number,
+	cashBefore: number,
+	cashAfter: number,
+	weaponTier: number,
+	damageMult: number,
+	destroyed: boolean?,
+	note: string?,
+}
+
+export type Line = { kind: string, label: string, detail: string, value: number }
+
+export type Result = {
+	troops: number,
+	weaponTier: number,
+	damageMult: number,
+	collected: number,
+	carried: number,
+	outcomes: { RowOutcome },
+	lines: { Line },
+	total: number,
+}
+
+local RunnerSim = {}
+
+function RunnerSim.Resolve(_course: RunnerCourse.Course, stats: Stats, _choices: { number }): Result
+	return { troops = stats.startTroops, weaponTier = 1, damageMult = 1, collected = 0, carried = 0, outcomes = {}, lines = {}, total = 0 }
+end
+
+function RunnerSim.BestCase(course: RunnerCourse.Course, stats: Stats): (Result, { number })
+	return RunnerSim.Resolve(course, stats, {}), {}
+end
+
+function RunnerSim.MinDuration(_course: RunnerCourse.Course): number
+	return 30
+end
+
+return RunnerSim
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="ModuleScript" referent="14">
+        <Properties>
+          <string name="Name">Signal</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Signal
+	Tiny pure-Luau signal (no BindableEvents, safe to fire with tables).
+
+		local s = Signal.new()
+		local conn = s:Connect(function(a, b) ... end)
+		s:Fire(1, 2)
+		conn:Disconnect()
+]]
+
+export type Connection = {
+	Connected: boolean,
+	Disconnect: (self: Connection) -> (),
+}
+
+export type Signal = {
+	Connect: (self: Signal, fn: (...any) -> ()) -> Connection,
+	Once: (self: Signal, fn: (...any) -> ()) -> Connection,
+	Fire: (self: Signal, ...any) -> (),
+	Wait: (self: Signal) -> ...any,
+	DisconnectAll: (self: Signal) -> (),
+}
+
+local Signal = {}
+Signal.__index = Signal
+
+function Signal.new(): Signal
+	local self = setmetatable({ _handlers = {} :: { [any]: (...any) -> () } }, Signal)
+	return (self :: any) :: Signal
+end
+
+function Signal:Connect(fn: (...any) -> ()): Connection
+	local handlers = self._handlers
+	local connection = {} :: any
+	connection.Connected = true
+	function connection.Disconnect(c)
+		c.Connected = false
+		handlers[c] = nil
+	end
+	handlers[connection] = fn
+	return connection :: Connection
+end
+
+function Signal:Once(fn: (...any) -> ()): Connection
+	local connection: Connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		fn(...)
+	end)
+	return connection
+end
+
+function Signal:Fire(...: any)
+	-- Copy first so handlers may disconnect while we iterate.
+	local list = {}
+	for _, fn in self._handlers do
+		table.insert(list, fn)
+	end
+	for _, fn in list do
+		task.spawn(fn, ...)
+	end
+end
+
+function Signal:Wait(): ...any
+	local thread = coroutine.running()
+	self:Once(function(...)
+		task.spawn(thread, ...)
+	end)
+	return coroutine.yield()
+end
+
+function Signal:DisconnectAll()
+	for connection in self._handlers do
+		connection.Connected = false
+	end
+	table.clear(self._handlers)
+end
+
+return Signal
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="15">
+        <Properties>
+          <string name="Name">Types</string>
+          <string name="Source"><![CDATA[--!strict
+--[[
+	Types
+	Saved player data schema + defaults. All dictionary keys are strings so the
+	table can be stored in a DataStore and sent over remotes unchanged.
+]]
+
+export type SectionState = {
+	level: number, -- upgrade level, starts at 1
+	stock: number, -- sales left before a manual restock is needed
+	employee: boolean, -- true = auto-restocks
+}
+
+export type Item = {
+	id: string, -- EquipmentDefs item id
+	rarity: number, -- 1 Common .. 5 Legendary
+	level: number, -- upgrade level, starts at 1
+	perks: { string }?, -- perk ids rolled when the item dropped (Rare+), see EquipmentDefs
+}
+
+export type PlayerData = {
+	version: number,
+	cash: number,
+	lifetimeCash: number,
+
+	runner: {
+		level: number, -- run counter shown as "Level N" (image 2)
+		runs: number,
+		bestPayout: number,
+		-- Permanent upgrade levels bought before runs. [REQUIREMENT]
+		upgrades: { troops: number, damage: number, capacity: number },
+	},
+
+	base: {
+		highestArea: number, -- highest unlocked area (1..#Config.Areas)
+		sections: { [string]: SectionState }, -- key = slot id ("a1s2"); present = unlocked
+		barriers: { [string]: boolean }, -- key = tostring(area): barrier squad on that area's exit gate defeated
+		arenaUnlocked: boolean,
+	},
+
+	combat: {
+		highestLevel: number, -- highest Combat Arena level cleared
+		wins: number,
+		games: number,
+	},
+
+	inventory: { [string]: Item }, -- key = item uid
+	equipped: { weapon: string?, armour: string? },
+	nextUid: number,
+
+	vehicles: { owned: { [string]: boolean }, equipped: string? },
+
+	boosts: {
+		multiplierSeconds: number, -- remaining play-time of the 2x cash boost
+	},
+
+	employeeTokens: number, -- Robux employees bought but not yet assigned
+	receipts: { [string]: boolean }, -- processed purchase ids (idempotency)
+	receiptOrder: { string },
+
+	stats: {
+		playSeconds: number,
+		combatKills: number,
+		sectionsUnlocked: number,
+	},
+}
+
+local Types = {}
+
+Types.DATA_VERSION = 1
+
+-- Starter loadout (ids must exist in EquipmentDefs).
+Types.STARTER_WEAPON_ID = "w_pistol"
+Types.STARTER_ARMOUR_ID = "a_vest"
+
+function Types.DefaultData(): PlayerData
+	return {
+		version = Types.DATA_VERSION,
+		cash = 0,
+		lifetimeCash = 0,
+		runner = {
+			level = 1,
+			runs = 0,
+			bestPayout = 0,
+			upgrades = { troops = 0, damage = 0, capacity = 0 },
+		},
+		base = {
+			highestArea = 1,
+			sections = {},
+			barriers = {},
+			arenaUnlocked = false,
+		},
+		combat = { highestLevel = 0, wins = 0, games = 0 },
+		inventory = {
+			["1"] = { id = Types.STARTER_WEAPON_ID, rarity = 1, level = 1 },
+			["2"] = { id = Types.STARTER_ARMOUR_ID, rarity = 1, level = 1 },
+		},
+		equipped = { weapon = "1", armour = "2" },
+		nextUid = 3,
+		vehicles = { owned = {}, equipped = nil },
+		boosts = { multiplierSeconds = 0 },
+		employeeTokens = 0,
+		receipts = {},
+		receiptOrder = {},
+		stats = { playSeconds = 0, combatKills = 0, sectionsUnlocked = 0 },
+	}
+end
+
+local function deepCopy(value: any): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local out = {}
+	for k, v in value do
+		out[k] = deepCopy(v)
+	end
+	return out
+end
+Types.DeepCopy = deepCopy
+
+-- Fill any keys missing from `data` with defaults (used after loading old saves).
+function Types.Reconcile(data: any): PlayerData
+	local function fill(target: any, template: any)
+		for k, v in template do
+			if target[k] == nil then
+				target[k] = deepCopy(v)
+			elseif type(v) == "table" and type(target[k]) == "table" and next(v) ~= nil then
+				-- Only recurse into "struct" tables, not open maps such as inventory.
+				local isStruct = true
+				for key in v do
+					if type(key) ~= "string" or tonumber(key) ~= nil then
+						isStruct = false
+						break
+					end
+				end
+				if isStruct then
+					fill(target[k], v)
+				end
+			end
+		end
+	end
+	if type(data) ~= "table" then
+		return Types.DefaultData()
+	end
+	local template = Types.DefaultData()
+	-- Never re-add the starter items to an existing inventory.
+	template.inventory = {}
+	template.equipped = {}
+	fill(data, template)
+	return data :: PlayerData
+end
+
+return Types
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="16">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Folder" referent="17">
+      <Properties>
+        <string name="Name">Server</string>
+      </Properties>
+      <Item class="Script" referent="18">
+        <Properties>
+          <string name="Name">Main</string>
+          <token name="RunContext">0</token>
+          <string name="Source"><![CDATA[--[[
+	Server entry point.
+	Every ModuleScript directly inside Server/Services is a service:
+		Service.Priority (optional, higher = initialised first)
+		Service:Init(registry)  -- create state, register Net handlers (no cross-service calls)
+		Service:Start()         -- connect events, may call other services
+	`registry` maps service name -> service table, e.g. registry.DataService.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
+Net.Setup()
+
+local servicesFolder = script.Parent:WaitForChild("Services")
+local registry: { [string]: any } = {}
+local ordered = {}
+
+for _, module in servicesFolder:GetChildren() do
+	if module:IsA("ModuleScript") then
+		local ok, service = pcall(require, module)
+		if ok and type(service) == "table" then
+			registry[module.Name] = service
+			table.insert(ordered, { name = module.Name, service = service })
+		else
+			warn(("[Server] failed to load %s: %s"):format(module.Name, tostring(service)))
+		end
+	end
+end
+
+table.sort(ordered, function(a, b)
+	local pa, pb = a.service.Priority or 0, b.service.Priority or 0
+	if pa ~= pb then
+		return pa > pb
+	end
+	return a.name < b.name
+end)
+
+for _, entry in ordered do
+	if type(entry.service.Init) == "function" then
+		local ok, err = pcall(entry.service.Init, entry.service, registry)
+		if not ok then
+			warn(("[Server] %s:Init failed: %s"):format(entry.name, tostring(err)))
+		end
+	end
+end
+
+for _, entry in ordered do
+	if type(entry.service.Start) == "function" then
+		task.spawn(function()
+			local ok, err = pcall(entry.service.Start, entry.service)
+			if not ok then
+				warn(("[Server] %s:Start failed: %s"):format(entry.name, tostring(err)))
+			end
+		end)
+	end
+end
+
+print(("[Server] started %d services"):format(#ordered))
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="19">
+        <Properties>
+          <string name="Name">Services</string>
+        </Properties>
+        <Item class="ModuleScript" referent="20">
+          <Properties>
+            <string name="Name">DataService</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	DataService
+	Loads, saves and syncs PlayerData.
+
+	API (server):
+		DataService:Get(player): PlayerData?          -- live table, mutate it then MarkDirty
+		DataService:WaitFor(player, timeout?): PlayerData?
+		DataService:MarkDirty(player)                  -- sync to client soon + save later
+		DataService:AddCash(player, amount, opts?): number
+			opts.boostable = true -> multiplied by BoostService:GetCashMultiplier (2x boost)
+			opts.source = "runner" | "section" | "combat" | ... (for logging)
+			returns the amount actually added
+		DataService:CanAfford(player, amount): boolean
+		DataService:SpendCash(player, amount): boolean -- false = not enough cash
+		DataService:SaveNow(player): boolean
+		DataService.PlayerLoaded: Signal(player, data)
+		DataService.PlayerRemoving: Signal(player, data)  -- before the final save
+
+	Without DataStore access (e.g. an unpublished place in Studio) the game still
+	runs; progress just is not saved. See README.md to enable saving in Studio.
+]]
+
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Format = require(Shared.Format)
+local Net = require(Shared.Net)
+local Signal = require(Shared.Signal)
+local Types = require(Shared.Types)
+
+type PlayerData = Types.PlayerData
+
+local DataService = {}
+DataService.Priority = 100 -- initialised first
+DataService.PlayerLoaded = Signal.new()
+DataService.PlayerRemoving = Signal.new()
+
+local Services: { [string]: any } = {}
+local store: DataStore? = nil
+local profiles: { [Player]: PlayerData } = {}
+local dirtySave: { [Player]: boolean } = {}
+local dirtySync: { [Player]: boolean } = {}
+local loading: { [Player]: boolean } = {}
+
+local MAX_RECEIPTS = 60
+
+local function keyFor(player: Player): string
+	return "u_" .. player.UserId
+end
+
+local function withRetries<T>(label: string, fn: () -> T): (boolean, T?)
+	local delaySeconds = 1
+	for attempt = 1, 4 do
+		local ok, result = pcall(fn)
+		if ok then
+			return true, result
+		end
+		warn(("[DataService] %s failed (attempt %d): %s"):format(label, attempt, tostring(result)))
+		if attempt < 4 then
+			task.wait(delaySeconds)
+			delaySeconds *= 2
+		end
+	end
+	return false, nil
+end
+
+local function openStore()
+	local ok, result = pcall(function()
+		return DataStoreService:GetDataStore(Config.DataStoreName)
+	end)
+	if not ok then
+		warn("[DataService] DataStores unavailable, progress will NOT be saved: " .. tostring(result))
+		return
+	end
+	-- In Studio, a place without "Enable Studio Access to API Services" errors here.
+	local probeOk, probeErr = pcall(function()
+		(result :: DataStore):GetAsync("__probe")
+	end)
+	if not probeOk then
+		warn("[DataService] DataStores unavailable, progress will NOT be saved: " .. tostring(probeErr))
+		return
+	end
+	store = result
+end
+
+function DataService:Init(registry: { [string]: any })
+	Services = registry
+	task.spawn(openStore)
+
+	Net.Handle("RequestSync", function(player)
+		if profiles[player] then
+			dirtySync[player] = true
+		end
+		return nil
+	end)
+end
+
+function DataService:Start()
+	Players.PlayerAdded:Connect(function(player)
+		self:_load(player)
+	end)
+	for _, player in Players:GetPlayers() do
+		task.spawn(function()
+			self:_load(player)
+		end)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		self:_release(player)
+	end)
+
+	-- Batched client sync (at most ~7 times per second per player).
+	task.spawn(function()
+		while true do
+			task.wait(0.15)
+			for player in dirtySync do
+				dirtySync[player] = nil
+				local data = profiles[player]
+				if data and player.Parent then
+					Net.Fire("Sync", player, data)
+				end
+			end
+		end
+	end)
+
+	-- Play-time counter + autosave.
+	task.spawn(function()
+		local sinceSave = 0
+		while true do
+			task.wait(1)
+			sinceSave += 1
+			for _, data in profiles do
+				data.stats.playSeconds += 1
+			end
+			if sinceSave >= Config.AutosaveInterval then
+				sinceSave = 0
+				for player in dirtySave do
+					task.spawn(function()
+						self:SaveNow(player)
+					end)
+				end
+			end
+		end
+	end)
+
+	game:BindToClose(function()
+		if RunService:IsStudio() and not store then
+			return
+		end
+		local pending = 0
+		for _, player in Players:GetPlayers() do
+			pending += 1
+			task.spawn(function()
+				self:SaveNow(player)
+				pending -= 1
+			end)
+		end
+		local started = os.clock()
+		while pending > 0 and os.clock() - started < 25 do
+			task.wait(0.1)
+		end
+	end)
+end
+
+function DataService:_load(player: Player)
+	if profiles[player] or loading[player] then
+		return
+	end
+	loading[player] = true
+	-- Give openStore a moment on server start.
+	local waited = 0
+	while store == nil and waited < 3 do
+		task.wait(0.25)
+		waited += 0.25
+	end
+
+	local data: PlayerData
+	local activeStore = store
+	if activeStore then
+		local ok, saved = withRetries("load " .. player.Name, function()
+			return activeStore:GetAsync(keyFor(player))
+		end)
+		if not ok then
+			loading[player] = nil
+			player:Kick("Could not load your save data. Please rejoin in a minute (your progress is safe).")
+			return
+		end
+		data = if saved ~= nil then Types.Reconcile(saved) else Types.DefaultData()
+	else
+		data = Types.DefaultData()
+	end
+
+	loading[player] = nil
+	if not player.Parent then
+		return -- left while loading
+	end
+	profiles[player] = data
+	player:SetAttribute("DataLoaded", true)
+	dirtySync[player] = true
+	self.PlayerLoaded:Fire(player, data)
+end
+
+function DataService:_release(player: Player)
+	local data = profiles[player]
+	if not data then
+		return
+	end
+	self.PlayerRemoving:Fire(player, data)
+	self:SaveNow(player)
+	profiles[player] = nil
+	dirtySave[player] = nil
+	dirtySync[player] = nil
+end
+
+function DataService:Get(player: Player): PlayerData?
+	return profiles[player]
+end
+
+function DataService:WaitFor(player: Player, timeout: number?): PlayerData?
+	local limit = timeout or 30
+	local started = os.clock()
+	while not profiles[player] and player.Parent and os.clock() - started < limit do
+		task.wait(0.1)
+	end
+	return profiles[player]
+end
+
+function DataService:GetLoadedPlayers(): { Player }
+	local list = {}
+	for player in profiles do
+		table.insert(list, player)
+	end
+	return list
+end
+
+function DataService:MarkDirty(player: Player)
+	if profiles[player] then
+		dirtySave[player] = true
+		dirtySync[player] = true
+	end
+end
+
+function DataService:AddCash(player: Player, amount: number, opts: { boostable: boolean?, source: string? }?): number
+	local data = profiles[player]
+	if not data or amount ~= amount or amount <= 0 then
+		return 0
+	end
+	local final = amount
+	if opts and opts.boostable then
+		local boostService = Services.BoostService
+		if boostService and boostService.GetCashMultiplier then
+			final *= boostService:GetCashMultiplier(player)
+		end
+	end
+	final = Format.RoundCents(final)
+	data.cash = Format.RoundCents(data.cash + final)
+	data.lifetimeCash = Format.RoundCents(data.lifetimeCash + final)
+	self:MarkDirty(player)
+	return final
+end
+
+function DataService:CanAfford(player: Player, amount: number): boolean
+	local data = profiles[player]
+	return data ~= nil and amount == amount and data.cash + 1e-6 >= amount
+end
+
+function DataService:SpendCash(player: Player, amount: number): boolean
+	local data = profiles[player]
+	if not data or amount ~= amount or amount < 0 then
+		return false
+	end
+	if data.cash + 1e-6 < amount then
+		return false
+	end
+	data.cash = math.max(0, Format.RoundCents(data.cash - amount))
+	self:MarkDirty(player)
+	return true
+end
+
+-- Remember a processed purchase (MarketplaceService receipt idempotency).
+function DataService:HasReceipt(player: Player, purchaseId: string): boolean
+	local data = profiles[player]
+	return data ~= nil and data.receipts[purchaseId] == true
+end
+
+function DataService:AddReceipt(player: Player, purchaseId: string)
+	local data = profiles[player]
+	if not data then
+		return
+	end
+	data.receipts[purchaseId] = true
+	table.insert(data.receiptOrder, purchaseId)
+	while #data.receiptOrder > MAX_RECEIPTS do
+		local oldest = table.remove(data.receiptOrder, 1)
+		if oldest then
+			data.receipts[oldest] = nil
+		end
+	end
+	self:MarkDirty(player)
+end
+
+function DataService:SaveNow(player: Player): boolean
+	local data = profiles[player]
+	local activeStore = store
+	if not data or not activeStore then
+		return false
+	end
+	dirtySave[player] = nil
+	local ok = withRetries("save " .. player.Name, function()
+		activeStore:UpdateAsync(keyFor(player), function()
+			return data
+		end)
+		return true
+	end)
+	if not ok then
+		dirtySave[player] = true
+	end
+	return ok
+end
+
+function DataService:IsSaving(): boolean
+	return store ~= nil
+end
+
+return DataService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="21">
+          <Properties>
+            <string name="Name">ModeService</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	ModeService
+	Tracks what each player is doing and moves them between the three systems.
+
+	Modes: "Base" (home map, default) | "Runner" | "Combat"
+	The current mode is mirrored to the client as the Player attribute "Mode".
+	Each player also gets a stable slot number (1..Config.MaxSlots) that picks
+	their personal runner track and combat arena (see Layout).
+
+	API (server):
+		ModeService:GetMode(player): string
+		ModeService:SetMode(player, mode)
+		ModeService:GetSlot(player): number
+		ModeService:Teleport(player, cframe): boolean
+		ModeService:ReturnToBase(player)
+		ModeService.ModeChanged: Signal(player, newMode, oldMode)
+			Services that run sessions (runner, combat) listen to this and clean
+			up when a player leaves their mode for any reason (death, leaving...).
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Layout = require(Shared.Layout)
+local Signal = require(Shared.Signal)
+
+local ModeService = {}
+ModeService.Priority = 90
+ModeService.ModeChanged = Signal.new()
+
+local modes: { [Player]: string } = {}
+local slots: { [Player]: number } = {}
+local usedSlots: { [number]: Player } = {}
+local lastBaseCFrame: { [Player]: CFrame } = {}
+
+local function allocateSlot(player: Player): number
+	for i = 1, Config.MaxSlots do
+		if not usedSlots[i] then
+			usedSlots[i] = player
+			return i
+		end
+	end
+	-- More players than slots: share the last slot (tracks/arenas are per-client visuals anyway).
+	return Config.MaxSlots
+end
+
+function ModeService:Init(_registry: { [string]: any }) end
+
+function ModeService:Start()
+	local function onPlayer(player: Player)
+		slots[player] = allocateSlot(player)
+		modes[player] = "Base"
+		player:SetAttribute("Mode", "Base")
+		player:SetAttribute("Slot", slots[player])
+		player.CharacterAdded:Connect(function(character)
+			-- A respawn always lands you back at the base.
+			if modes[player] ~= "Base" then
+				self:SetMode(player, "Base")
+			end
+			local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
+			if humanoid then
+				humanoid.Died:Connect(function()
+					if modes[player] ~= "Base" then
+						self:SetMode(player, "Base")
+					end
+				end)
+			end
+		end)
+	end
+	Players.PlayerAdded:Connect(onPlayer)
+	for _, player in Players:GetPlayers() do
+		onPlayer(player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		local old = modes[player]
+		if old and old ~= "Base" then
+			self.ModeChanged:Fire(player, "Base", old)
+		end
+		local slot = slots[player]
+		if slot and usedSlots[slot] == player then
+			usedSlots[slot] = nil
+		end
+		modes[player] = nil
+		slots[player] = nil
+		lastBaseCFrame[player] = nil
+	end)
+end
+
+function ModeService:GetMode(player: Player): string
+	return modes[player] or "Base"
+end
+
+function ModeService:GetSlot(player: Player): number
+	return slots[player] or 1
+end
+
+function ModeService:SetMode(player: Player, mode: string)
+	local old = modes[player] or "Base"
+	if old == mode then
+		return
+	end
+	if old == "Base" then
+		-- Remember where the player was so we can bring them back there.
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root then
+			lastBaseCFrame[player] = root.CFrame
+		end
+	end
+	modes[player] = mode
+	player:SetAttribute("Mode", mode)
+	self.ModeChanged:Fire(player, mode, old)
+end
+
+function ModeService:Teleport(player: Player, cframe: CFrame): boolean
+	local character = player.Character
+	if not character then
+		return false
+	end
+	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return false
+	end
+	root.AssemblyLinearVelocity = Vector3.zero
+	character:PivotTo(cframe + Vector3.new(0, 3.5, 0))
+	return true
+end
+
+function ModeService:ReturnToBase(player: Player)
+	local target = lastBaseCFrame[player]
+	if not target then
+		target = CFrame.new(Layout.SpawnPosition())
+	end
+	self:SetMode(player, "Base")
+	self:Teleport(player, target)
+end
+
+return ModeService
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="22">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+      <float name="CameraMaxZoomDistance">90</float>
+      <float name="CameraMinZoomDistance">8</float>
+      <float name="CharacterJumpHeight">7.2</float>
+      <float name="CharacterWalkSpeed">20</float>
+      <bool name="LoadCharacterAppearance">true</bool>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="23">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="Folder" referent="24">
+        <Properties>
+          <string name="Name">Client</string>
+        </Properties>
+        <Item class="Folder" referent="25">
+          <Properties>
+            <string name="Name">Controllers</string>
+          </Properties>
+          <Item class="ModuleScript" referent="26">
+            <Properties>
+              <string name="Name">HUDController</string>
+              <string name="Source"><![CDATA[--!strict
+--[[
+	HUDController
+	Always-on HUD: cash pill (top-right, like both reference images), boost /
+	status chips under it, the left-hand menu of card buttons (base only) and
+	server toasts.
+
+	API (other controllers, call from Start):
+		HUD:AddMenuButton({
+			Id = "Run", Title = "Army Run", Icon = "🏃", Order = 1,
+			HeaderColor = Color3?, HeaderDarkColor = Color3?,
+			OnClick = function() end,
+			Visible = function(data) return true end,  -- optional, re-checked on every Sync
+		}) -> TextButton
+		HUD:AddStatusChip(id, color) -> { SetText(text), SetVisible(bool), Destroy() }
+		HUD:Toast(text, kind?)
+		HUD:GetGui() -> ScreenGui
+		HUD:SetMenuVisible(visible)   -- e.g. hide while a big panel is open
+]]
+
+local Players = game:GetService("Players")
+
+local Client = script.Parent.Parent
+local State = require(Client.State)
+local Theme = require(Client.UI.Theme)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+
+local P = Theme.Palette
+local _player = Players.LocalPlayer
+
+type MenuSpec = {
+	Id: string,
+	Title: string,
+	Icon: string,
+	Order: number?,
+	HeaderColor: Color3?,
+	HeaderDarkColor: Color3?,
+	OnClick: () -> (),
+	Visible: ((any) -> boolean)?,
+}
+
+type Chip = {
+	SetText: (string) -> (),
+	SetVisible: (boolean) -> (),
+	Destroy: () -> (),
+}
+
+local HUD = {}
+HUD.Priority = 80
+
+local gui: ScreenGui
+local menu: Frame
+local chips: Frame
+local setCash: (number) -> ()
+local menuEntries: { { spec: MenuSpec, button: TextButton } } = {}
+local menuForcedHidden = false
+
+local function refreshMenu()
+	local data = State.Get()
+	local inBase = State.Mode() == "Base"
+	menu.Visible = inBase and not menuForcedHidden
+	for _, entry in menuEntries do
+		local visible = true
+		if entry.spec.Visible and data then
+			local ok, result = pcall(entry.spec.Visible, data)
+			visible = ok and result == true
+		end
+		entry.button.Visible = visible
+	end
+end
+
+function HUD:Init(_registry: { [string]: any })
+	gui = Theme.ScreenGui("HUD", 5)
+
+	local topRight = Instance.new("Frame")
+	topRight.Name = "TopRight"
+	topRight.BackgroundTransparency = 1
+	topRight.AnchorPoint = Vector2.new(1, 0)
+	topRight.Position = UDim2.new(1, -18, 0, 16)
+	topRight.Size = UDim2.fromOffset(250, 400)
+	topRight.Parent = gui
+	Theme.ResponsiveScale(topRight)
+	local layout = Theme.List(topRight, "Vertical", 8, Enum.HorizontalAlignment.Right)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+
+	local pill, setter = Theme.CashPill({ LayoutOrder = 1, Parent = topRight })
+	pill.Size = UDim2.fromOffset(240, 58)
+	setCash = setter
+
+	chips = Instance.new("Frame")
+	chips.Name = "Chips"
+	chips.BackgroundTransparency = 1
+	chips.Size = UDim2.fromOffset(240, 300)
+	chips.LayoutOrder = 2
+	chips.Parent = topRight
+	local chipLayout = Theme.List(chips, "Vertical", 6, Enum.HorizontalAlignment.Right)
+	chipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+
+	menu = Instance.new("Frame")
+	menu.Name = "Menu"
+	menu.BackgroundTransparency = 1
+	menu.AnchorPoint = Vector2.new(0, 0.5)
+	menu.Position = UDim2.new(0, 16, 0.5, 0)
+	menu.Size = UDim2.fromOffset(124, 640)
+	menu.Parent = gui
+	Theme.ResponsiveScale(menu)
+	local menuLayout = Theme.List(menu, "Vertical", 10, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+	menuLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+end
+
+function HUD:Start()
+	local data = State.Get()
+	if data then
+		setCash(data.cash)
+	end
+	State.Changed:Connect(function(snapshot)
+		setCash(snapshot.cash)
+		refreshMenu()
+	end)
+	State.ModeChanged:Connect(refreshMenu)
+	Net.On("Notify", function(text: string, kind: string?)
+		Theme.Toast(text, kind)
+	end)
+	refreshMenu()
+end
+
+function HUD:GetGui(): ScreenGui
+	return gui
+end
+
+function HUD:Toast(text: string, kind: string?)
+	Theme.Toast(text, kind)
+end
+
+function HUD:SetMenuVisible(visible: boolean)
+	menuForcedHidden = not visible
+	refreshMenu()
+end
+
+-- Small card button: coloured header with the title, blue body with an icon.
+function HUD:AddMenuButton(spec: MenuSpec): TextButton
+	local button = Instance.new("TextButton")
+	button.Name = spec.Id
+	button.Text = ""
+	button.AutoButtonColor = false
+	button.BackgroundTransparency = 1
+	button.Size = UDim2.fromOffset(118, 104)
+	button.LayoutOrder = spec.Order or 10
+	button.Parent = menu
+
+	local card, body = Theme.Card({
+		Title = spec.Title,
+		HeaderColor = spec.HeaderColor or P.CardOrange,
+		HeaderDarkColor = spec.HeaderDarkColor or P.CardOrangeDark,
+		HeaderHeight = 30,
+		TitleSize = 20,
+		Size = UDim2.fromScale(1, 1),
+		Parent = button,
+	})
+	card.Active = false
+	Theme.Label({
+		Text = spec.Icon,
+		MaxTextSize = 44,
+		StrokeThickness = 0,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = card.ZIndex + 3,
+		Parent = body,
+	})
+
+	button.Activated:Connect(function()
+		Theme.Pop(button)
+		spec.OnClick()
+	end)
+	table.insert(menuEntries, { spec = spec, button = button })
+	refreshMenu()
+	return button
+end
+
+function HUD:AddStatusChip(id: string, color: Color3?): Chip
+	local chip = Instance.new("Frame")
+	chip.Name = id
+	chip.BackgroundColor3 = color or P.OfferPurple
+	chip.Size = UDim2.fromOffset(200, 38)
+	chip.Visible = false
+	chip.Parent = chips
+	Theme.Corner(chip, 0.5)
+	Theme.Stroke(chip, P.CardOutline, 2, true)
+	local label = Theme.Label({
+		Text = "",
+		MaxTextSize = 22,
+		Size = UDim2.new(1, -16, 1, -6),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = chip,
+	})
+	return {
+		SetText = function(text: string)
+			label.Text = text
+		end,
+		SetVisible = function(visible: boolean)
+			chip.Visible = visible
+		end,
+		Destroy = function()
+			chip:Destroy()
+		end,
+	}
+end
+
+return HUD
+]]></string>
+            </Properties>
+          </Item>
+        </Item>
+        <Item class="LocalScript" referent="27">
+          <Properties>
+            <string name="Name">Main</string>
+            <string name="Source"><![CDATA[--[[
+	Client entry point.
+	Every ModuleScript directly inside Client/Controllers is a controller:
+		Controller.Priority (optional, higher = initialised first)
+		Controller:Init(registry)  -- build UI, local state (no cross-controller calls)
+		Controller:Start()         -- connect events, may call other controllers
+	`registry` maps controller name -> controller table.
+]]
+
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local clientFolder = script.Parent
+
+-- Wait until the server has loaded our data (first Sync arrives right after).
+local State = require(clientFolder:WaitForChild("State"))
+State.Wait()
+
+local controllersFolder = clientFolder:WaitForChild("Controllers")
+local registry: { [string]: any } = {}
+local ordered = {}
+
+for _, module in controllersFolder:GetChildren() do
+	if module:IsA("ModuleScript") then
+		local ok, controller = pcall(require, module)
+		if ok and type(controller) == "table" then
+			registry[module.Name] = controller
+			table.insert(ordered, { name = module.Name, controller = controller })
+		else
+			warn(("[Client] failed to load %s: %s"):format(module.Name, tostring(controller)))
+		end
+	end
+end
+
+table.sort(ordered, function(a, b)
+	local pa, pb = a.controller.Priority or 0, b.controller.Priority or 0
+	if pa ~= pb then
+		return pa > pb
+	end
+	return a.name < b.name
+end)
+
+for _, entry in ordered do
+	if type(entry.controller.Init) == "function" then
+		local ok, err = pcall(entry.controller.Init, entry.controller, registry)
+		if not ok then
+			warn(("[Client] %s:Init failed: %s"):format(entry.name, tostring(err)))
+		end
+	end
+end
+
+for _, entry in ordered do
+	if type(entry.controller.Start) == "function" then
+		task.spawn(function()
+			local ok, err = pcall(entry.controller.Start, entry.controller)
+			if not ok then
+				warn(("[Client] %s:Start failed: %s"):format(entry.name, tostring(err)))
+			end
+		end)
+	end
+end
+
+print(("[Client] %s started %d controllers"):format(player.Name, #ordered))
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="28">
+          <Properties>
+            <string name="Name">State</string>
+            <string name="Source"><![CDATA[--!strict
+--[[
+	State (client)
+	Latest PlayerData snapshot pushed by the server's DataService.
+
+		local State = require(Client.State)
+		State.Get()                -- PlayerData? (read-only, never mutate)
+		State.Wait()               -- yields until the first snapshot
+		State.Changed:Connect(function(data) ... end)
+		State.Mode()               -- "Base" | "Runner" | "Combat"
+		State.ModeChanged:Connect(function(newMode, oldMode) ... end)
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+local Signal = require(Shared.Signal)
+local Types = require(Shared.Types)
+
+local player = Players.LocalPlayer
+
+local State = {}
+State.Changed = Signal.new()
+State.ModeChanged = Signal.new()
+
+local data: Types.PlayerData? = nil
+local currentMode: string = (player:GetAttribute("Mode") :: string?) or "Base"
+
+Net.On("Sync", function(snapshot: Types.PlayerData)
+	data = snapshot
+	State.Changed:Fire(snapshot)
+end)
+
+player:GetAttributeChangedSignal("Mode"):Connect(function()
+	local old = currentMode
+	currentMode = (player:GetAttribute("Mode") :: string?) or "Base"
+	if old ~= currentMode then
+		State.ModeChanged:Fire(currentMode, old)
+	end
+end)
+
+function State.Get(): Types.PlayerData?
+	return data
+end
+
+function State.Wait(): Types.PlayerData
+	if not data then
+		task.spawn(function()
+			-- Ask again in case the first push happened before we listened.
+			while not data do
+				Net.Request("RequestSync")
+				task.wait(2)
+			end
+		end)
+	end
+	while not data do
+		State.Changed:Wait()
+	end
+	return data :: Types.PlayerData
+end
+
+function State.Mode(): string
+	return currentMode
+end
+
+return State
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="Folder" referent="29">
+          <Properties>
+            <string name="Name">UI</string>
+          </Properties>
+          <Item class="ModuleScript" referent="30">
+            <Properties>
+              <string name="Name">ChestUI</string>
+              <string name="Source"><![CDATA[--!strict
+--[[
+	ChestUI  (STUB written by the lead — GEAR replaces the body, keeps the signature)
+	See docs/ARCHITECTURE.md §4.5.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+
+local ChestUI = {}
+
+function ChestUI.Play(_chestTier: string, _item: Types.Item, onDone: (() -> ())?)
+	if onDone then
+		onDone()
+	end
+end
+
+return ChestUI
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="31">
+            <Properties>
+              <string name="Name">InventoryUI</string>
+              <string name="Source"><![CDATA[--!strict
+--[[
+	InventoryUI  (STUB written by the lead — GEAR replaces the body, keeps the signature)
+	See docs/ARCHITECTURE.md §4.5.
+]]
+
+local InventoryUI = {}
+
+export type OpenOptions = {
+	Title: string?,
+	ActionText: string?,
+	OnAction: (() -> ())?,
+	OnClose: (() -> ())?,
+}
+
+function InventoryUI.Open(opts: OpenOptions): () -> ()
+	if opts.OnAction then
+		opts.OnAction()
+	end
+	return function() end
+end
+
+return InventoryUI
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="32">
+            <Properties>
+              <string name="Name">Theme</string>
+              <string name="Source"><![CDATA[--!strict
+--[[
+	Theme (client UI kit)
+	Builds every piece of UI in the look of the reference images: chunky
+	FredokaOne text with dark outlines, black currency pill with a gold coin,
+	orange-header / blue-body cards, green money tags, rounded glossy buttons.
+	No image assets are needed (coins and icons are drawn with frames/emoji).
+
+	Most functions take a props table. Common props:
+		Name, Parent, Size, Position, AnchorPoint, LayoutOrder, ZIndex, Visible
+
+	Quick reference:
+		Theme.ScreenGui(name, displayOrder?) -> ScreenGui
+		Theme.Label({ Text, TextColor3?, MaxTextSize?, StrokeThickness?, ... }) -> TextLabel
+		Theme.Button({ Text, Color?, DarkColor?, OnClick, MaxTextSize?, ... }) -> TextButton
+		Theme.SetButtonEnabled(button, enabled)
+		Theme.Card({ Title, HeaderColor?, HeaderDarkColor?, BodyColor?, BodyDarkColor?, ... }) -> (card, body)
+		Theme.Panel({ Title, HeaderColor?, OnClose?, Size? }) -> (panel, content, close)
+		Theme.CoinIcon({ ... }) -> Frame
+		Theme.CashPill({ ... }) -> (Frame, setAmount(number))
+		Theme.MoneyTag({ Text, ... }) -> (Frame, setText(string))
+		Theme.Banner({ Text, ... }) -> (Frame, setText(string))
+		Theme.PurchaseDialog({ Title, Description, RobuxPrice?, RobuxEnabled?, CashPrice?, OnRobux?, OnCash? })
+		Theme.Confirm({ Title, Body, ConfirmText?, OnConfirm })
+		Theme.Toast(text, kind?)
+		Theme.FloatText(worldPosition, text, color?)
+		Theme.Billboard({ Adornee?, Parent, Size, StudsOffset?, AlwaysOnTop?, MaxDistance? }) -> BillboardGui
+		Theme.RarityColor(rarity) -> Color3
+		Theme.Tween(instance, goals, duration?, style?, direction?) -> Tween
+		Theme.Pop(guiObject)
+		Theme.Corner/Stroke/Gradient/Padding/List/AspectRatio helpers
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Format = require(Shared.Format)
+
+local P = Config.Palette
+local player = Players.LocalPlayer
+
+local Theme = {}
+Theme.Palette = P
+Theme.Font = Config.Font
+
+type Props = { [string]: any }
+
+local GENERIC_KEYS = {
+	"Name",
+	"Size",
+	"Position",
+	"AnchorPoint",
+	"LayoutOrder",
+	"ZIndex",
+	"Visible",
+	"BackgroundColor3",
+	"BackgroundTransparency",
+	"ClipsDescendants",
+	"AutomaticSize",
+	"Rotation",
+}
+
+local function applyGeneric(instance: Instance, props: Props)
+	local target = instance :: any
+	for _, key in GENERIC_KEYS do
+		if props[key] ~= nil then
+			target[key] = props[key]
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+-- Low-level helpers
+-------------------------------------------------------------------------------
+
+-- Generic creator: Theme.New("Frame", { Size = ..., Parent = ... }, { children })
+function Theme.New(className: string, props: Props?, children: { Instance }?): Instance
+	local instance = Instance.new(className) :: any
+	local parent = nil
+	if props then
+		for key, value in props do
+			if key == "Parent" then
+				parent = value
+			else
+				instance[key] = value
+			end
+		end
+	end
+	if children then
+		for _, child in children do
+			child.Parent = instance
+		end
+	end
+	if parent then
+		instance.Parent = parent
+	end
+	return instance
+end
+
+function Theme.Corner(parent: Instance, radius: number?): UICorner
+	local c = Instance.new("UICorner")
+	c.CornerRadius = if radius and radius < 1 and radius > 0 then UDim.new(radius, 0) else UDim.new(0, radius or 12)
+	c.Parent = parent
+	return c
+end
+
+-- isBorder = true draws an outline around a frame; otherwise it outlines text.
+function Theme.Stroke(parent: Instance, color: Color3?, thickness: number?, isBorder: boolean?): UIStroke
+	local s = Instance.new("UIStroke")
+	s.Color = color or P.TextStroke
+	s.Thickness = thickness or 2.5
+	s.LineJoinMode = Enum.LineJoinMode.Round
+	s.ApplyStrokeMode = if isBorder then Enum.ApplyStrokeMode.Border else Enum.ApplyStrokeMode.Contextual
+	s.Parent = parent
+	return s
+end
+
+function Theme.Gradient(parent: Instance, top: Color3, bottom: Color3, rotation: number?): UIGradient
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new(top, bottom)
+	g.Rotation = rotation or 90
+	g.Parent = parent
+	return g
+end
+
+function Theme.Padding(parent: Instance, px: number, py: number?): UIPadding
+	local p = Instance.new("UIPadding")
+	local vertical = py or px
+	p.PaddingLeft = UDim.new(0, px)
+	p.PaddingRight = UDim.new(0, px)
+	p.PaddingTop = UDim.new(0, vertical)
+	p.PaddingBottom = UDim.new(0, vertical)
+	p.Parent = parent
+	return p
+end
+
+-- direction: "Vertical" | "Horizontal"
+function Theme.List(
+	parent: Instance,
+	direction: string?,
+	padding: number?,
+	hAlign: Enum.HorizontalAlignment?,
+	vAlign: Enum.VerticalAlignment?
+): UIListLayout
+	local l = Instance.new("UIListLayout")
+	l.FillDirection = if direction == "Horizontal" then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
+	l.Padding = UDim.new(0, padding or 8)
+	l.SortOrder = Enum.SortOrder.LayoutOrder
+	l.HorizontalAlignment = hAlign or Enum.HorizontalAlignment.Center
+	l.VerticalAlignment = vAlign or Enum.VerticalAlignment.Top
+	l.Parent = parent
+	return l
+end
+
+function Theme.AspectRatio(parent: Instance, ratio: number): UIAspectRatioConstraint
+	local a = Instance.new("UIAspectRatioConstraint")
+	a.AspectRatio = ratio
+	a.Parent = parent
+	return a
+end
+
+function Theme.Tween(
+	instance: Instance,
+	goals: { [string]: any },
+	duration: number?,
+	style: Enum.EasingStyle?,
+	direction: Enum.EasingDirection?
+): Tween
+	local tween = TweenService:Create(
+		instance,
+		TweenInfo.new(duration or 0.25, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out),
+		goals
+	)
+	tween:Play()
+	return tween
+end
+
+local function getScale(gui: GuiObject): UIScale
+	local scale = gui:FindFirstChild("ThemePopScale") :: UIScale?
+	if not scale then
+		local created = Instance.new("UIScale")
+		created.Name = "ThemePopScale"
+		created.Parent = gui
+		scale = created
+	end
+	return scale :: UIScale
+end
+
+-- Quick "bounce" used when something is bought / appears.
+function Theme.Pop(gui: GuiObject)
+	local scale = getScale(gui)
+	scale.Scale = 0.85
+	Theme.Tween(scale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
+end
+
+function Theme.RarityColor(rarity: number): Color3
+	return P.Rarity[math.clamp(rarity, 1, #P.Rarity)]
+end
+
+function Theme.RarityName(rarity: number): string
+	local def = Config.Rarities[math.clamp(rarity, 1, #Config.Rarities)]
+	return def.name
+end
+
+-- Shrinks UI on small (phone) screens, grows it a little on big screens.
+function Theme.ResponsiveScale(gui: GuiObject, baseHeight: number?): UIScale
+	local scale = Instance.new("UIScale")
+	scale.Name = "ResponsiveScale"
+	scale.Parent = gui
+	local function update()
+		local camera = Workspace.CurrentCamera
+		local height = if camera then camera.ViewportSize.Y else 800
+		scale.Scale = math.clamp(height / (baseHeight or 820), 0.55, 1.25)
+	end
+	update()
+	local camera = Workspace.CurrentCamera
+	if camera then
+		camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+	end
+	return scale
+end
+
+-------------------------------------------------------------------------------
+-- Building blocks
+-------------------------------------------------------------------------------
+
+function Theme.ScreenGui(name: string, displayOrder: number?): ScreenGui
+	local playerGui = player:WaitForChild("PlayerGui")
+	local existing = playerGui:FindFirstChild(name)
+	if existing and existing:IsA("ScreenGui") then
+		return existing
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = name
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.DisplayOrder = displayOrder or 0
+	gui.Parent = playerGui
+	return gui
+end
+
+-- Bold outlined label. Text scales to fit, up to MaxTextSize.
+function Theme.Label(props: Props): TextLabel
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Font = Config.Font
+	label.Text = props.Text or ""
+	label.TextColor3 = props.TextColor3 or P.White
+	label.TextScaled = true
+	label.TextWrapped = props.TextWrapped ~= false
+	label.RichText = props.RichText == true
+	label.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Center
+	label.TextYAlignment = props.TextYAlignment or Enum.TextYAlignment.Center
+	label.Size = UDim2.fromScale(1, 1)
+	applyGeneric(label, props)
+	local limit = Instance.new("UITextSizeConstraint")
+	limit.MaxTextSize = props.MaxTextSize or 32
+	limit.MinTextSize = props.MinTextSize or 8
+	limit.Parent = label
+	if props.StrokeThickness ~= 0 then
+		Theme.Stroke(label, props.StrokeColor, props.StrokeThickness or 2.5)
+	end
+	if props.Parent then
+		label.Parent = props.Parent
+	end
+	return label
+end
+
+local function darken(color: Color3, amount: number): Color3
+	local h, s, v = color:ToHSV()
+	return Color3.fromHSV(h, s, math.clamp(v * (1 - amount), 0, 1))
+end
+Theme.Darken = darken
+
+local function lighten(color: Color3, amount: number): Color3
+	return color:Lerp(Color3.new(1, 1, 1), amount)
+end
+Theme.Lighten = lighten
+
+-- Glossy rounded button with a darker "lip" underneath (pressable look).
+function Theme.Button(props: Props): TextButton
+	local color: Color3 = props.Color or P.ButtonGreen
+	local dark: Color3 = props.DarkColor or darken(color, 0.3)
+
+	local button = Instance.new("TextButton")
+	button.AutoButtonColor = false
+	button.Text = ""
+	button.BackgroundColor3 = dark
+	button.Size = UDim2.fromOffset(200, 60)
+	applyGeneric(button, props)
+	button.BackgroundColor3 = dark
+	Theme.Corner(button, props.CornerRadius or 14)
+	Theme.Stroke(button, P.CardOutline, 2.5, true)
+
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.BackgroundColor3 = color
+	face.Size = UDim2.new(1, 0, 1, -5)
+	face.ZIndex = button.ZIndex
+	face.Parent = button
+	Theme.Corner(face, props.CornerRadius or 14)
+	Theme.Gradient(face, lighten(color, 0.18), color)
+
+	local label = Theme.Label({
+		Name = "Label",
+		Text = props.Text or "",
+		MaxTextSize = props.MaxTextSize or 28,
+		Size = UDim2.new(1, -16, 1, -8),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		ZIndex = button.ZIndex + 1,
+		RichText = props.RichText,
+		Parent = face,
+	})
+	label.Name = "Label"
+
+	local scale = getScale(button)
+	button.MouseButton1Down:Connect(function()
+		Theme.Tween(scale, { Scale = 0.94 }, 0.08)
+	end)
+	button.MouseButton1Up:Connect(function()
+		Theme.Tween(scale, { Scale = 1 }, 0.12, Enum.EasingStyle.Back)
+	end)
+	button.MouseLeave:Connect(function()
+		Theme.Tween(scale, { Scale = 1 }, 0.12)
+	end)
+	if props.OnClick then
+		button.Activated:Connect(function()
+			if button:GetAttribute("Disabled") then
+				return
+			end
+			props.OnClick()
+		end)
+	end
+	button:SetAttribute("BaseColor", color)
+	button:SetAttribute("BaseDarkColor", dark)
+	if props.Parent then
+		button.Parent = props.Parent
+	end
+	return button
+end
+
+function Theme.SetButtonText(button: TextButton, text: string)
+	local face = button:FindFirstChild("Face")
+	local label = face and face:FindFirstChild("Label") :: TextLabel?
+	if label then
+		label.Text = text
+	end
+end
+
+-- Greys a Theme.Button out (and ignores clicks) or restores its colour.
+function Theme.SetButtonEnabled(button: TextButton, enabled: boolean)
+	button:SetAttribute("Disabled", not enabled)
+	local face = button:FindFirstChild("Face") :: Frame?
+	local base = button:GetAttribute("BaseColor") :: Color3?
+	local baseDark = button:GetAttribute("BaseDarkColor") :: Color3?
+	if face and base and baseDark then
+		local color = if enabled then base else P.ButtonGrey
+		face.BackgroundColor3 = color
+		button.BackgroundColor3 = if enabled then baseDark else P.ButtonGreyDark
+		local gradient = face:FindFirstChildOfClass("UIGradient")
+		if gradient then
+			gradient.Color = ColorSequence.new(lighten(color, 0.18), color)
+		end
+	end
+end
+
+-- Gold coin drawn from frames (matches the coin in both reference images).
+function Theme.CoinIcon(props: Props): Frame
+	local coin = Instance.new("Frame")
+	coin.Name = "Coin"
+	coin.BackgroundColor3 = P.CoinDark
+	coin.Size = UDim2.fromOffset(40, 40)
+	applyGeneric(coin, props)
+	Theme.Corner(coin, 0.5)
+	Theme.Stroke(coin, P.TextStroke, 2, true)
+	Theme.AspectRatio(coin, 1)
+
+	local inner = Instance.new("Frame")
+	inner.Name = "Inner"
+	inner.AnchorPoint = Vector2.new(0.5, 0.5)
+	inner.Position = UDim2.fromScale(0.5, 0.5)
+	inner.Size = UDim2.fromScale(0.74, 0.74)
+	inner.BackgroundColor3 = P.Coin
+	inner.ZIndex = coin.ZIndex
+	inner.Parent = coin
+	Theme.Corner(inner, 0.5)
+	Theme.Gradient(inner, P.CoinShine, P.Coin, 45)
+	if props.Parent then
+		coin.Parent = props.Parent
+	end
+	return coin
+end
+
+-- Black rounded currency pill: [coin] $1,562.50 (top-right of both images).
+function Theme.CashPill(props: Props): (Frame, (number) -> ())
+	local pill = Instance.new("Frame")
+	pill.Name = props.Name or "CashPill"
+	pill.BackgroundColor3 = P.PillBlack
+	pill.BackgroundTransparency = 0.05
+	pill.Size = UDim2.fromOffset(240, 58)
+	applyGeneric(pill, props)
+	Theme.Corner(pill, 0.5)
+
+	local coin = Theme.CoinIcon({
+		Size = UDim2.new(0, 0, 1, 8),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, -6, 0.5, 0),
+		ZIndex = pill.ZIndex + 1,
+		Parent = pill,
+	})
+	coin.Size = UDim2.fromScale(0, 1.15)
+	coin.AutomaticSize = Enum.AutomaticSize.None
+	local aspect = coin:FindFirstChildOfClass("UIAspectRatioConstraint")
+	if aspect then
+		aspect.DominantAxis = Enum.DominantAxis.Height
+	end
+
+	local label = Theme.Label({
+		Name = "Amount",
+		Text = Format.Money(0),
+		MaxTextSize = 34,
+		Size = UDim2.new(1, -70, 0.78, 0),
+		Position = UDim2.new(0, 58, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = pill.ZIndex + 1,
+		Parent = pill,
+	})
+
+	local shown = 0
+	local target = 0
+	local animating = false
+	local function setAmount(amount: number)
+		target = amount
+		if animating then
+			return
+		end
+		animating = true
+		task.spawn(function()
+			local from = shown
+			local started = os.clock()
+			local duration = if math.abs(target - from) > 0 then 0.45 else 0
+			while os.clock() - started < duration do
+				local alpha = (os.clock() - started) / duration
+				alpha = 1 - (1 - alpha) ^ 3
+				shown = from + (target - from) * alpha
+				label.Text = Format.Money(shown)
+				task.wait()
+				if target ~= amount then
+					-- New target arrived mid-animation: restart from where we are.
+					from = shown
+					amount = target
+					started = os.clock()
+				end
+			end
+			shown = target
+			label.Text = Format.Money(shown)
+			animating = false
+		end)
+		if target > shown + 0.001 then
+			Theme.Pop(pill)
+		end
+	end
+	if props.Parent then
+		pill.Parent = props.Parent
+	end
+	return pill, setAmount
+end
+
+-- Green money tag floating above the runner squad ("$122.50" in image 2).
+function Theme.MoneyTag(props: Props): (Frame, (string) -> ())
+	local tag = Instance.new("Frame")
+	tag.Name = props.Name or "MoneyTag"
+	tag.BackgroundColor3 = P.MoneyGreenDark
+	tag.Size = UDim2.fromOffset(130, 44)
+	applyGeneric(tag, props)
+	Theme.Corner(tag, 10)
+	Theme.Stroke(tag, P.CardOutline, 2, true)
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.BackgroundColor3 = P.MoneyGreen
+	face.Size = UDim2.new(1, 0, 1, -4)
+	face.ZIndex = tag.ZIndex
+	face.Parent = tag
+	Theme.Corner(face, 10)
+	local label = Theme.Label({
+		Text = props.Text or "",
+		MaxTextSize = props.MaxTextSize or 30,
+		Size = UDim2.new(1, -10, 1, -4),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		ZIndex = tag.ZIndex + 1,
+		Parent = face,
+	})
+	if props.Parent then
+		tag.Parent = props.Parent
+	end
+	return tag, function(text: string)
+		label.Text = text
+	end
+end
+
+-- Black banner with white text ("Level 39" in image 2).
+function Theme.Banner(props: Props): (Frame, (string) -> ())
+	local banner = Instance.new("Frame")
+	banner.Name = props.Name or "Banner"
+	banner.BackgroundColor3 = P.PillBlack
+	banner.Size = UDim2.fromOffset(290, 48)
+	applyGeneric(banner, props)
+	Theme.Corner(banner, 8)
+	Theme.Stroke(banner, Color3.fromRGB(60, 60, 70), 2, true)
+	local label = Theme.Label({
+		Text = props.Text or "",
+		MaxTextSize = props.MaxTextSize or 32,
+		Size = UDim2.new(1, -16, 1, -8),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		StrokeThickness = 0,
+		ZIndex = banner.ZIndex + 1,
+		Parent = banner,
+	})
+	if props.Parent then
+		banner.Parent = props.Parent
+	end
+	return banner, function(text: string)
+		label.Text = text
+	end
+end
+
+-- Card with coloured header and blue body ("Coin Magnet" card in image 2).
+-- Returns the card and its body frame (put content in the body).
+function Theme.Card(props: Props): (Frame, Frame)
+	local headerColor: Color3 = props.HeaderColor or P.CardOrange
+	local headerDark: Color3 = props.HeaderDarkColor or P.CardOrangeDark
+	local bodyColor: Color3 = props.BodyColor or P.CardBlue
+	local bodyDark: Color3 = props.BodyDarkColor or P.CardBlueDark
+	local headerHeight: number = props.HeaderHeight or 40
+
+	local card = Instance.new("Frame")
+	card.Name = props.Name or "Card"
+	card.BackgroundColor3 = bodyDark
+	card.Size = UDim2.fromOffset(180, 220)
+	applyGeneric(card, props)
+	card.ClipsDescendants = false
+	Theme.Corner(card, 14)
+	Theme.Stroke(card, P.CardOutline, 3, true)
+
+	local bodyFill = Instance.new("Frame")
+	bodyFill.Name = "BodyFill"
+	bodyFill.BackgroundColor3 = bodyColor
+	bodyFill.Size = UDim2.fromScale(1, 1)
+	bodyFill.ZIndex = card.ZIndex
+	bodyFill.Parent = card
+	Theme.Corner(bodyFill, 14)
+	Theme.Gradient(bodyFill, lighten(bodyColor, 0.1), bodyDark)
+
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.BackgroundColor3 = headerColor
+	header.Size = UDim2.new(1, 0, 0, headerHeight)
+	header.ZIndex = card.ZIndex + 1
+	header.Parent = card
+	Theme.Corner(header, 14)
+	Theme.Gradient(header, lighten(headerColor, 0.15), headerDark)
+	-- square off the header's bottom corners
+	local headerBottom = Instance.new("Frame")
+	headerBottom.BorderSizePixel = 0
+	headerBottom.BackgroundColor3 = headerDark
+	headerBottom.Size = UDim2.new(1, 0, 0, 12)
+	headerBottom.Position = UDim2.new(0, 0, 1, -12)
+	headerBottom.ZIndex = card.ZIndex + 1
+	headerBottom.Parent = header
+
+	Theme.Label({
+		Name = "Title",
+		Text = props.Title or "",
+		MaxTextSize = props.TitleSize or 26,
+		Size = UDim2.new(1, -14, 1, -6),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		ZIndex = card.ZIndex + 2,
+		Parent = header,
+	})
+
+	local body = Instance.new("Frame")
+	body.Name = "Body"
+	body.BackgroundTransparency = 1
+	body.Position = UDim2.fromOffset(0, headerHeight)
+	body.Size = UDim2.new(1, 0, 1, -headerHeight)
+	body.ZIndex = card.ZIndex + 1
+	body.Parent = card
+	Theme.Padding(body, 8)
+
+	if props.Parent then
+		card.Parent = props.Parent
+	end
+	return card, body
+end
+
+local modalGui: ScreenGui? = nil
+local function getModalGui(): ScreenGui
+	if not modalGui then
+		modalGui = Theme.ScreenGui("ThemeModals", 50)
+	end
+	return modalGui :: ScreenGui
+end
+
+-- Centered modal panel with a dimmed background and a red close button.
+-- Returns (panel, content, close()).
+function Theme.Panel(props: Props): (Frame, Frame, () -> ())
+	local gui = props.Gui or getModalGui()
+	local shade = Instance.new("TextButton")
+	shade.Name = (props.Name or "Panel") .. "Shade"
+	shade.AutoButtonColor = false
+	shade.Text = ""
+	shade.BackgroundColor3 = P.Shade
+	shade.BackgroundTransparency = 0.45
+	shade.Size = UDim2.fromScale(1, 1)
+	shade.ZIndex = 10
+	shade.Parent = gui
+
+	local card, body = Theme.Card({
+		Name = props.Name or "Panel",
+		Title = props.Title or "",
+		HeaderColor = props.HeaderColor,
+		HeaderDarkColor = props.HeaderDarkColor,
+		BodyColor = props.BodyColor or P.PanelBlue,
+		BodyDarkColor = props.BodyDarkColor or P.PanelBlueDark,
+		HeaderHeight = 54,
+		TitleSize = 34,
+		Size = props.Size or UDim2.fromOffset(560, 440),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		ZIndex = 11,
+		Parent = shade,
+	})
+	Theme.ResponsiveScale(card)
+
+	local closed = false
+	local function close()
+		if closed then
+			return
+		end
+		closed = true
+		shade:Destroy()
+		if props.OnClose then
+			props.OnClose()
+		end
+	end
+
+	if props.Closable ~= false then
+		local closeButton = Theme.Button({
+			Name = "Close",
+			Text = "X",
+			Color = P.ButtonRed,
+			Size = UDim2.fromOffset(46, 46),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(1, -6, 0, 6),
+			ZIndex = 20,
+			MaxTextSize = 26,
+			OnClick = close,
+			Parent = card,
+		})
+		closeButton.ZIndex = 20
+	end
+
+	Theme.Pop(card)
+	return card, body, close
+end
+
+-- Two-route purchase dialog used for employees, boosts and vehicles:
+-- [ R$ 200 ]  or  [ (coin) $12,345 ]
+function Theme.PurchaseDialog(props: Props): () -> ()
+	local _, content, close = Theme.Panel({
+		Name = "PurchaseDialog",
+		Title = props.Title or "Buy",
+		HeaderColor = props.HeaderColor or P.OfferPurple,
+		HeaderDarkColor = props.HeaderDarkColor or P.OfferPurpleDark,
+		Size = UDim2.fromOffset(520, 360),
+		OnClose = props.OnClose,
+	})
+	Theme.List(content, "Vertical", 12)
+
+	Theme.Label({
+		Name = "Description",
+		Text = props.Description or "",
+		MaxTextSize = 24,
+		Size = UDim2.new(1, 0, 0, 110),
+		LayoutOrder = 1,
+		ZIndex = 13,
+		Parent = content,
+	})
+
+	local row = Instance.new("Frame")
+	row.Name = "Buttons"
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 74)
+	row.LayoutOrder = 2
+	row.ZIndex = 13
+	row.Parent = content
+	Theme.List(row, "Horizontal", 14, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+
+	if props.RobuxPrice then
+		local robuxButton = Theme.Button({
+			Name = "Robux",
+			Text = if props.RobuxEnabled == false then "Robux not set up" else Format.Robux(props.RobuxPrice),
+			Color = P.Robux,
+			DarkColor = P.RobuxDark,
+			Size = UDim2.fromOffset(210, 70),
+			ZIndex = 14,
+			LayoutOrder = 1,
+			OnClick = function()
+				close()
+				if props.OnRobux then
+					props.OnRobux()
+				end
+			end,
+			Parent = row,
+		})
+		if props.RobuxEnabled == false then
+			Theme.SetButtonEnabled(robuxButton, false)
+		end
+	end
+
+	if props.CashPrice then
+		local cashButton = Theme.Button({
+			Name = "Cash",
+			Text = "      " .. Format.Money(props.CashPrice),
+			Color = P.ButtonGreen,
+			DarkColor = P.ButtonGreenDark,
+			Size = UDim2.fromOffset(230, 70),
+			ZIndex = 14,
+			LayoutOrder = 2,
+			OnClick = function()
+				close()
+				if props.OnCash then
+					props.OnCash()
+				end
+			end,
+			Parent = row,
+		})
+		Theme.CoinIcon({
+			Size = UDim2.fromOffset(34, 34),
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 12, 0.5, -2),
+			ZIndex = 16,
+			Parent = cashButton,
+		})
+		if props.CashAffordable == false then
+			Theme.SetButtonEnabled(cashButton, false)
+		end
+	end
+
+	if props.Footnote then
+		Theme.Label({
+			Name = "Footnote",
+			Text = props.Footnote,
+			MaxTextSize = 18,
+			TextColor3 = Color3.fromRGB(220, 235, 255),
+			Size = UDim2.new(1, 0, 0, 40),
+			LayoutOrder = 3,
+			ZIndex = 13,
+			Parent = content,
+		})
+	end
+	return close
+end
+
+function Theme.Confirm(props: Props): () -> ()
+	local _, content, close = Theme.Panel({
+		Name = "Confirm",
+		Title = props.Title or "Are you sure?",
+		Size = UDim2.fromOffset(480, 300),
+		OnClose = props.OnClose,
+	})
+	Theme.List(content, "Vertical", 12)
+	Theme.Label({
+		Text = props.Body or "",
+		MaxTextSize = 24,
+		Size = UDim2.new(1, 0, 0, 110),
+		LayoutOrder = 1,
+		ZIndex = 13,
+		Parent = content,
+	})
+	Theme.Button({
+		Text = props.ConfirmText or "Yes",
+		Color = props.ConfirmColor or P.ButtonGreen,
+		Size = UDim2.fromOffset(220, 64),
+		LayoutOrder = 2,
+		ZIndex = 14,
+		OnClick = function()
+			close()
+			props.OnConfirm()
+		end,
+		Parent = content,
+	})
+	return close
+end
+
+-------------------------------------------------------------------------------
+-- Toasts and floating world text
+-------------------------------------------------------------------------------
+local toastGui: ScreenGui? = nil
+local toastList: Frame? = nil
+
+local TOAST_COLORS = {
+	info = P.CardBlue,
+	success = P.ButtonGreen,
+	error = P.ButtonRed,
+	cash = P.MoneyGreen,
+}
+
+-- kind: "info" | "success" | "error" | "cash"
+function Theme.Toast(text: string, kind: string?)
+	if not toastGui then
+		toastGui = Theme.ScreenGui("ThemeToasts", 60)
+		local list = Instance.new("Frame")
+		list.Name = "List"
+		list.BackgroundTransparency = 1
+		list.AnchorPoint = Vector2.new(0.5, 0)
+		list.Position = UDim2.new(0.5, 0, 0, 86)
+		list.Size = UDim2.fromOffset(520, 300)
+		list.Parent = toastGui
+		Theme.List(list, "Vertical", 6)
+		toastList = list
+	end
+	local color = TOAST_COLORS[kind or "info"] or P.CardBlue
+	local toast = Instance.new("Frame")
+	toast.BackgroundColor3 = color
+	toast.Size = UDim2.fromOffset(460, 46)
+	toast.LayoutOrder = math.floor(os.clock() * 100)
+	toast.Parent = toastList
+	Theme.Corner(toast, 12)
+	Theme.Stroke(toast, P.CardOutline, 2.5, true)
+	Theme.Label({ Text = text, MaxTextSize = 24, Size = UDim2.new(1, -16, 1, -6), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Parent = toast })
+	Theme.Pop(toast)
+	task.delay(2.6, function()
+		Theme.Tween(toast, { BackgroundTransparency = 1 }, 0.3)
+		task.wait(0.3)
+		toast:Destroy()
+	end)
+end
+
+function Theme.Billboard(props: Props): BillboardGui
+	local board = Instance.new("BillboardGui")
+	board.Name = props.Name or "Billboard"
+	board.Size = props.Size or UDim2.fromOffset(200, 60)
+	board.StudsOffset = props.StudsOffset or Vector3.new(0, 3, 0)
+	board.AlwaysOnTop = props.AlwaysOnTop == true
+	board.MaxDistance = props.MaxDistance or 160
+	board.LightInfluence = 0
+	board.ResetOnSpawn = false
+	if props.Adornee then
+		board.Adornee = props.Adornee
+	end
+	board.Parent = props.Parent
+	return board
+end
+
+-- Rising, fading text in the world ("+$12.50" over a shop).
+function Theme.FloatText(position: Vector3, text: string, color: Color3?)
+	local anchor = Instance.new("Part")
+	anchor.Name = "FloatText"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.Position = position
+	anchor.Parent = Workspace
+
+	local board = Theme.Billboard({ Parent = anchor, Adornee = anchor, Size = UDim2.fromOffset(180, 50), StudsOffset = Vector3.zero, AlwaysOnTop = true, MaxDistance = 120 })
+	local label = Theme.Label({ Text = text, TextColor3 = color or P.MoneyGreen, MaxTextSize = 34, Parent = board })
+	Theme.Tween(anchor, { Position = position + Vector3.new(0, 6, 0) }, 1.2)
+	task.delay(0.6, function()
+		Theme.Tween(label, { TextTransparency = 1 }, 0.6)
+		local stroke = label:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			Theme.Tween(stroke, { Transparency = 1 }, 0.6)
+		end
+	end)
+	task.delay(1.3, function()
+		anchor:Destroy()
+	end)
+end
+
+return Theme
+]]></string>
+            </Properties>
+          </Item>
+        </Item>
+        <Item class="Folder" referent="33">
+          <Properties>
+            <string name="Name">World</string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Workspace" referent="34">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <float name="Gravity">196.2</float>
+      <bool name="NeedsPivotMigration">false</bool>
+    </Properties>
+  </Item>
+</roblox>

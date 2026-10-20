@@ -1,0 +1,48 @@
+{
+  "name": "ArmyRunTycoon",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "CameraMaxZoomDistance": 90,
+        "CameraMinZoomDistance": 8,
+        "CharacterWalkSpeed": 20,
+        "CharacterJumpHeight": 7.2,
+        "LoadCharacterAppearance": true
+      },
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "ClockTime": 13.5,
+        "Brightness": 3,
+        "GlobalShadows": true,
+        "Ambient": [0.55, 0.57, 0.62],
+        "OutdoorAmbient": [0.62, 0.68, 0.78],
+        "EnvironmentDiffuseScale": 0.6,
+        "EnvironmentSpecularScale": 0.3,
+        "ShadowSoftness": 0.35,
+        "Technology": "ShadowMap"
+      }
+    },
+    "Workspace": {
+      "$properties": {
+        "Gravity": 196.2
+      }
+    }
+  }
+}
