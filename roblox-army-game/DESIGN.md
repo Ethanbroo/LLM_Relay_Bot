@@ -192,8 +192,9 @@ enemies and 30% from ground piles. You keep collected cash even if you lose.
 2. Waves of soldiers. 💡 **Auto-fire at the nearest enemy while standing still**; moving stops your fire
    (the Archero rule). Enemy bullets are slow and dodgeable, and grenades show a red warning circle first.
 3. Ability pick after every wave except the last.
-4. ✅ **A chest at the end of every game.** 💡 Wood on a loss (only if you defeated at least one enemy),
-   silver on a win, gold for barrier wins and every 5th arena level.
+4. ✅ **A chest at the end of every game.** 💡 Silver on a win, gold for barrier wins and every 5th arena level,
+   wood on a loss. To stop start-and-quit farming, a loss gives a chest only if you defeated at least one enemy
+   or fought for 20 seconds.
 
 ### 5.5 Enemies and abilities
 💡 **Enemy types** (`Shared/Combat/CombatDefs.luau`). Base stats are for level 1:
@@ -282,7 +283,7 @@ Damage reduction is capped at 60%.
 
 | Chest | When 💡 | Common | Uncommon | Rare | Epic | Legendary |
 |---|---|---|---|---|---|---|
-| Wooden | defeat (with at least 1 kill) | 62% | 27% | 8% | 2.5% | 0.5% |
+| Wooden | defeat (at least 1 kill or 20 s of fighting) | 62% | 27% | 8% | 2.5% | 0.5% |
 | Silver | arena win | 45% | 32% | 15% | 6% | 2% |
 | Golden | barrier win / every 5th arena level | 36% | 30% | 20% | 10% | 4% |
 
@@ -466,7 +467,54 @@ Colours were measured from the reference pixels (`Config.Palette`).
 5. ⚠️ **Robux prices fixed vs cash prices scaling** makes the cash/Robux exchange rate drift with progression.
    This is intended by the brief and is noted here because it changes the value of Robux over time.
 6. ⚠️ **"Three area upgrades" is undefined.** Kept as a switch (§8) until you choose.
+7. ⚠️ **"A chest after every combat game" vs free-chest farming.** If every game gave a chest, you could start a fight
+   and quit at once for free chests. *Used:* a loss gives a wooden chest only after ≥ 1 kill or ≥ 20 s of fighting.
+   *Alternative:* always give a wooden chest (`CombatDefs.CHEST_MIN_SECONDS = 0`).
 
 ## 13. Requirement checklist
 
-REQUIREMENT_CHECKLIST_PLACEHOLDER
+Every requirement in the brief, and where it lives in the game (checked by an independent review of the code).
+
+| # | Brief requirement | Where it is in the game | Status |
+|---|---|---|---|
+| 1 | Two core systems + combat, one connected loop | §1; `Server/Main` loads Runner, Base, Combat, Inventory, Shop, Boost, Vehicle services | ✅ |
+| 2 | Runner: control your own avatar, move left/right | `Client/Controllers/RunnerController` (`step`, `connectInput`: A/D, arrows, drag, stick) | ✅ |
+| 3 | Collect troops and weapon upgrades for that round | `Shared/Runner/RunnerCourse.Generate` (troop gates, gold WEAPON +1 / +20% DMG gates); `RunnerSim.Resolve` | ✅ |
+| 4 | Keep / clarify + × − ÷ | `RunnerCourse` troopGate (`add`/`mul`/`sub`/`div` act on troop count); §2.1 Q2 | ✅ |
+| 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, enemies, base, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
+| 6 | Permanent upgrades before a run: starting troops, damage, carry capacity, small steps, kept | `RunnerUI.ShowPrepare` (PERMANENT UPGRADES cards); `RunnerService.onBuyUpgrade`; `Economy.RunnerUpgradePrice/RunnerStats` (+1 troop, +4%, +6%; max 50) | ✅ |
+| 7 | Keep permanent upgrades distinct from in-run pickups | Separate pre-run cards; summary headings "COLLECTED THIS RUN" vs "PERMANENT UPGRADES" | ✅ (the troops line shows starting troops vs troops gained this run) |
+| 8 | Runner matches reference colours/saturation | `Config.Palette`, `Client/World/RunnerVisuals`, `RunnerService.buildTrack`, `MapBuilder.fillWater/applyLighting` | ✅ track, gates, sea, UI, plus a cyan `Atmosphere` sky (`MapBuilder.applyLighting`) |
+| 9 | Spend money to upgrade base, unlock areas, unlock and improve revenue sections | `Server/Services/BaseService` (UnlockSlot, UpgradeSection, UnlockGate); `Economy.SlotUnlockPrice/SectionUpgradePrice/GatePrice` | ✅ |
+| 10 | Many areas, later ones cost more | `Config.Areas` (8); `Economy.GatePrice` (≥ +5% per gate); area totals strictly increase (tests/economy.spec) | ✅ |
+| 11 | Four unlockable revenue sections per area | `Config.Areas[*].slots` (4 each) | ✅ |
+| 12 | Area 2: repeatable combat takes one of the four unlocks | `Config.Areas[2].slots[4]` (kind "arena", `Config.ArenaSlotId`), unlocked by `BaseService` UnlockSlot → `data.base.arenaUnlocked` | ✅ (conflict noted in §12.1) |
+| 13 | Manual restocking until an employee | `BaseService.tickPlayer` (stops at 0 stock) + `Restock` handler (hold E) | ✅ |
+| 14 | Employees remove the manual work | `BaseService:AssignEmployee`; auto-restock 3 s after empty | ✅ |
+| 15 | Employee: 200 Robux OR cash = 20 runs (benchmark defined) | `Config.Employee` (Robux 200, RunsEquivalent 20); `ShopService.hireEmployeeRobux/grantEmployee`; `BaseService` HireEmployeeCash; `Economy.EmployeeCashPrice` = 20 × R(section area) | ✅ (the Robux route needs the developer product ID in `Config.ProductIds.Employee`) |
+| 16 | Defeat a wave of soldiers to unlock the next area | `CombatService.handlePrepare("barrier")` → `settle` → `BaseService:MarkBarrierDefeated`; `UnlockGate` requires `barriers[area]` + gate price | ✅ |
+| 17 | Combat: move around, dodge attacks | `CombatService` (WASD movement, auto-fire only when still, slow telegraphed bullets/grenades/lasers, cover); `CombatDefs.ENEMIES` | ✅ |
+| 18 | Collect upgrades that make waves easier | `CombatDefs.ABILITIES/RollAbilities`; `CombatService.waveCleared/applyAbility` (1 of 3 after each wave) | ✅ |
+| 19 | Repeatable combat from stage 2 | `CombatService.handlePrepare("arena")` needs `arenaUnlocked`; `CombatController:OpenArenaMenu` (free level choice up to best + 1) | ✅ |
+| 20 | Cash from defeated enemies and from the ground | `CombatDefs.LevelPlan` (70% enemies / 30% piles); `CombatService.killEnemy/startWave` → `spawnPickup`; `settle` pays | ✅ |
+| 21 | Later combat levels harder but pay more | `CombatDefs.HpScale/DamageScale/BUDGET_GROWTH`, new enemy types; `Economy.CombatLevelReward` strictly increasing | ✅ |
+| 22 | Chest at the end of each combat game | `CombatDefs.ChestTier`; `InventoryService:AwardChest`; `Client/UI/ChestUI` | ✅ every real fight (win, or a loss with ≥ 1 kill or ≥ 20 s of fighting); see §12.7 |
+| 23 | Chests hold random armour or weapons | `EquipmentDefs.RollChest` (50/50 slot, random item) | ✅ |
+| 24 | Rarities; higher = better stats and abilities, rarer | `Config.Rarities`; `EquipmentDefs.ItemStats/StatMult`, perk slots; `CHEST_TIERS` (odds fall with rarity in every chest) | ✅ |
+| 25 | Spend coins to upgrade equipment | `InventoryService.onUpgrade`; `Economy.EquipmentUpgradePrice`; `Client/UI/InventoryUI` | ✅ |
+| 26 | Keep lasting gear distinct from in-fight upgrades; say what lasts | Abilities in `CombatDefs.ABILITIES` reset each attempt; gear in `data.inventory` persists; §5.3 | ✅ |
+| 27 | Inventory: review and equip BEFORE the first round | `CombatController.openInventory` (lobby, "START BATTLE"); `InventoryService.validate` allows changes while `CombatActive` is false | ✅ |
+| 28 | Best-case cash of 10 simulated runs | `Economy.TenRunBenchmark/simulateArea`; `RunnerSim.BestCase` (exact Pareto search) | ✅ |
+| 29 | Baseline for "three area upgrades", not silently chosen | `Config.Benchmark.Mode` ("CombinedSections" default / "EachSection"); `Economy.SlotUnlockPrice`; §8 | ✅ (tier reading not built) |
+| 30 | Each new area costs more; progression from runner upgrades, sections, employees, combat, gear, harder levels | `Economy` + `docs/ECONOMY_TABLES.md` (§1, §7 tables); §1 table | ✅ |
+| 31 | Vehicles: better ones as areas unlock; Robux or coins | `Config.Vehicles` (one per area); `VehicleService` BuyVehicle (needs `highestArea ≥ area`); `Economy.VehicleCoinPrice` | ✅ |
+| 32 | 2× multipliers defined (what, how long) | `Config.Boosts` x2_15/30/60; `BoostService.AddMultiplierMinutes/GetCashMultiplier`; `DataService:AddCash(boostable)` | ✅ |
+| 33 | Time skips 1–24 h pay automatic sections | `Config.Boosts` skip_1…skip_24; `BaseService:ApplyTimeSkip` | ✅ |
+| 34 | Employees purchasable both ways | see #15 | ✅ |
+| 35 | 2× and skips appear randomly on the home map, cheaper more often | `BoostService.spawnOffer` (weighted by `Config.Boosts[].weight`); `Client/World/BoostOfferVisuals`; purchase offers (§9.3) | ✅ |
+| 36 | Coin prices take time, vary by rarity/value, scale with area, reflect nearby costs | `Economy.BoostCoinPrice` (from area run + shop income), `VehicleCoinPrice` (× gate price), `EmployeeCashPrice` | ✅ (time skips priced from what your shops pay now, capped at the area value) |
+| 37 | Robux prices fixed | `Config.Boosts[].robux`, `Config.Vehicles[].robux`, `Config.Employee.Robux` | ✅ |
+| 38 | 80% efficiency defined before any multiplier | `Config.CoinRoute.NetGainShare = 0.2` → P = 0.8 V; §9.4 | ✅ |
+| 39 | Ten points to resolve kept visible with proposals | §11 (Q1–Q10) and inline ❓ marks | ✅ |
+| 40 | Requested output sections | §1 loop, §2 runner, §3 permanent upgrades, §4 base, §5 combat, §6 equipment, §7 difficulty/costs, §8 benchmark, §9 purchases, §10 visuals | ✅ |
+| 41 | Separate requirements from proposals; list conflicts | Legend (✅ / 💡 / ❓ / ⚠️), `[REQUIREMENT]` / `[PROPOSAL]` tags in code; §12 | ✅ |
