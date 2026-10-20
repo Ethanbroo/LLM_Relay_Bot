@@ -234,6 +234,11 @@ Perk ids COMBAT must implement (GEAR may give them to items, COMBAT abilities ma
 `dodge` (10% chance per stack to ignore a hit, max 40%), `thorns` (melee attackers take 50% of
 the damage back), `swift` (+8% move speed per stack), `vampire` (heal 2% max HP per kill per stack).
 
+Player attribute `CombatActive` (boolean): COMBAT sets it to `true` from `CombatStart`
+until the fight ends (and clears it on any cleanup). GEAR rejects `EquipItem`,
+`UpgradeItem`, `ScrapItem` while it is true (the loadout is locked mid-fight; the lobby
+before the first round is *not* active, so equipping there works).
+
 ### 4.6 COMBAT → BASE (client)
 
 ```lua
@@ -246,6 +251,10 @@ CombatController:StartBarrier(area: number) -- fight the barrier squad on `area`
 ```lua
 RunnerController:OpenPrepare()  -- same as stepping on the ARMY RUN portal (called by HUD button)
 ```
+
+### 4.8 Lead (later)
+`server/Services/DevService.luau` (Studio-only test tools) and `DESIGN.md`/`README.md`
+are written by the lead after the build — do not create them.
 
 ## 5. World, modes and data
 
