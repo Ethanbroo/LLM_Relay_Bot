@@ -61,8 +61,11 @@
 		Gold weapon gate: +1 weapon tier and banks that weapon's cash value
 		(at the top tier it still banks the Rocket value).
 		Gold damage gate: damageMult +0.2 and banks DAMAGE_GATE_VALUE.
-		Cash stack: added to carried cash up to stats.capacity; the rest is
-		lost and reported ("bag full"). [REQUIREMENT: coin-carrying capacity]
+		Cash stack (cash rows): added to carried cash up to stats.capacity; the
+		rest is lost and reported ("bag full"). [REQUIREMENT: coin-carrying capacity]
+		Cash bag behind a gate (toll / bonus gates): goes straight into the bank
+		(not the bag), so it is always worth its price in troops - the track's
+		cash rows already fill the bag (review: gate cash was otherwise $0).
 		Squad: the squad shoots it for ENGAGE_SECONDS (guns reach 1.5 rows):
 		damage = troops x UnitDps x ENGAGE_SECONDS, kills floor(damage / soldier
 		hp) soldiers (reward each); every surviving soldier costs 1 troop.
@@ -128,6 +131,7 @@ export type RowOutcome = {
 	damageMult: number,
 	destroyed: boolean?,
 	note: string?,
+	gateCash: number?, -- cash bag behind the gate passed (banked, not carried)
 	-- Fights and contest gates (nil elsewhere):
 	stance: number?, -- 0..MAX_STANCE used (0 when the squad was too small for wide shooting)
 	across: number?, -- units that shot the other lane
@@ -193,6 +197,7 @@ type Step = {
 	upgradeKind: string?, -- "weapon" | "damage"
 	upgradeValue: number,
 	note: string?,
+	gateCash: number, -- banked cash bag of a gate
 	barricades: number, -- barricades destroyed (yours + the other lane's)
 	stance: number?,
 	across: number?,
@@ -505,6 +510,7 @@ local function step(
 		upgradeKind = nil,
 		upgradeValue = 0,
 		note = nil,
+		gateCash = 0,
 		barricades = 0,
 	}
 	local amount = finite(opt.amount, 0)
@@ -533,9 +539,12 @@ local function step(
 		s.note = "+" .. math.floor(amount * 100 + 0.5) .. "% damage"
 	end
 
-	-- 2) Cash stack in this lane (cash rows and red toll gates), whole dollars
+	-- 2) Cash in this lane, whole dollars: a cash row's stack goes into the bag,
+	-- a gate's cash bag straight into the bank.
 	local cash = math.max(0, round(finite(opt.cash, 0)))
-	if cash > 0 then
+	if cash > 0 and row.kind == "gate" then
+		s.gateCash = cash
+	elseif cash > 0 then
 		local room = math.max(0, stats.capacity - s.carried)
 		local take = math.min(room, cash)
 		s.collected = cash
@@ -626,7 +635,7 @@ local function step(
 		end
 	end
 
-	s.bankDelta = s.upgradeValue + s.killReward + s.barricadeReward
+	s.bankDelta = s.upgradeValue + s.killReward + s.barricadeReward + s.gateCash
 	return s
 end
 
@@ -826,6 +835,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 	local overflowTotal = 0
 	local kills, killValue = 0, 0
 	local barricades, barricadeValue = 0, 0
+	local gateBags, gateCashValue = 0, 0
 	local outcomes: { RowOutcome } = {}
 	local upgradeLines: { Line } = {}
 
@@ -850,6 +860,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 			damageMult = s.dmg,
 			destroyed = s.destroyed,
 			note = s.note,
+			gateCash = if s.gateCash > 0 then s.gateCash else nil,
 			stance = s.stance,
 			across = s.across,
 			damage = s.damage,
@@ -886,6 +897,10 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 		killValue += s.killReward
 		barricades += s.barricades
 		barricadeValue += s.barricadeReward
+		if s.gateCash > 0 then
+			gateBags += 1
+			gateCashValue += s.gateCash
+		end
 		troops, tier, dmg, carried = s.troops, s.tier, s.dmg, s.carried
 	end
 
@@ -916,6 +931,14 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 		cashDetail ..= ", " .. Format.Money(overflowTotal) .. " lost (bag full)"
 	end
 	table.insert(lines, { kind = "cash", label = "Cash carried", detail = cashDetail, value = carried })
+	if gateBags > 0 then
+		table.insert(lines, {
+			kind = "gatecash",
+			label = "Gate cash x " .. gateBags,
+			detail = "cash bags behind gates (not limited by your bag)",
+			value = gateCashValue,
+		})
+	end
 	local enemyDetail = kills .. " soldiers"
 	if barricades > 0 then
 		enemyDetail ..= " + " .. barricades .. (if barricades == 1 then " barricade" else " barricades")

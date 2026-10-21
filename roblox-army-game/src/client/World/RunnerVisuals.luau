@@ -1201,14 +1201,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			end
 			local row = rowVisual.row
 			-- Bullets go to the nearest engaged row, so a row only "takes hits"
-			-- once the engaged rows before it are crossed (review: a gate grew
-			-- while every bullet went to the row before it).
+			-- from where the fight row before it is (review: a gate grew while
+			-- every bullet went to the row before it). Rows are closer together
+			-- than the gun range, so only the row just before can overlap; the
+			-- hold depends on the layout, not on that row still being engaged, so
+			-- nothing jumps when it is crossed.
 			local start = row.distance - GUN_RANGE
-			for other in engaged do
-				local before = rowVisuals[other]
-				if other < index and before then
-					start = math.max(start, before.row.distance)
-				end
+			local before = rowVisuals[index - 1]
+			local beforeKind = before and before.row.kind
+			if
+				before
+				and (beforeKind == "squad" or beforeKind == "barricade" or beforeKind == "contest")
+				and before.row.distance > start
+			then
+				start = before.row.distance
 			end
 			local progress = math.clamp((distance - start) / math.max(1, row.distance - start), 0, 1)
 			local fights = e.fights
@@ -1539,8 +1545,10 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				tollCash:Destroy()
 				optionVisual.model = nil
 				optionVisual.valueLabel = nil
-				if cashDelta > 0.001 then
-					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(cashDelta), P.MoneyGreen)
+				-- A gate's cash bag is banked straight away (RunnerSim), never lost to a full bag.
+				local banked = if outcome and outcome.gateCash then outcome.gateCash else 0
+				if banked > 0 then
+					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(banked) .. " 💵", P.MoneyGreen)
 				end
 			end
 			-- Weapon gates get their own "🔫 Rifle!" pop below instead.

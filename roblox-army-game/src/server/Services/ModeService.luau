@@ -106,11 +106,21 @@ function ModeService:SetMode(player: Player, mode: string)
 		return
 	end
 	if old == "Base" then
-		-- Remember where the player was so we can bring them back there.
+		-- Remember where the player was so we can bring them back there: the
+		-- point under their feet, facing the way they faced (Teleport adds the
+		-- standing height back; review: storing the root CFrame landed them
+		-- 3.5 studs too high, e.g. inside a stall's roof).
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
-			lastBaseCFrame[player] = root.CFrame
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local drop = (if humanoid then humanoid.HipHeight else 2) + root.Size.Y / 2
+			local feet = root.Position - Vector3.new(0, drop, 0)
+			local look = root.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			lastBaseCFrame[player] = if flat.Magnitude > 0.05
+				then CFrame.lookAt(feet, feet + flat.Unit)
+				else CFrame.new(feet)
 		end
 	end
 	modes[player] = mode

@@ -27,8 +27,19 @@ function Format.Short(n: number): string
 	else
 		local index = math.min(math.floor(math.log10(n) / 3), #SUFFIXES)
 		local scaled = n / 10 ^ (index * 3)
+		if scaled >= 999.5 and index < #SUFFIXES then
+			-- 999,600 is "1M", not "1000K"
+			index += 1
+			scaled /= 1000
+		end
 		local digits = if scaled < 10 then "%.2f" elseif scaled < 100 then "%.1f" else "%.0f"
-		text = string.format(digits, scaled):gsub("%.?0+$", "") .. SUFFIXES[index]
+		local raw = string.format(digits, scaled)
+		-- Drop trailing zeros of the decimals only ("1.50" -> "1.5"), never of
+		-- the whole number (220K stays "220K").
+		if raw:find(".", 1, true) then
+			raw = (raw:gsub("0+$", ""):gsub("%.$", ""))
+		end
+		text = raw .. SUFFIXES[index]
 	end
 	return (if negative then "-" else "") .. text
 end

@@ -792,6 +792,7 @@ local LINE_ICONS: { [string]: string } = {
 	weapon = "🔫",
 	damage = "💥",
 	cash = "💰",
+	gatecash = "💵",
 	enemies = "🎯",
 	boss = "👹",
 	bonus = "🚙",

@@ -24,7 +24,7 @@
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
-			(= RunnerStats(ReferenceUpgrades(area)): carries BaseCapacity x AreaScale^(area-1))
+			(= RunnerStats(ReferenceUpgrades(area)))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -213,10 +213,15 @@ end
 -- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
 -- limit everywhere (the track offers ~2.5x that) and every capacity level
 -- adds money you can actually pick up.
+-- It never shrinks from one area to the next (review: the area-2 gate made
+-- every bag ~11% smaller), so areas 2-3 keep area 1's base.
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
-	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
+	local best = 0
+	for a = 1, anyArea(area) do
+		best = math.max(best, d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a)))
+	end
+	return best
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -249,9 +254,7 @@ end
 
 function Economy.BenchmarkStats(area: number): RunnerStats
 	local a = anyArea(area)
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
-	stats.capacity = round(EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1))
-	return stats
+	return Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
 end
 
 -------------------------------------------------------------------------------
@@ -683,7 +686,7 @@ function Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): nu
 		return nil
 	end
 	local factor = d.RarityFactor[r] or d.RarityFactor[#d.RarityFactor]
-	return price(d.BaseShare * Economy.RunBenchmark(1) * d.Growth ^ (lvl - 1) * factor)
+	return price(d.BaseShare * Economy.RunBenchmark(1) * ease() * d.Growth ^ (lvl - 1) * factor)
 end
 
 return Economy

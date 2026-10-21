@@ -21,6 +21,21 @@ return function(H)
 		H.expect(Format.Money(-40) == "-$40", Format.Money(-40))
 		H.expect(Format.Money(2500000) == "$2.5M", Format.Money(2500000))
 		H.expect(not Format.Money(987654.4):find("%."), "no cents")
+		-- Short numbers keep the zeros of whole numbers (review: 220K showed as "22K").
+		for value, want in {
+			[220400] = "220K",
+			[100000] = "100K",
+			[200000] = "200K",
+			[1520] = "1.52K",
+			[1500] = "1.5K",
+			[1000] = "1K",
+			[10000] = "10K",
+			[999600] = "1M",
+			[2500000] = "2.5M",
+		} do
+			H.expect(Format.Short(value) == want, ("Short(%d) = %s, want %s"):format(value, Format.Short(value), want))
+		end
+		H.expect(Format.Money(1e8) == "$100M", Format.Money(1e8))
 		H.expect(Format.RoundWhole(2.5) == 3 and Format.RoundWhole(2.49) == 2, "RoundWhole")
 	end)
 

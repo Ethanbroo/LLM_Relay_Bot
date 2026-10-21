@@ -27,8 +27,8 @@ local EconomyDefs = {}
 EconomyDefs.AreaScale = 1.6
 
 -- [owner request] "So it's easier to progress": base unlocks, gates, section
--- upgrades and permanent runner upgrades cost this share of what the 10-run
--- benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
+-- upgrades, permanent runner upgrades and gear (equipment) upgrades cost this
+-- share of what the 10-run benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
 -- stronger guns and shoot-to-grow gates raised best-case runs ~24%; 0.8 keeps
 -- those prices where they were while every run pays more. Employees keep the
 -- "20 runs" rule and boosts the 80% rule (both requirements). 1 = the brief's

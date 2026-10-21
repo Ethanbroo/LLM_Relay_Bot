@@ -2408,7 +2408,7 @@ return Config
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
-			(= RunnerStats(ReferenceUpgrades(area)): carries BaseCapacity x AreaScale^(area-1))
+			(= RunnerStats(ReferenceUpgrades(area)))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -2597,10 +2597,15 @@ end
 -- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
 -- limit everywhere (the track offers ~2.5x that) and every capacity level
 -- adds money you can actually pick up.
+-- It never shrinks from one area to the next (review: the area-2 gate made
+-- every bag ~11% smaller), so areas 2-3 keep area 1's base.
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
-	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
+	local best = 0
+	for a = 1, anyArea(area) do
+		best = math.max(best, d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a)))
+	end
+	return best
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -2633,9 +2638,7 @@ end
 
 function Economy.BenchmarkStats(area: number): RunnerStats
 	local a = anyArea(area)
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
-	stats.capacity = round(EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1))
-	return stats
+	return Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
 end
 
 -------------------------------------------------------------------------------
@@ -3067,7 +3070,7 @@ function Economy.EquipmentUpgradePrice(rarity: number, currentLevel: number): nu
 		return nil
 	end
 	local factor = d.RarityFactor[r] or d.RarityFactor[#d.RarityFactor]
-	return price(d.BaseShare * Economy.RunBenchmark(1) * d.Growth ^ (lvl - 1) * factor)
+	return price(d.BaseShare * Economy.RunBenchmark(1) * ease() * d.Growth ^ (lvl - 1) * factor)
 end
 
 return Economy
@@ -3106,8 +3109,8 @@ local EconomyDefs = {}
 EconomyDefs.AreaScale = 1.6
 
 -- [owner request] "So it's easier to progress": base unlocks, gates, section
--- upgrades and permanent runner upgrades cost this share of what the 10-run
--- benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
+-- upgrades, permanent runner upgrades and gear (equipment) upgrades cost this
+-- share of what the 10-run benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
 -- stronger guns and shoot-to-grow gates raised best-case runs ~24%; 0.8 keeps
 -- those prices where they were while every run pays more. Employees keep the
 -- "20 runs" rule and boosts the 80% rule (both requirements). 1 = the brief's
@@ -3239,8 +3242,19 @@ function Format.Short(n: number): string
 	else
 		local index = math.min(math.floor(math.log10(n) / 3), #SUFFIXES)
 		local scaled = n / 10 ^ (index * 3)
+		if scaled >= 999.5 and index < #SUFFIXES then
+			-- 999,600 is "1M", not "1000K"
+			index += 1
+			scaled /= 1000
+		end
 		local digits = if scaled < 10 then "%.2f" elseif scaled < 100 then "%.1f" else "%.0f"
-		text = string.format(digits, scaled):gsub("%.?0+$", "") .. SUFFIXES[index]
+		local raw = string.format(digits, scaled)
+		-- Drop trailing zeros of the decimals only ("1.50" -> "1.5"), never of
+		-- the whole number (220K stays "220K").
+		if raw:find(".", 1, true) then
+			raw = (raw:gsub("0+$", ""):gsub("%.$", ""))
+		end
+		text = raw .. SUFFIXES[index]
 	end
 	return (if negative then "-" else "") .. text
 end
@@ -4739,8 +4753,11 @@ return RunnerDefs
 		Gold weapon gate: +1 weapon tier and banks that weapon's cash value
 		(at the top tier it still banks the Rocket value).
 		Gold damage gate: damageMult +0.2 and banks DAMAGE_GATE_VALUE.
-		Cash stack: added to carried cash up to stats.capacity; the rest is
-		lost and reported ("bag full"). [REQUIREMENT: coin-carrying capacity]
+		Cash stack (cash rows): added to carried cash up to stats.capacity; the
+		rest is lost and reported ("bag full"). [REQUIREMENT: coin-carrying capacity]
+		Cash bag behind a gate (toll / bonus gates): goes straight into the bank
+		(not the bag), so it is always worth its price in troops - the track's
+		cash rows already fill the bag (review: gate cash was otherwise $0).
 		Squad: the squad shoots it for ENGAGE_SECONDS (guns reach 1.5 rows):
 		damage = troops x UnitDps x ENGAGE_SECONDS, kills floor(damage / soldier
 		hp) soldiers (reward each); every surviving soldier costs 1 troop.
@@ -4806,6 +4823,7 @@ export type RowOutcome = {
 	damageMult: number,
 	destroyed: boolean?,
 	note: string?,
+	gateCash: number?, -- cash bag behind the gate passed (banked, not carried)
 	-- Fights and contest gates (nil elsewhere):
 	stance: number?, -- 0..MAX_STANCE used (0 when the squad was too small for wide shooting)
 	across: number?, -- units that shot the other lane
@@ -4871,6 +4889,7 @@ type Step = {
 	upgradeKind: string?, -- "weapon" | "damage"
 	upgradeValue: number,
 	note: string?,
+	gateCash: number, -- banked cash bag of a gate
 	barricades: number, -- barricades destroyed (yours + the other lane's)
 	stance: number?,
 	across: number?,
@@ -5183,6 +5202,7 @@ local function step(
 		upgradeKind = nil,
 		upgradeValue = 0,
 		note = nil,
+		gateCash = 0,
 		barricades = 0,
 	}
 	local amount = finite(opt.amount, 0)
@@ -5211,9 +5231,12 @@ local function step(
 		s.note = "+" .. math.floor(amount * 100 + 0.5) .. "% damage"
 	end
 
-	-- 2) Cash stack in this lane (cash rows and red toll gates), whole dollars
+	-- 2) Cash in this lane, whole dollars: a cash row's stack goes into the bag,
+	-- a gate's cash bag straight into the bank.
 	local cash = math.max(0, round(finite(opt.cash, 0)))
-	if cash > 0 then
+	if cash > 0 and row.kind == "gate" then
+		s.gateCash = cash
+	elseif cash > 0 then
 		local room = math.max(0, stats.capacity - s.carried)
 		local take = math.min(room, cash)
 		s.collected = cash
@@ -5304,7 +5327,7 @@ local function step(
 		end
 	end
 
-	s.bankDelta = s.upgradeValue + s.killReward + s.barricadeReward
+	s.bankDelta = s.upgradeValue + s.killReward + s.barricadeReward + s.gateCash
 	return s
 end
 
@@ -5504,6 +5527,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 	local overflowTotal = 0
 	local kills, killValue = 0, 0
 	local barricades, barricadeValue = 0, 0
+	local gateBags, gateCashValue = 0, 0
 	local outcomes: { RowOutcome } = {}
 	local upgradeLines: { Line } = {}
 
@@ -5528,6 +5552,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 			damageMult = s.dmg,
 			destroyed = s.destroyed,
 			note = s.note,
+			gateCash = if s.gateCash > 0 then s.gateCash else nil,
 			stance = s.stance,
 			across = s.across,
 			damage = s.damage,
@@ -5564,6 +5589,10 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 		killValue += s.killReward
 		barricades += s.barricades
 		barricadeValue += s.barricadeReward
+		if s.gateCash > 0 then
+			gateBags += 1
+			gateCashValue += s.gateCash
+		end
 		troops, tier, dmg, carried = s.troops, s.tier, s.dmg, s.carried
 	end
 
@@ -5594,6 +5623,14 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, st
 		cashDetail ..= ", " .. Format.Money(overflowTotal) .. " lost (bag full)"
 	end
 	table.insert(lines, { kind = "cash", label = "Cash carried", detail = cashDetail, value = carried })
+	if gateBags > 0 then
+		table.insert(lines, {
+			kind = "gatecash",
+			label = "Gate cash x " .. gateBags,
+			detail = "cash bags behind gates (not limited by your bag)",
+			value = gateCashValue,
+		})
+	end
 	local enemyDetail = kills .. " soldiers"
 	if barricades > 0 then
 		enemyDetail ..= " + " .. barricades .. (if barricades == 1 then " barricade" else " barricades")
@@ -11704,11 +11741,21 @@ function ModeService:SetMode(player: Player, mode: string)
 		return
 	end
 	if old == "Base" then
-		-- Remember where the player was so we can bring them back there.
+		-- Remember where the player was so we can bring them back there: the
+		-- point under their feet, facing the way they faced (Teleport adds the
+		-- standing height back; review: storing the root CFrame landed them
+		-- 3.5 studs too high, e.g. inside a stall's roof).
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
-			lastBaseCFrame[player] = root.CFrame
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local drop = (if humanoid then humanoid.HipHeight else 2) + root.Size.Y / 2
+			local feet = root.Position - Vector3.new(0, drop, 0)
+			local look = root.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			lastBaseCFrame[player] = if flat.Magnitude > 0.05
+				then CFrame.lookAt(feet, feet + flat.Unit)
+				else CFrame.new(feet)
 		end
 	end
 	modes[player] = mode
@@ -20204,6 +20251,7 @@ local LINE_ICONS: { [string]: string } = {
 	weapon = "🔫",
 	damage = "💥",
 	cash = "💰",
+	gatecash = "💵",
 	enemies = "🎯",
 	boss = "👹",
 	bonus = "🚙",
@@ -28080,14 +28128,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			end
 			local row = rowVisual.row
 			-- Bullets go to the nearest engaged row, so a row only "takes hits"
-			-- once the engaged rows before it are crossed (review: a gate grew
-			-- while every bullet went to the row before it).
+			-- from where the fight row before it is (review: a gate grew while
+			-- every bullet went to the row before it). Rows are closer together
+			-- than the gun range, so only the row just before can overlap; the
+			-- hold depends on the layout, not on that row still being engaged, so
+			-- nothing jumps when it is crossed.
 			local start = row.distance - GUN_RANGE
-			for other in engaged do
-				local before = rowVisuals[other]
-				if other < index and before then
-					start = math.max(start, before.row.distance)
-				end
+			local before = rowVisuals[index - 1]
+			local beforeKind = before and before.row.kind
+			if
+				before
+				and (beforeKind == "squad" or beforeKind == "barricade" or beforeKind == "contest")
+				and before.row.distance > start
+			then
+				start = before.row.distance
 			end
 			local progress = math.clamp((distance - start) / math.max(1, row.distance - start), 0, 1)
 			local fights = e.fights
@@ -28418,8 +28472,10 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				tollCash:Destroy()
 				optionVisual.model = nil
 				optionVisual.valueLabel = nil
-				if cashDelta > 0.001 then
-					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(cashDelta), P.MoneyGreen)
+				-- A gate's cash bag is banked straight away (RunnerSim), never lost to a full bag.
+				local banked = if outcome and outcome.gateCash then outcome.gateCash else 0
+				if banked > 0 then
+					Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "+" .. Format.Money(banked) .. " 💵", P.MoneyGreen)
 				end
 			end
 			-- Weapon gates get their own "🔫 Rifle!" pop below instead.

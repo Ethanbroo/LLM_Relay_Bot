@@ -457,12 +457,52 @@ return function(H)
 		local junk = Economy.RunnerStats({ troops = -5, damage = 0 / 0, capacity = 1e9 } :: any, 1)
 		H.expect(junk.startTroops == 3 and junk.damage == base.damage, "clamped")
 		H.expect(Economy.RunnerStats(nil :: any, 1).startTroops == 3, "nil upgrades")
+		-- The bag at a given capacity level never shrinks when a new area opens.
+		for level = 0, 30, 3 do
+			local previous = 0
+			for area = 1, AREAS do
+				local bag = Economy.RunnerStats({ troops = 0, damage = 0, capacity = level }, area).capacity
+				H.expect(bag >= previous, ("capacity level %d shrinks in area %d"):format(level, area))
+				previous = bag
+			end
+		end
+		-- The track offers at least 2x the reference bag in cash rows, so the
+		-- coin (capacity) upgrade always has cash to pick up.
+		for area = 1, 4 do
+			local first = RunnerDefs.FirstLevelOfArea(area)
+			local bag = Economy.BenchmarkStats(area).capacity
+			for i = 0, 9 do
+				local course = RunnerCourse.Generate(area, first + i)
+				local top = 0
+				for _, row in course.rows do
+					if row.kind == "cash" then
+						local m = 0
+						for _, opt in row.options do
+							m = math.max(m, opt.cash or 0)
+						end
+						top += m
+					end
+				end
+				H.expect(top >= 2 * bag, ("area %d level %d: track cash %d < 2 x bag %d"):format(area, first + i, top, bag))
+			end
+			-- One capacity level above the reference adds money in the best case.
+			local ref = Economy.ReferenceUpgrades(area)
+			local more = Economy.RunnerStats({ troops = ref.troops, damage = ref.damage, capacity = ref.capacity + 1 }, area)
+			local base, plus = 0, 0
+			for i = 0, 9 do
+				local course = RunnerCourse.Generate(area, first + i)
+				base += RunnerSim.BestCase(course, Economy.BenchmarkStats(area)).total
+				plus += RunnerSim.BestCase(course, more).total
+			end
+			H.expect(plus - base >= 10 * 0.8 * (more.capacity - bag), ("area %d: +1 capacity adds too little"):format(area))
+		end
 		-- The reference bag keeps up with the area so the bag stays relevant.
 		for area = 1, AREAS do
 			local bench = Economy.BenchmarkStats(area)
 			local ref = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
 			local benchBag = EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1)
-			H.near(bench.capacity, benchBag, 0.5, "benchmark capacity")
+			-- (areas 2-3 keep area 1's base, so their reference bag is a bit bigger)
+			H.expect(bench.capacity >= benchBag - 0.5, "benchmark capacity")
 			H.expect(ref.capacity == bench.capacity, "the benchmark is the reference player")
 			isWhole(ref.capacity, "reference capacity")
 			H.expect(bench.startTroops == ref.startTroops and bench.damage == ref.damage, "same troops / damage")
