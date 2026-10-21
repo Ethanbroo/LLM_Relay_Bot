@@ -234,7 +234,10 @@ RunnerDefs.MAX_STANCE = 2
 RunnerDefs.TROOP_VALUE = 1.5 -- [PROPOSAL] $ per troop alive at the finish ("$1.50 each")
 RunnerDefs.DAMAGE_GATE_AMOUNT = 0.2 -- [PROPOSAL] +20% damage per damage gate (additive)
 RunnerDefs.DAMAGE_GATE_VALUE = 9 -- [PROPOSAL] $ credited per damage gate collected
-RunnerDefs.CASH_ROW_BASE = 9 -- [PROPOSAL] middle cash lane of the first cash row
+-- [PROPOSAL] middle cash lane of the first cash row. The cash rows offer
+-- about 2.5x the reference bag (Economy), so coin-carrying capacity is the
+-- limit and its upgrade (+20% per level, owner request) always pays.
+RunnerDefs.CASH_ROW_BASE = 19
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
 RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trade troops for cash)

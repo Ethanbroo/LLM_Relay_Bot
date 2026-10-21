@@ -137,6 +137,7 @@ type Session = {
 	stances: { number }, -- row index -> RunnerSim.Stance at that crossing
 	nextRow: number,
 	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
+	engagements: { [number]: Engagement }, -- row index -> the engagement last sent (split-fire hint)
 	live: Live,
 	targetLateral: number,
 	camLateral: number,
@@ -481,6 +482,7 @@ end
 local function crossRow(s: Session, index: number, lane: number, lateral: number)
 	local crossed = s.course.rows[index]
 	s.choices[index] = lane
+	s.engagements[index] = nil
 	s.laterals[index] = lateral
 	s.stances[index] = if crossed then RunnerSim.Stance(crossed, lane, lateral) else 0
 	s.nextRow = index + 1
@@ -545,9 +547,28 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 			local outcome = if ok and type(result) == "table" then findOutcome(result, index) else nil
 			local engagement = engagementFor(row, lane, outcome)
 			if engagement then
+				s.engagements[index] = engagement
 				visuals:Engage(index, engagement)
 			end
 		end
+	end
+	-- Wide shooting is a trade-off (owner request: the middle hits both sides,
+	-- a side gets more damage), so say when fire is being split.
+	local nearest: Engagement? = nil
+	for index = s.nextRow, #rows do
+		local engagement = s.engagements[index]
+		if engagement then
+			nearest = engagement
+			break
+		end
+		if distance < rows[index].distance - GUN_RANGE then
+			break
+		end
+	end
+	if s.hud then
+		s.hud.SetNote(if nearest and nearest.across > 0
+			then ("🎯 SPLIT FIRE: %d shoot the other side"):format(nearest.across)
+			else nil)
 	end
 end
 
@@ -748,6 +769,7 @@ local function beginBoss(s: Session, lateral: number)
 	s.humanoid:Move(Vector3.zero, false)
 	if s.hud then
 		s.hud.SetProgress(1)
+		s.hud.SetNote(nil)
 	end
 	-- Our own prediction: the boss's max HP for the intro (the same number the
 	-- server uses: same course + stats) and the fallback if RunnerFinish fails.
@@ -1098,6 +1120,7 @@ local function startSession(reply: { [string]: any })
 		stances = {},
 		nextRow = 1,
 		engageKeys = {},
+		engagements = {},
 		live = { troops = stats.startTroops, cash = 0, tier = 1, dmg = 1 },
 		targetLateral = 0,
 		camLateral = 0,

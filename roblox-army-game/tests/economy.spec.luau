@@ -114,11 +114,17 @@ return function(H)
 						count += 1
 					end
 				end
-				H.expect(sum == Economy.TenRunBenchmark(area), "three sections = B10 exactly in area " .. area)
+				H.expect(sum == Economy.PriceBenchmark(area), "three sections = eased B10 exactly in area " .. area)
+				H.near(
+					Economy.PriceBenchmark(area),
+					EconomyDefs.ProgressEase * Economy.TenRunBenchmark(area),
+					0.5,
+					"price benchmark = B10 x ProgressEase"
+				)
 			end
 			H.near(
 				Economy.SlotUnlockPrice(Config.ArenaSlotId),
-				EconomyDefs.Slots.ArenaShare * Economy.TenRunBenchmark(Config.ArenaArea),
+				EconomyDefs.Slots.ArenaShare * Economy.PriceBenchmark(Config.ArenaArea),
 				0.5,
 				"arena price"
 			)
@@ -135,7 +141,7 @@ return function(H)
 					isWhole(price, slotDef.id)
 					if slotDef.kind == "revenue" and count < 3 then
 						count += 1
-						H.expect(price == Economy.TenRunBenchmark(area), "section = B10")
+						H.expect(price == Economy.PriceBenchmark(area), "section = eased B10")
 					end
 				end
 			end
@@ -177,7 +183,12 @@ return function(H)
 						H.expect(s.incomePerSale >= 1, "at least $1 per sale")
 						H.near(s.incomePerSecond, s.incomePerSale / s.saleInterval, 1e-9, "income per second")
 						local payback = Economy.SlotUnlockPrice(slotDef.id) / s.incomePerSecond / 60
-						H.expect(payback >= 25 and payback <= 45, ("%s payback %.1f min"):format(slotDef.id, payback))
+						-- Prices are eased (EconomyDefs.ProgressEase), so payback is that much faster.
+						local ease = EconomyDefs.ProgressEase
+						H.expect(
+							payback >= 25 * ease and payback <= 45,
+							("%s payback %.1f min"):format(slotDef.id, payback)
+						)
 						passive += s.incomePerSecond
 						-- Upgrades: +20% income, +10% stock per level, nil at max.
 						-- (incomePerSecond is the exact design rate: rounding a sale to
@@ -428,7 +439,12 @@ return function(H)
 			H.expect(Economy.RunnerUpgradePrice(kind, Economy.RunnerUpgradeMaxLevel) == nil, "nil at max")
 			H.expect(Economy.RunnerUpgradeEffect(kind, Economy.RunnerUpgradeMaxLevel) == "MAX", "MAX text")
 		end
-		H.near(Economy.RunnerUpgradePrice("troops", 0) :: number, 0.4 * Economy.RunBenchmark(1), 0.5, "level 0 price")
+		H.near(
+			Economy.RunnerUpgradePrice("troops", 0) :: number,
+			0.4 * Economy.RunBenchmark(1) * EconomyDefs.ProgressEase,
+			0.5,
+			"level 0 price"
+		)
 		local base = Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, 1)
 		local one = Economy.RunnerStats({ troops = 1, damage = 1, capacity = 1 }, 1)
 		H.expect(base.startTroops == 3 and one.startTroops == 4, "+1 troop")
@@ -441,19 +457,13 @@ return function(H)
 		local junk = Economy.RunnerStats({ troops = -5, damage = 0 / 0, capacity = 1e9 } :: any, 1)
 		H.expect(junk.startTroops == 3 and junk.damage == base.damage, "clamped")
 		H.expect(Economy.RunnerStats(nil :: any, 1).startTroops == 3, "nil upgrades")
-		-- The benchmark bag keeps up with the area so the bag stays relevant;
-		-- a real player at the reference level carries at least that (the +20%
-		-- steps are bigger than the +6% the base is re-based with), and an
-		-- un-upgraded player carries what the old +6% steps gave.
+		-- The reference bag keeps up with the area so the bag stays relevant.
 		for area = 1, AREAS do
 			local bench = Economy.BenchmarkStats(area)
 			local ref = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
 			local benchBag = EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1)
 			H.near(bench.capacity, benchBag, 0.5, "benchmark capacity")
-			H.expect(ref.capacity >= bench.capacity, "reference-level players carry at least the benchmark bag")
-			local refLevel = Economy.ReferenceUpgrades(area).capacity
-			local oldBase = benchBag / (1 + 0.06 * refLevel)
-			H.near(Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, area).capacity, oldBase, 0.5, "base")
+			H.expect(ref.capacity == bench.capacity, "the benchmark is the reference player")
 			isWhole(ref.capacity, "reference capacity")
 			H.expect(bench.startTroops == ref.startTroops and bench.damage == ref.damage, "same troops / damage")
 		end

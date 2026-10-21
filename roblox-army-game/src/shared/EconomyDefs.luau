@@ -26,6 +26,15 @@ local EconomyDefs = {}
 -- Prices are derived from the runner benchmark, so they follow automatically.
 EconomyDefs.AreaScale = 1.6
 
+-- [owner request] "So it's easier to progress": base unlocks, gates, section
+-- upgrades and permanent runner upgrades cost this share of what the 10-run
+-- benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
+-- stronger guns and shoot-to-grow gates raised best-case runs ~24%; 0.8 keeps
+-- those prices where they were while every run pays more. Employees keep the
+-- "20 runs" rule and boosts the 80% rule (both requirements). 1 = the brief's
+-- plain "10 runs fund three upgrades".
+EconomyDefs.ProgressEase = 0.8
+
 -------------------------------------------------------------------------------
 -- Permanent runner upgrades (bought before a run) [REQUIREMENT: small steps]
 -------------------------------------------------------------------------------
@@ -37,14 +46,11 @@ EconomyDefs.Runner = {
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	-- [owner request] +20% of base capacity per level (was +6%: "increase the
-	-- upgrade amount of coins so it's easier to progress").
+	-- upgrade amount of coins so it's easier to progress"). The track offers
+	-- about 2.5x the bag in cash (RunnerDefs.CASH_ROW_BASE), so the bag is the
+	-- limit and every level up to ~7 above the area's reference level adds
+	-- real money per run.
 	CapacityPerLevel = 0.2,
-	-- [PROPOSAL] The area's base bag is still re-based with the OLD +6% step,
-	-- and the 10-run benchmark (prices) still assumes the bag a reference
-	-- player had with it (BaseCapacity x AreaScale^(area-1)). So nobody carries
-	-- less than before, prices do not move, and every capacity level bought
-	-- now pays ~3x more than before: progress is easier, as asked.
-	CapacityBasePerLevel = 0.06,
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
@@ -75,7 +81,8 @@ EconomyDefs.Sections = {
 	MaxLevel = 10, -- [PROPOSAL]
 	-- [PROPOSAL] A full area of level-1 sections earns this share of the active
 	-- runner rate R(area) / RunDurationSeconds(). With CombinedSections prices a
-	-- level-1 section then repays its unlock price in ~40 minutes of stocked running.
+	-- level-1 section then repays its unlock price in ~40 minutes of stocked running
+	-- (~33 minutes with the eased prices, EconomyDefs.ProgressEase).
 	-- (0.32 -> 0.36 when the castle boss fight made a run ~7 s longer, -> 0.39 when
 	-- the boss intro / outro (~5.4 s) were counted in RunDurationSeconds: the share
 	-- grows with the run length so the section $/s and the payback stay the same.)

@@ -9,6 +9,8 @@
 	Public API (docs/ARCHITECTURE.md §4.1). `area` = index into Config.Areas.
 		Economy.RunBenchmark(area): number           R(area): average best-case payout of the 10 benchmark runs
 		Economy.TenRunBenchmark(area): number        B10(area): sum of the 10 best-case runs
+		Economy.PriceBenchmark(area): number         B10 x EconomyDefs.ProgressEase: what unlock, gate and
+		                                             upgrade prices are shares of (owner request: easier progress)
 		Economy.BenchmarkDetails(area): { upgradeLevel, runs = { { level, payout } }, total }
 		Economy.ReferenceUpgrades(area): { troops, damage, capacity }
 		Economy.SlotUnlockPrice(slotId): number      revenue section or the Combat Arena slot
@@ -22,7 +24,7 @@
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
-			(RunnerStats(ReferenceUpgrades(area)) with the benchmark bag BaseCapacity x AreaScale^(area-1))
+			(= RunnerStats(ReferenceUpgrades(area)): carries BaseCapacity x AreaScale^(area-1))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -207,14 +209,14 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus at the OLD +6% step
--- (CapacityBasePerLevel), so the bag stays a real limit everywhere. Each
--- level adds CapacityPerLevel (+20%) of this base, so a player at the
--- reference level now carries MORE than the benchmark bag (BenchmarkStats).
+-- the reference player's capacity bonus, so a reference-upgraded player
+-- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
+-- limit everywhere (the track offers ~2.5x that) and every capacity level
+-- adds money you can actually pick up.
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityBasePerLevel * referenceLevel(a))
+	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -320,6 +322,14 @@ function Economy.RunBenchmark(area: number): number
 	return round(d.total / math.max(1, #d.runs))
 end
 
+local function ease(): number
+	return math.clamp(num(EconomyDefs.ProgressEase, 1), 0.05, 1)
+end
+
+function Economy.PriceBenchmark(area: number): number
+	return round(Economy.TenRunBenchmark(area) * ease())
+end
+
 -------------------------------------------------------------------------------
 -- Slots, gates, sections
 -------------------------------------------------------------------------------
@@ -375,7 +385,7 @@ function Economy.SlotUnlockPrice(slotId: string): number
 	if not info then
 		return math.huge -- unknown slot: can never be bought
 	end
-	local b10 = Economy.TenRunBenchmark(info.area)
+	local b10 = Economy.PriceBenchmark(info.area)
 	if info.def.kind ~= "revenue" then
 		return price(EconomyDefs.Slots.ArenaShare * b10)
 	end
@@ -410,7 +420,7 @@ function Economy.GatePrice(area: number): number
 	if cached then
 		return cached
 	end
-	local gate = price(EconomyDefs.Slots.GateShare * Economy.TenRunBenchmark(a))
+	local gate = price(EconomyDefs.Slots.GateShare * Economy.PriceBenchmark(a))
 	if a > 1 then
 		-- Rounded UP: always at least GateMinStep dearer than the gate before.
 		local previous = Economy.GatePrice(a - 1)
@@ -523,7 +533,7 @@ function Economy.RunnerUpgradePrice(kind: string, currentLevel: number): number?
 	if lvl >= d.MaxLevel then
 		return nil
 	end
-	return price(d.BasePriceShare * Economy.RunBenchmark(1) * d.PriceGrowth ^ lvl * factor)
+	return price(d.BasePriceShare * Economy.RunBenchmark(1) * ease() * d.PriceGrowth ^ lvl * factor)
 end
 
 -------------------------------------------------------------------------------

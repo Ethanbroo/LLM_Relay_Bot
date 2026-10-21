@@ -25,9 +25,11 @@
 			line and passes `lane`: how many of the formation's outer columns
 			(FORMATION_SPACING_X apart) reach over the line between the two lanes,
 			0..2: closer than 1 column to the line -> 2, closer than 2 -> 1, else 0.
-			(The edge shift of RunnerDefs.FormationShift only happens deep in a
-			lane, where no column reaches across.) The server computes it from
-			where it saw the avatar cross the row.
+			The sim ignores the edge shift of RunnerDefs.FormationShift: it only
+			moves troops when the avatar is more than 6.4 studs from the centre
+			line (stance 0 there); a shifted troop may then stand up to ~0.8 stud
+			past the line but still counts as shooting its own lane. The server
+			computes it from where it saw the avatar cross the row.
 		RunnerSim.UnitsAcross(units, row, lane, stance): number
 			of `units` (troops incl. the avatar) how many shoot the other lane:
 			the troops in the outer `stance` columns on that side, and only with
@@ -90,9 +92,12 @@
 	Why BestCase is exact: the final payout never goes down when any of
 	(troops, weaponTier, damageMult, carried, banked) goes up (the boss damage
 	potential, victory and the survivors all rise with troops and unit DPS),
-	and every row rule keeps that order for a fixed (lane, stance): more units
-	or DPS means more damage on BOTH lanes (UnitsAcross grows by at most one
-	unit per extra troop). The one exception is a red contest gate, which
+	and every row rule keeps that order for a fixed (lane, stance) above the
+	wide-shooting threshold: more units or DPS means more damage on BOTH lanes
+	(there UnitsAcross grows by at most one unit per extra troop). At the
+	threshold itself (WIDE_RANGE_MIN_COMPANIONS) a stance > 0 suddenly sends 2
+	troops across, but a bigger squad can always pick stance 0, which is exactly
+	what every stance means below the threshold. The one exception is a red contest gate, which
 	takes more troops from a stronger squad - but its blue side is better in
 	every state (more troops, nothing else differs), so some best run never
 	passes a red contest gate and every other rule is monotone. So a partial

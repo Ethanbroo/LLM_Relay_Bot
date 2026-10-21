@@ -305,7 +305,8 @@ are written by the lead after the build — do not create them.
   Gate cash rides a red "-N", the smaller of two blue "+N" or the troop gate next to a
   weapon gate. **Shoot-to-grow gates** (row kind `contest`, 2 per course, owner request):
   a blue "+N" and a red "-N" that each grow by `growStep` troops per `growHp` damage they
-  take (capped at `growMax` steps, additive only) and widen visually; you pass one.
+  take (capped at `growMax` steps, additive only); a tug-of-war meter above them shows
+  which side is winning (the panels stay on the scored lanes); you pass one.
   **Wide shooting** (owner request): in a 2-lane squad / barricade / contest row, with
   more than 4 troops beside the avatar, the outer 0–2 formation columns over the other
   lane (`RunnerSim.Stance` from the avatar's lateral position) shoot that lane
@@ -320,13 +321,16 @@ are written by the lead after the build — do not create them.
   (troops, gun, squad DPS, carried / capacity cash) sit in a bottom-left screen panel.
 * Permanent upgrades (bought on the pre-run screen or anywhere): **Starting troops**,
   **Damage**, **Coin-carrying capacity**. Troops/damage levels are *small*; capacity is
-  +20% per level (owner request; prices use `Economy.BenchmarkStats`, the old bag).
+  +20% per level (owner request); the track offers ~2.5x the bag in cash so every level
+  pays. Unlock / gate / upgrade prices use `Economy.PriceBenchmark` = B10 x
+  `EconomyDefs.ProgressEase` (0.8, owner request "easier to progress").
   In-run pickups only last for that run.
 * Completion summary: every upgrade collected with its cash value, troops ×
   value, cash carried vs capacity, enemies defeated, boss line, vehicle
-  bonus, 2x boost, **total**. Then back to base at `Layout.RunnerReturnCFrame` (the
-  spawn, away from the ARMY RUN pad). After a LOST run the summary also offers
-  TRY AGAIN (`RunnerRetry`: same level, straight back to the track start).
+  bonus, 2x boost, **total**. Then back to base where the player stood before the run
+  (or `Layout.RunnerReturnCFrame`, the spawn, if that was the ARMY RUN pad). After a
+  LOST run the summary also offers TRY AGAIN (`RunnerRetry`: same level, straight back
+  to the track start). While fire is split the HUD shows "🎯 SPLIT FIRE".
 * Server authority: `RunnerPrepare` generates the course (server) and teleports
   to the track start; `RunnerGo` locks stats + start time; `RunnerFinish(runId, choices,
   laterals)` re-simulates with `RunnerSim.Resolve(course, stats, lanes, stances)` (lanes

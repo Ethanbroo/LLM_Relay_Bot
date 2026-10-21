@@ -18,10 +18,12 @@
 	  * barricades  - sandbag walls with an HP bar
 	  * contest rows- "shoot to grow" gates [owner request], drawn UNLIKE the other
 	                  gates: less see-through blue / red panels with dark stripes,
-	                  a glowing gold Neon frame each, "🎯 +3" / "🎯 -4" numbers and a
-	                  "🎯 SHOOT TO GROW" beam over the row. While the squad shoots
-	                  them each side's number grows and the more-shot side widens,
-	                  pushing the middle post (and the other side) aside
+	                  a gold frame each, "🎯 +3" / "🎯 -4" numbers and a blue / red
+	                  tug-of-war meter over the row with "🎯 SHOOT TO GROW" on it.
+	                  While the squad shoots them each side's number grows and the
+	                  meter pushes into the less-shot side. The panels and the
+	                  middle post stay on the real lanes (the lane you pass is the
+	                  one RunnerSim / the server score)
 	  * value labels- a row's cash values, a red toll gate's cash, a squad's
 	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
 	                  previous row has been crossed (owner request: far-away labels
@@ -133,14 +135,18 @@ local GATE_HEIGHT = 7
 local POST_HEIGHT = 8.4
 local FORT_DEPTH = 14
 -- Shoot-to-grow ("contest") gates [PROPOSAL, visual only]
-local CONTEST_TRANSPARENCY = 0.22 -- less see-through than normal gates (0.45)
-local CONTEST_POST_HEIGHT = 10.4 -- taller posts that carry the "SHOOT TO GROW" beam
-local CONTEST_BEAM_HEIGHT = 1.8
-local CONTEST_FRAME = 0.45 -- thickness of the glowing frame bars
+-- Shoot-to-grow rows. The panels and the middle post stay exactly on the
+-- lanes RunnerSim / the server score (review: a moving divider showed one
+-- side while the other was paid); which side dominates is shown by the
+-- tug-of-war meter above them and by the growing numbers.
+local CONTEST_TRANSPARENCY = 0.35 -- a little less see-through than normal gates (0.45)
+local CONTEST_FRAME = 0.45 -- thickness of the gold frame bars
 local CONTEST_STRIPES = 5 -- dark vertical stripes per panel
-local CONTEST_SWING = 0.35 -- how far the middle moves at the most growth difference
-local CONTEST_SHARE_MIN = 0.2 -- a side never gets narrower than 20% of the row
-local CONTEST_SHARE_MAX = 0.8
+local CONTEST_METER_Y = GATE_HEIGHT + 1.05 -- centre height of the tug-of-war meter
+local CONTEST_METER_HEIGHT = 0.9
+local CONTEST_SWING = 0.4 -- how far the meter's split moves at the most growth difference
+local CONTEST_SHARE_MIN = 0.1
+local CONTEST_SHARE_MAX = 0.9
 local AIM_SPREAD = 3 -- tenths of a stud: bullets land this close to their target point
 
 -- Boss timing is shared with the economy (RunnerDefs; fallback = same values).
@@ -403,9 +409,9 @@ type ContestVisual = {
 	sides: { ContestSide },
 	minX: number, -- lateral extent of both lanes together
 	maxX: number,
-	share: number, -- left side's share of the width now (animated)
+	share: number, -- left side's share of the tug-of-war meter now (animated)
 	goal: number, -- share it is moving to
-	divider: BasePart, -- middle post (moves with the share)
+	meter: { BasePart }, -- left and right halves of the meter (their colours)
 	distance: number,
 }
 
@@ -653,44 +659,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		return list
 	end
 
-	-- Lays a shoot-to-grow row out for its current share: both panels, their
-	-- frames, shooting targets and the middle post (CFrame / Size only).
+	-- Puts the tug-of-war meter's split where the share says (two plain
+	-- parts: Size / CFrame only, no SurfaceGui on them).
 	local function layoutContest(cv: ContestVisual)
 		local split = cv.minX + (cv.maxX - cv.minX) * cv.share
-		for i, side in cv.sides do
-			local x0 = if i == 1 then cv.minX else split
-			local x1 = if i == 1 then split else cv.maxX
-			-- Room for the frame bars and half a post on each side.
-			local width = math.max(1, x1 - x0 - 2 * CONTEST_FRAME - 0.9)
-			local centre = worldAt(cv.distance, (x0 + x1) / 2, GATE_HEIGHT / 2 + 0.2)
-			local ov = side.ov
-			ov.centre = centre
-			local panel = ov.panel
-			if side.gone or not panel then
-				continue
-			end
-			panel.Size = Vector3.new(width, GATE_HEIGHT, 0.5)
-			panel.CFrame = CFrame.new(centre)
-			-- Points on the face the runner sees (+Z).
-			ov.targets = {
-				centre + Vector3.new(-width * 0.3, -0.9, 0.35),
-				centre + Vector3.new(0, 0.7, 0.35),
-				centre + Vector3.new(width * 0.3, -0.2, 0.35),
-			}
-			local f = CONTEST_FRAME
-			local top, bottom, left, right = side.frame[1], side.frame[2], side.frame[3], side.frame[4]
-			if top and bottom and left and right then
-				top.Size = Vector3.new(width + 2 * f, f, 0.65)
-				top.CFrame = CFrame.new(centre + Vector3.new(0, GATE_HEIGHT / 2, 0))
-				bottom.Size = top.Size
-				bottom.CFrame = CFrame.new(centre - Vector3.new(0, GATE_HEIGHT / 2, 0))
-				left.Size = Vector3.new(f, GATE_HEIGHT, 0.65)
-				left.CFrame = CFrame.new(centre - Vector3.new(width / 2 + f / 2, 0, 0))
-				right.Size = left.Size
-				right.CFrame = CFrame.new(centre + Vector3.new(width / 2 + f / 2, 0, 0))
-			end
+		local left, right = cv.meter[1], cv.meter[2]
+		if not left or not right then
+			return
 		end
-		cv.divider.CFrame = CFrame.new(worldAt(cv.distance, split, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2))
+		local leftWidth = math.max(0.05, split - cv.minX)
+		local rightWidth = math.max(0.05, cv.maxX - split)
+		left.Size = Vector3.new(leftWidth, CONTEST_METER_HEIGHT, 0.3)
+		left.CFrame = CFrame.new(worldAt(cv.distance, cv.minX + leftWidth / 2, CONTEST_METER_Y))
+		right.Size = Vector3.new(rightWidth, CONTEST_METER_HEIGHT, 0.3)
+		right.CFrame = CFrame.new(worldAt(cv.distance, cv.maxX - rightWidth / 2, CONTEST_METER_Y))
 	end
 
 	-- Shoot-to-grow gates (row kind "contest"): look unlike every other gate.
@@ -707,13 +689,16 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		local maxX = rightOpt.x + rightOpt.width / 2
 		local list: { OptionVisual } = {}
 		local sides: { ContestSide } = {}
+		local meter: { BasePart } = {}
 		for _, option in { leftOpt, rightOpt } do
 			local red = option.tone == "growNegative" or option.op == "sub"
 			local color = if red then P.GateNegative else P.GatePositive
 			local centre = worldAt(row.distance, option.x, GATE_HEIGHT / 2 + 0.2)
+			-- The panel fills its own lane (room for the frame and half a post).
+			local width = math.max(2, option.width - 2 * CONTEST_FRAME - 0.9)
 			local panel = RunnerModels.Part({
 				Name = "ContestPanel" .. option.lane,
-				Size = Vector3.new(math.max(2, option.width - 1.2), GATE_HEIGHT, 0.5),
+				Size = Vector3.new(width, GATE_HEIGHT, 0.5),
 				CFrame = CFrame.new(centre),
 				Color = color,
 				Transparency = CONTEST_TRANSPARENCY,
@@ -723,6 +708,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local value = option.amount or 0
 			local label = RunnerModels.SurfaceLabel(panel, Enum.NormalId.Back, contestText(option, value), 160)
 			label.ZIndex = 3
+			label.TextWrapped = false -- "🎯 +12" stays on one line while it grows
 			-- Dark vertical stripes behind the number (same SurfaceGui, lower ZIndex).
 			local gui = label.Parent
 			if gui then
@@ -738,19 +724,44 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 					stripe.Parent = gui
 				end
 			end
+			-- Gold frame (solid, not Neon: Neon yellow glows white on the white track).
+			local f = CONTEST_FRAME
 			local frame: { BasePart } = {}
-			for _, name in { "FrameTop", "FrameBottom", "FrameLeft", "FrameRight" } do
-				local bar = RunnerModels.Part({
-					Name = name,
-					Size = Vector3.one,
-					CFrame = CFrame.new(centre),
+			local bars: { { name: string, size: Vector3, offset: Vector3 } } = {
+				{ name = "FrameTop", size = Vector3.new(width + 2 * f, f, 0.65), offset = Vector3.new(0, GATE_HEIGHT / 2, 0) },
+				{
+					name = "FrameBottom",
+					size = Vector3.new(width + 2 * f, f, 0.65),
+					offset = Vector3.new(0, -GATE_HEIGHT / 2, 0),
+				},
+				{
+					name = "FrameLeft",
+					size = Vector3.new(f, GATE_HEIGHT, 0.65),
+					offset = Vector3.new(-(width / 2 + f / 2), 0, 0),
+				},
+				{ name = "FrameRight", size = Vector3.new(f, GATE_HEIGHT, 0.65), offset = Vector3.new(width / 2 + f / 2, 0, 0) },
+			}
+			for _, bar in bars do
+				local part = RunnerModels.Part({
+					Name = bar.name,
+					Size = bar.size,
+					CFrame = CFrame.new(centre + bar.offset),
 					Color = P.Coin,
-					Material = Enum.Material.Neon,
 					Parent = rowFolder,
 				})
-				bar.CastShadow = false
-				table.insert(frame, bar)
+				part.CastShadow = false
+				table.insert(frame, part)
 			end
+			-- This side's half of the tug-of-war meter (layoutContest sizes it).
+			local half = RunnerModels.Part({
+				Name = "ContestMeter" .. option.lane,
+				Size = Vector3.new(1, CONTEST_METER_HEIGHT, 0.3),
+				CFrame = CFrame.new(worldAt(row.distance, option.x, CONTEST_METER_Y)),
+				Color = color,
+				Parent = rowFolder,
+			})
+			half.CastShadow = false
+			table.insert(meter, half)
 			local ov: OptionVisual = {
 				option = option,
 				centre = centre,
@@ -758,7 +769,12 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				label = label,
 				model = nil,
 				enemies = {},
-				targets = {},
+				-- Points on the face the runner sees (+Z).
+				targets = {
+					centre + Vector3.new(-width * 0.3, -0.9, 0.35),
+					centre + Vector3.new(0, 0.7, 0.35),
+					centre + Vector3.new(width * 0.3, -0.2, 0.35),
+				},
 				hp = nil,
 				anchor = nil,
 				valueLabel = nil, -- the number is on the panel (like a gate)
@@ -766,50 +782,46 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			list[option.lane] = ov
 			table.insert(sides, { lane = option.lane, option = option, ov = ov, frame = frame, shown = value, gone = false })
 		end
-		-- Tall outer posts carrying the sign beam, and the middle post that moves.
+		-- Outer posts hold the meter; the middle post marks the real lane line.
+		local postHeight = CONTEST_METER_Y + CONTEST_METER_HEIGHT / 2 + 0.2
 		for _, x in { minX - 0.35, maxX + 0.35 } do
 			RunnerModels.Part({
 				Name = "ContestPost",
-				Size = Vector3.new(0.8, CONTEST_POST_HEIGHT, 0.8),
-				CFrame = CFrame.new(worldAt(row.distance, x, CONTEST_POST_HEIGHT / 2)),
+				Size = Vector3.new(0.8, postHeight, 0.8),
+				CFrame = CFrame.new(worldAt(row.distance, x, postHeight / 2)),
 				Color = P.GatePost,
 				Parent = rowFolder,
 			})
 		end
-		local divider = RunnerModels.Part({
+		local lineX = ((leftOpt.x + leftOpt.width / 2) + (rightOpt.x - rightOpt.width / 2)) / 2
+		RunnerModels.Part({
 			Name = "ContestDivider",
-			Size = Vector3.new(0.8, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT, 0.8),
-			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2)),
+			Size = Vector3.new(0.8, GATE_HEIGHT + 0.4, 0.8),
+			CFrame = CFrame.new(worldAt(row.distance, lineX, (GATE_HEIGHT + 0.4) / 2)),
 			Color = P.GatePost,
 			Parent = rowFolder,
 		})
-		local beam = RunnerModels.Part({
+		-- "🎯 SHOOT TO GROW" written over the meter on an invisible part (a
+		-- SurfaceGui still draws on it), so nothing solid blocks the view ahead.
+		local signPart = RunnerModels.Part({
 			Name = "ContestSign",
-			Size = Vector3.new(maxX - minX + 1.5, CONTEST_BEAM_HEIGHT, 0.6),
-			CFrame = CFrame.new(
-				worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT / 2)
-			),
-			Color = P.PillBlack,
+			Size = Vector3.new(maxX - minX, CONTEST_METER_HEIGHT + 0.6, 0.1),
+			-- Just in front of the meter (the runner comes from smaller distances).
+			CFrame = CFrame.new(worldAt(row.distance - 0.3, (minX + maxX) / 2, CONTEST_METER_Y)),
+			Color = P.White,
+			Transparency = 1,
 			Parent = rowFolder,
 		})
-		local sign = RunnerModels.SurfaceLabel(beam, Enum.NormalId.Back, "🎯 SHOOT TO GROW", 80)
-		sign.TextColor3 = P.Coin
-		local trim = RunnerModels.Part({
-			Name = "ContestSignTrim",
-			Size = Vector3.new(maxX - minX + 1.7, 0.25, 0.7),
-			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT)),
-			Color = P.Coin,
-			Material = Enum.Material.Neon,
-			Parent = rowFolder,
-		})
-		trim.CastShadow = false
+		signPart.CastShadow = false
+		local sign = RunnerModels.SurfaceLabel(signPart, Enum.NormalId.Back, "🎯 SHOOT TO GROW 🎯", 80)
+		sign.TextWrapped = false
 		local cv: ContestVisual = {
 			sides = sides,
 			minX = minX,
 			maxX = maxX,
 			share = 0.5,
 			goal = 0.5,
-			divider = divider,
+			meter = meter,
 			distance = row.distance,
 		}
 		layoutContest(cv)
@@ -1188,7 +1200,17 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				continue
 			end
 			local row = rowVisual.row
-			local progress = math.clamp((distance - (row.distance - GUN_RANGE)) / GUN_RANGE, 0, 1)
+			-- Bullets go to the nearest engaged row, so a row only "takes hits"
+			-- once the engaged rows before it are crossed (review: a gate grew
+			-- while every bullet went to the row before it).
+			local start = row.distance - GUN_RANGE
+			for other in engaged do
+				local before = rowVisuals[other]
+				if other < index and before then
+					start = math.max(start, before.row.distance)
+				end
+			end
+			local progress = math.clamp((distance - start) / math.max(1, row.distance - start), 0, 1)
 			local fights = e.fights
 			for lane, ov in rowVisual.options do
 				local laneFight = fights[lane]
@@ -1216,7 +1238,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				end
 			end
 			-- Shoot-to-grow: each side's number grows with its share of the
-			-- engagement; the more-shot side takes more of the width.
+			-- engagement; the tug-of-war meter leans towards the more-shot side.
 			local cv = rowVisual.contest
 			if cv then
 				local now: { number } = {}
@@ -1427,7 +1449,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		if #parts > 0 then
 			Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 		end
-		-- Shoot-to-grow rows slide towards their goal width (only while it changes).
+		-- Shoot-to-grow meters slide towards their goal (only while it changes).
 		local slide = 1 - math.exp(-dt * 6)
 		for _, cv in contests do
 			if math.abs(cv.share - cv.goal) > 0.001 then
@@ -1601,6 +1623,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 						end
 					end
 					ov.enemies = standing
+					-- Its label shows the soldiers still standing there.
+					local fallen = if outcome and outcome.otherKills then outcome.otherKills else killed
+					local left = math.max(0, math.floor(ov.option.enemies or 0) - fallen)
+					local gui = ov.valueLabel
+					if fallen > 0 and gui then
+						if left <= 0 then
+							gui.Enabled = false
+						else
+							local text = gui:FindFirstChild("Text", true)
+							if text and text:IsA("TextLabel") then
+								text.Text = left .. " SOLDIERS"
+							end
+						end
+					end
 				end
 			end
 			if totalKills > 0 then

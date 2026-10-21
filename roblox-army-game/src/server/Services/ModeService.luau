@@ -15,6 +15,8 @@
 		ModeService:Teleport(player, cframe): boolean
 		ModeService:ReturnToBase(player, target: CFrame?)
 			back to Base mode at `target`, or where the player stood before leaving the base
+		ModeService:GetBaseCFrame(player): CFrame?
+			where the player stood when they last left the base (nil if never)
 		ModeService.ModeChanged: Signal(player, newMode, oldMode)
 			Services that run sessions (runner, combat) listen to this and clean
 			up when a player leaves their mode for any reason (death, leaving...).
@@ -128,6 +130,10 @@ function ModeService:Teleport(player: Player, cframe: CFrame): boolean
 	root.AssemblyLinearVelocity = Vector3.zero
 	character:PivotTo(cframe + Vector3.new(0, 3.5, 0))
 	return true
+end
+
+function ModeService:GetBaseCFrame(player: Player): CFrame?
+	return lastBaseCFrame[player]
 end
 
 function ModeService:ReturnToBase(player: Player, place: CFrame?)

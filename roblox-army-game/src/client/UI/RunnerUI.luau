@@ -11,6 +11,8 @@
 			Hud.SetStatsVisible(visible) -- hidden on the pre-run screen (the cards show the
 			                                stats) and on the summary (RunnerController)
 			Hud.PopCash()                -- bounce the money tag (cash picked up)
+		Hud.SetNote(text?)           -- small orange pill just above the squad panel (nil hides it),
+		                                e.g. "🎯 SPLIT FIRE: 3 troops shoot the other side"
 			Hud.Destroy()
 			HudStats = { troops, weaponName, weaponTier, maxTier, dps, cash, capacity }
 			  Panel (owner request: stats in a corner, not above the head; bottom-left,
@@ -180,6 +182,7 @@ export type Hud = {
 	SetStats: (stats: HudStats) -> (),
 	SetStatsVisible: (visible: boolean) -> (),
 	PopCash: () -> (),
+	SetNote: (text: string?) -> (),
 	Destroy: () -> (),
 }
 
@@ -289,6 +292,33 @@ function RunnerUI.ShowHud(level: number): Hud
 		Parent = moneyTag,
 	})
 
+	-- Note pill just above the squad panel (wide-shooting hint).
+	local noteHolder = Instance.new("Frame")
+	noteHolder.Name = "RunnerNote"
+	noteHolder.BackgroundTransparency = 1
+	noteHolder.AnchorPoint = Vector2.new(0, 1)
+	noteHolder.Position = UDim2.new(0, 12, 1, -12)
+	noteHolder.Size = UDim2.fromOffset(232, 226) -- the panel (186) + the pill above it
+	noteHolder.Visible = false
+	noteHolder.Parent = gui
+	responsive(noteHolder)
+	local notePill = Instance.new("Frame")
+	notePill.Name = "Pill"
+	notePill.BackgroundColor3 = P.CardOrangeDark
+	notePill.Size = UDim2.new(1, 0, 0, 34)
+	notePill.Parent = noteHolder
+	Theme.Corner(notePill, 0.5)
+	Theme.Stroke(notePill, P.CardOutline, 2, true)
+	local noteLabel = Theme.Label({
+		Text = "",
+		MaxTextSize = 18,
+		Size = UDim2.new(1, -12, 1, -4),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = notePill,
+	})
+	local noteText: string? = nil
+
 	local lastTroops = -1
 	return {
 		SetLevel = function(newLevel: number)
@@ -323,13 +353,28 @@ function RunnerUI.ShowHud(level: number): Hud
 			else
 				corner.Visible = visible
 			end
+			noteHolder.Visible = corner.Visible and noteText ~= nil
 		end,
 		PopCash = function()
 			Theme.Pop(moneyTag)
 		end,
+		SetNote = function(text: string?)
+			if text == noteText then
+				return
+			end
+			noteText = text
+			if text then
+				noteLabel.Text = text
+				noteHolder.Visible = corner.Visible
+				Theme.Pop(notePill)
+			else
+				noteHolder.Visible = false
+			end
+		end,
 		Destroy = function()
 			root:Destroy()
 			corner:Destroy()
+			noteHolder:Destroy()
 		end,
 	}
 end

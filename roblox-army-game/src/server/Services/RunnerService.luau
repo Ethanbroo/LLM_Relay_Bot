@@ -30,7 +30,7 @@
 			laterals[i] = studs right of the centre line where the client crossed row i
 		RunnerRetry(runId)            -> same as RunnerPrepare: a new run on the same track,
 		                                 after a finished one (the defeat screen's TRY AGAIN)
-		RunnerLeave()                 -> {}   back to the base, at Layout.RunnerReturnCFrame
+		RunnerLeave()                 -> {}   back to the base (see returnSpot)
 
 	Push channel "Runner" (server -> client):
 		"Ended", { runId }   -- the server ended the session (death, mode change)
@@ -65,9 +65,10 @@
 		                 repeated request gets the same reply again (never pays twice).
 		RunnerRetry    - after RunnerFinish: ends that session and starts a new one
 		                 at the player's current level without leaving the track.
-		RunnerLeave    - restores the avatar and returns to the base at the spawn,
-		                 on the far side from the ARMY RUN pad (owner request: not
-		                 back on the pad; the base's unlocks are right there).
+		RunnerLeave    - restores the avatar and returns to the base: where the player
+		                 stood before the run, unless that was on the ARMY RUN pad -
+		                 then at the spawn, on the far side of the area (owner
+		                 request: not back on the pad; the unlocks are right there).
 
 	Every way a session ends (RunnerLeave, death / respawn / any mode change,
 	leaving the game, a failed teleport) goes through endSession, which stops
@@ -122,6 +123,9 @@ local PLAZA_LENGTH = 80
 local PLAZA_WIDTH = 60
 local WALL_HEIGHT = 40
 local UPGRADE_KINDS = { troops = true, damage = true, capacity = true }
+-- [PROPOSAL] A run started this close to the ARMY RUN pad (studs, flat) returns
+-- the player to the spawn instead (the 15-stud pad + a margin).
+local PORTAL_CLEAR_RADIUS = 14
 local GUN_NAME = "RunnerGun" -- RunnerVisuals looks for this Tool in the character
 
 -- RUN_SPEED comes from ECON's RunnerDefs (fallback if the value is missing).
@@ -432,8 +436,16 @@ local function chooseStances(session: Session, lanes: { number }, laterals: any)
 		end
 		local at = session.serverLaterals[i] or session.lastLateral or 0
 		local claimed = rawget(source, i)
-		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= LANE_EDGE_TOLERANCE then
+		-- The client's own lane was paid near the edge (chooseLanes): its lateral
+		-- may then be a little further from our late sample.
+		local tolerance = if lanes[i] ~= session.serverChoices[i] then 2 * LANE_EDGE_TOLERANCE else LANE_EDGE_TOLERANCE
+		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= tolerance then
 			at = claimed :: number
+		end
+		-- Never take the stance from a point outside the lane that is paid.
+		local option = optionForLane(row, lanes[i])
+		if option then
+			at = math.clamp(at, option.x - option.width / 2, option.x + option.width / 2)
 		end
 		clean[i] = RunnerSim.Stance(row, lanes[i], at)
 	end
@@ -642,6 +654,20 @@ local function dataService(): any
 	return registry.DataService
 end
 
+-- Where a player lands after a run: where they stood before it, unless that
+-- was on the ARMY RUN pad (owner request: not back on the pad) - then the spawn.
+local function returnSpot(player: Player): CFrame
+	local Mode = modeService()
+	local last: CFrame? = if Mode and type(Mode.GetBaseCFrame) == "function" then Mode:GetBaseCFrame(player) else nil
+	if last then
+		local offset = last.Position - Layout.RunnerPortalPosition()
+		if Vector2.new(offset.X, offset.Z).Magnitude > PORTAL_CLEAR_RADIUS then
+			return last
+		end
+	end
+	return Layout.RunnerReturnCFrame()
+end
+
 -- Creates a session at the player's current level and puts the avatar at
 -- the start of its track, frozen. `fromBase` = coming from the base (switch
 -- the mode to Runner first); false = a retry on the track (already Runner).
@@ -696,7 +722,7 @@ local function startRun(player: Player, data: any, character: Model, humanoid: H
 		if fromBase then
 			Mode:SetMode(player, "Base") -- never left the base
 		else
-			Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+			Mode:ReturnToBase(player, returnSpot(player))
 		end
 		return Net.Fail("Could not reach the track, try again")
 	end
@@ -957,7 +983,7 @@ local function onLeave(player: Player)
 	local Mode = modeService()
 	endSession(player, false)
 	if Mode and Mode:GetMode(player) == "Runner" then
-		Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+		Mode:ReturnToBase(player, returnSpot(player))
 	end
 	return Net.Ok()
 end

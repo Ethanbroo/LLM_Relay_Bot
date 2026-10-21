@@ -2393,6 +2393,8 @@ return Config
 	Public API (docs/ARCHITECTURE.md §4.1). `area` = index into Config.Areas.
 		Economy.RunBenchmark(area): number           R(area): average best-case payout of the 10 benchmark runs
 		Economy.TenRunBenchmark(area): number        B10(area): sum of the 10 best-case runs
+		Economy.PriceBenchmark(area): number         B10 x EconomyDefs.ProgressEase: what unlock, gate and
+		                                             upgrade prices are shares of (owner request: easier progress)
 		Economy.BenchmarkDetails(area): { upgradeLevel, runs = { { level, payout } }, total }
 		Economy.ReferenceUpgrades(area): { troops, damage, capacity }
 		Economy.SlotUnlockPrice(slotId): number      revenue section or the Combat Arena slot
@@ -2406,7 +2408,7 @@ return Config
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
-			(RunnerStats(ReferenceUpgrades(area)) with the benchmark bag BaseCapacity x AreaScale^(area-1))
+			(= RunnerStats(ReferenceUpgrades(area)): carries BaseCapacity x AreaScale^(area-1))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -2591,14 +2593,14 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus at the OLD +6% step
--- (CapacityBasePerLevel), so the bag stays a real limit everywhere. Each
--- level adds CapacityPerLevel (+20%) of this base, so a player at the
--- reference level now carries MORE than the benchmark bag (BenchmarkStats).
+-- the reference player's capacity bonus, so a reference-upgraded player
+-- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
+-- limit everywhere (the track offers ~2.5x that) and every capacity level
+-- adds money you can actually pick up.
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityBasePerLevel * referenceLevel(a))
+	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -2704,6 +2706,14 @@ function Economy.RunBenchmark(area: number): number
 	return round(d.total / math.max(1, #d.runs))
 end
 
+local function ease(): number
+	return math.clamp(num(EconomyDefs.ProgressEase, 1), 0.05, 1)
+end
+
+function Economy.PriceBenchmark(area: number): number
+	return round(Economy.TenRunBenchmark(area) * ease())
+end
+
 -------------------------------------------------------------------------------
 -- Slots, gates, sections
 -------------------------------------------------------------------------------
@@ -2759,7 +2769,7 @@ function Economy.SlotUnlockPrice(slotId: string): number
 	if not info then
 		return math.huge -- unknown slot: can never be bought
 	end
-	local b10 = Economy.TenRunBenchmark(info.area)
+	local b10 = Economy.PriceBenchmark(info.area)
 	if info.def.kind ~= "revenue" then
 		return price(EconomyDefs.Slots.ArenaShare * b10)
 	end
@@ -2794,7 +2804,7 @@ function Economy.GatePrice(area: number): number
 	if cached then
 		return cached
 	end
-	local gate = price(EconomyDefs.Slots.GateShare * Economy.TenRunBenchmark(a))
+	local gate = price(EconomyDefs.Slots.GateShare * Economy.PriceBenchmark(a))
 	if a > 1 then
 		-- Rounded UP: always at least GateMinStep dearer than the gate before.
 		local previous = Economy.GatePrice(a - 1)
@@ -2907,7 +2917,7 @@ function Economy.RunnerUpgradePrice(kind: string, currentLevel: number): number?
 	if lvl >= d.MaxLevel then
 		return nil
 	end
-	return price(d.BasePriceShare * Economy.RunBenchmark(1) * d.PriceGrowth ^ lvl * factor)
+	return price(d.BasePriceShare * Economy.RunBenchmark(1) * ease() * d.PriceGrowth ^ lvl * factor)
 end
 
 -------------------------------------------------------------------------------
@@ -3095,6 +3105,15 @@ local EconomyDefs = {}
 -- Prices are derived from the runner benchmark, so they follow automatically.
 EconomyDefs.AreaScale = 1.6
 
+-- [owner request] "So it's easier to progress": base unlocks, gates, section
+-- upgrades and permanent runner upgrades cost this share of what the 10-run
+-- benchmark gives (Economy.PriceBenchmark = B10 x ProgressEase). Round 4's
+-- stronger guns and shoot-to-grow gates raised best-case runs ~24%; 0.8 keeps
+-- those prices where they were while every run pays more. Employees keep the
+-- "20 runs" rule and boosts the 80% rule (both requirements). 1 = the brief's
+-- plain "10 runs fund three upgrades".
+EconomyDefs.ProgressEase = 0.8
+
 -------------------------------------------------------------------------------
 -- Permanent runner upgrades (bought before a run) [REQUIREMENT: small steps]
 -------------------------------------------------------------------------------
@@ -3106,14 +3125,11 @@ EconomyDefs.Runner = {
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	-- [owner request] +20% of base capacity per level (was +6%: "increase the
-	-- upgrade amount of coins so it's easier to progress").
+	-- upgrade amount of coins so it's easier to progress"). The track offers
+	-- about 2.5x the bag in cash (RunnerDefs.CASH_ROW_BASE), so the bag is the
+	-- limit and every level up to ~7 above the area's reference level adds
+	-- real money per run.
 	CapacityPerLevel = 0.2,
-	-- [PROPOSAL] The area's base bag is still re-based with the OLD +6% step,
-	-- and the 10-run benchmark (prices) still assumes the bag a reference
-	-- player had with it (BaseCapacity x AreaScale^(area-1)). So nobody carries
-	-- less than before, prices do not move, and every capacity level bought
-	-- now pays ~3x more than before: progress is easier, as asked.
-	CapacityBasePerLevel = 0.06,
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
@@ -3144,7 +3160,8 @@ EconomyDefs.Sections = {
 	MaxLevel = 10, -- [PROPOSAL]
 	-- [PROPOSAL] A full area of level-1 sections earns this share of the active
 	-- runner rate R(area) / RunDurationSeconds(). With CombinedSections prices a
-	-- level-1 section then repays its unlock price in ~40 minutes of stocked running.
+	-- level-1 section then repays its unlock price in ~40 minutes of stocked running
+	-- (~33 minutes with the eased prices, EconomyDefs.ProgressEase).
 	-- (0.32 -> 0.36 when the castle boss fight made a run ~7 s longer, -> 0.39 when
 	-- the boss intro / outro (~5.4 s) were counted in RunDurationSeconds: the share
 	-- grows with the run length so the section $/s and the payback stay the same.)
@@ -4478,7 +4495,10 @@ RunnerDefs.MAX_STANCE = 2
 RunnerDefs.TROOP_VALUE = 1.5 -- [PROPOSAL] $ per troop alive at the finish ("$1.50 each")
 RunnerDefs.DAMAGE_GATE_AMOUNT = 0.2 -- [PROPOSAL] +20% damage per damage gate (additive)
 RunnerDefs.DAMAGE_GATE_VALUE = 9 -- [PROPOSAL] $ credited per damage gate collected
-RunnerDefs.CASH_ROW_BASE = 9 -- [PROPOSAL] middle cash lane of the first cash row
+-- [PROPOSAL] middle cash lane of the first cash row. The cash rows offer
+-- about 2.5x the reference bag (Economy), so coin-carrying capacity is the
+-- limit and its upgrade (+20% per level, owner request) always pays.
+RunnerDefs.CASH_ROW_BASE = 19
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
 RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trade troops for cash)
@@ -4683,9 +4703,11 @@ return RunnerDefs
 			line and passes `lane`: how many of the formation's outer columns
 			(FORMATION_SPACING_X apart) reach over the line between the two lanes,
 			0..2: closer than 1 column to the line -> 2, closer than 2 -> 1, else 0.
-			(The edge shift of RunnerDefs.FormationShift only happens deep in a
-			lane, where no column reaches across.) The server computes it from
-			where it saw the avatar cross the row.
+			The sim ignores the edge shift of RunnerDefs.FormationShift: it only
+			moves troops when the avatar is more than 6.4 studs from the centre
+			line (stance 0 there); a shifted troop may then stand up to ~0.8 stud
+			past the line but still counts as shooting its own lane. The server
+			computes it from where it saw the avatar cross the row.
 		RunnerSim.UnitsAcross(units, row, lane, stance): number
 			of `units` (troops incl. the avatar) how many shoot the other lane:
 			the troops in the outer `stance` columns on that side, and only with
@@ -4748,9 +4770,12 @@ return RunnerDefs
 	Why BestCase is exact: the final payout never goes down when any of
 	(troops, weaponTier, damageMult, carried, banked) goes up (the boss damage
 	potential, victory and the survivors all rise with troops and unit DPS),
-	and every row rule keeps that order for a fixed (lane, stance): more units
-	or DPS means more damage on BOTH lanes (UnitsAcross grows by at most one
-	unit per extra troop). The one exception is a red contest gate, which
+	and every row rule keeps that order for a fixed (lane, stance) above the
+	wide-shooting threshold: more units or DPS means more damage on BOTH lanes
+	(there UnitsAcross grows by at most one unit per extra troop). At the
+	threshold itself (WIDE_RANGE_MIN_COMPANIONS) a stance > 0 suddenly sends 2
+	troops across, but a bigger squad can always pick stance 0, which is exactly
+	what every stance means below the threshold. The one exception is a red contest gate, which
 	takes more troops from a stronger squad - but its blue side is better in
 	every state (more troops, nothing else differs), so some best run never
 	passes a red contest gate and every other rule is monotone. So a partial
@@ -11588,6 +11613,8 @@ return MapBuilder
 		ModeService:Teleport(player, cframe): boolean
 		ModeService:ReturnToBase(player, target: CFrame?)
 			back to Base mode at `target`, or where the player stood before leaving the base
+		ModeService:GetBaseCFrame(player): CFrame?
+			where the player stood when they last left the base (nil if never)
 		ModeService.ModeChanged: Signal(player, newMode, oldMode)
 			Services that run sessions (runner, combat) listen to this and clean
 			up when a player leaves their mode for any reason (death, leaving...).
@@ -11703,6 +11730,10 @@ function ModeService:Teleport(player: Player, cframe: CFrame): boolean
 	return true
 end
 
+function ModeService:GetBaseCFrame(player: Player): CFrame?
+	return lastBaseCFrame[player]
+end
+
 function ModeService:ReturnToBase(player: Player, place: CFrame?)
 	local target = place or lastBaseCFrame[player]
 	if not target then
@@ -11751,7 +11782,7 @@ return ModeService
 			laterals[i] = studs right of the centre line where the client crossed row i
 		RunnerRetry(runId)            -> same as RunnerPrepare: a new run on the same track,
 		                                 after a finished one (the defeat screen's TRY AGAIN)
-		RunnerLeave()                 -> {}   back to the base, at Layout.RunnerReturnCFrame
+		RunnerLeave()                 -> {}   back to the base (see returnSpot)
 
 	Push channel "Runner" (server -> client):
 		"Ended", { runId }   -- the server ended the session (death, mode change)
@@ -11786,9 +11817,10 @@ return ModeService
 		                 repeated request gets the same reply again (never pays twice).
 		RunnerRetry    - after RunnerFinish: ends that session and starts a new one
 		                 at the player's current level without leaving the track.
-		RunnerLeave    - restores the avatar and returns to the base at the spawn,
-		                 on the far side from the ARMY RUN pad (owner request: not
-		                 back on the pad; the base's unlocks are right there).
+		RunnerLeave    - restores the avatar and returns to the base: where the player
+		                 stood before the run, unless that was on the ARMY RUN pad -
+		                 then at the spawn, on the far side of the area (owner
+		                 request: not back on the pad; the unlocks are right there).
 
 	Every way a session ends (RunnerLeave, death / respawn / any mode change,
 	leaving the game, a failed teleport) goes through endSession, which stops
@@ -11843,6 +11875,9 @@ local PLAZA_LENGTH = 80
 local PLAZA_WIDTH = 60
 local WALL_HEIGHT = 40
 local UPGRADE_KINDS = { troops = true, damage = true, capacity = true }
+-- [PROPOSAL] A run started this close to the ARMY RUN pad (studs, flat) returns
+-- the player to the spawn instead (the 15-stud pad + a margin).
+local PORTAL_CLEAR_RADIUS = 14
 local GUN_NAME = "RunnerGun" -- RunnerVisuals looks for this Tool in the character
 
 -- RUN_SPEED comes from ECON's RunnerDefs (fallback if the value is missing).
@@ -12153,8 +12188,16 @@ local function chooseStances(session: Session, lanes: { number }, laterals: any)
 		end
 		local at = session.serverLaterals[i] or session.lastLateral or 0
 		local claimed = rawget(source, i)
-		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= LANE_EDGE_TOLERANCE then
+		-- The client's own lane was paid near the edge (chooseLanes): its lateral
+		-- may then be a little further from our late sample.
+		local tolerance = if lanes[i] ~= session.serverChoices[i] then 2 * LANE_EDGE_TOLERANCE else LANE_EDGE_TOLERANCE
+		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= tolerance then
 			at = claimed :: number
+		end
+		-- Never take the stance from a point outside the lane that is paid.
+		local option = optionForLane(row, lanes[i])
+		if option then
+			at = math.clamp(at, option.x - option.width / 2, option.x + option.width / 2)
 		end
 		clean[i] = RunnerSim.Stance(row, lanes[i], at)
 	end
@@ -12363,6 +12406,20 @@ local function dataService(): any
 	return registry.DataService
 end
 
+-- Where a player lands after a run: where they stood before it, unless that
+-- was on the ARMY RUN pad (owner request: not back on the pad) - then the spawn.
+local function returnSpot(player: Player): CFrame
+	local Mode = modeService()
+	local last: CFrame? = if Mode and type(Mode.GetBaseCFrame) == "function" then Mode:GetBaseCFrame(player) else nil
+	if last then
+		local offset = last.Position - Layout.RunnerPortalPosition()
+		if Vector2.new(offset.X, offset.Z).Magnitude > PORTAL_CLEAR_RADIUS then
+			return last
+		end
+	end
+	return Layout.RunnerReturnCFrame()
+end
+
 -- Creates a session at the player's current level and puts the avatar at
 -- the start of its track, frozen. `fromBase` = coming from the base (switch
 -- the mode to Runner first); false = a retry on the track (already Runner).
@@ -12417,7 +12474,7 @@ local function startRun(player: Player, data: any, character: Model, humanoid: H
 		if fromBase then
 			Mode:SetMode(player, "Base") -- never left the base
 		else
-			Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+			Mode:ReturnToBase(player, returnSpot(player))
 		end
 		return Net.Fail("Could not reach the track, try again")
 	end
@@ -12678,7 +12735,7 @@ local function onLeave(player: Player)
 	local Mode = modeService()
 	endSession(player, false)
 	if Mode and Mode:GetMode(player) == "Runner" then
-		Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+		Mode:ReturnToBase(player, returnSpot(player))
 	end
 	return Net.Ok()
 end
@@ -15296,6 +15353,7 @@ type Session = {
 	stances: { number }, -- row index -> RunnerSim.Stance at that crossing
 	nextRow: number,
 	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
+	engagements: { [number]: Engagement }, -- row index -> the engagement last sent (split-fire hint)
 	live: Live,
 	targetLateral: number,
 	camLateral: number,
@@ -15640,6 +15698,7 @@ end
 local function crossRow(s: Session, index: number, lane: number, lateral: number)
 	local crossed = s.course.rows[index]
 	s.choices[index] = lane
+	s.engagements[index] = nil
 	s.laterals[index] = lateral
 	s.stances[index] = if crossed then RunnerSim.Stance(crossed, lane, lateral) else 0
 	s.nextRow = index + 1
@@ -15704,9 +15763,28 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 			local outcome = if ok and type(result) == "table" then findOutcome(result, index) else nil
 			local engagement = engagementFor(row, lane, outcome)
 			if engagement then
+				s.engagements[index] = engagement
 				visuals:Engage(index, engagement)
 			end
 		end
+	end
+	-- Wide shooting is a trade-off (owner request: the middle hits both sides,
+	-- a side gets more damage), so say when fire is being split.
+	local nearest: Engagement? = nil
+	for index = s.nextRow, #rows do
+		local engagement = s.engagements[index]
+		if engagement then
+			nearest = engagement
+			break
+		end
+		if distance < rows[index].distance - GUN_RANGE then
+			break
+		end
+	end
+	if s.hud then
+		s.hud.SetNote(if nearest and nearest.across > 0
+			then ("🎯 SPLIT FIRE: %d shoot the other side"):format(nearest.across)
+			else nil)
 	end
 end
 
@@ -15907,6 +15985,7 @@ local function beginBoss(s: Session, lateral: number)
 	s.humanoid:Move(Vector3.zero, false)
 	if s.hud then
 		s.hud.SetProgress(1)
+		s.hud.SetNote(nil)
 	end
 	-- Our own prediction: the boss's max HP for the intro (the same number the
 	-- server uses: same course + stats) and the fallback if RunnerFinish fails.
@@ -16257,6 +16336,7 @@ local function startSession(reply: { [string]: any })
 		stances = {},
 		nextRow = 1,
 		engageKeys = {},
+		engagements = {},
 		live = { troops = stats.startTroops, cash = 0, tier = 1, dmg = 1 },
 		targetLateral = 0,
 		camLateral = 0,
@@ -19343,6 +19423,8 @@ return InventoryUI
 			Hud.SetStatsVisible(visible) -- hidden on the pre-run screen (the cards show the
 			                                stats) and on the summary (RunnerController)
 			Hud.PopCash()                -- bounce the money tag (cash picked up)
+		Hud.SetNote(text?)           -- small orange pill just above the squad panel (nil hides it),
+		                                e.g. "🎯 SPLIT FIRE: 3 troops shoot the other side"
 			Hud.Destroy()
 			HudStats = { troops, weaponName, weaponTier, maxTier, dps, cash, capacity }
 			  Panel (owner request: stats in a corner, not above the head; bottom-left,
@@ -19512,6 +19594,7 @@ export type Hud = {
 	SetStats: (stats: HudStats) -> (),
 	SetStatsVisible: (visible: boolean) -> (),
 	PopCash: () -> (),
+	SetNote: (text: string?) -> (),
 	Destroy: () -> (),
 }
 
@@ -19621,6 +19704,33 @@ function RunnerUI.ShowHud(level: number): Hud
 		Parent = moneyTag,
 	})
 
+	-- Note pill just above the squad panel (wide-shooting hint).
+	local noteHolder = Instance.new("Frame")
+	noteHolder.Name = "RunnerNote"
+	noteHolder.BackgroundTransparency = 1
+	noteHolder.AnchorPoint = Vector2.new(0, 1)
+	noteHolder.Position = UDim2.new(0, 12, 1, -12)
+	noteHolder.Size = UDim2.fromOffset(232, 226) -- the panel (186) + the pill above it
+	noteHolder.Visible = false
+	noteHolder.Parent = gui
+	responsive(noteHolder)
+	local notePill = Instance.new("Frame")
+	notePill.Name = "Pill"
+	notePill.BackgroundColor3 = P.CardOrangeDark
+	notePill.Size = UDim2.new(1, 0, 0, 34)
+	notePill.Parent = noteHolder
+	Theme.Corner(notePill, 0.5)
+	Theme.Stroke(notePill, P.CardOutline, 2, true)
+	local noteLabel = Theme.Label({
+		Text = "",
+		MaxTextSize = 18,
+		Size = UDim2.new(1, -12, 1, -4),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = notePill,
+	})
+	local noteText: string? = nil
+
 	local lastTroops = -1
 	return {
 		SetLevel = function(newLevel: number)
@@ -19655,13 +19765,28 @@ function RunnerUI.ShowHud(level: number): Hud
 			else
 				corner.Visible = visible
 			end
+			noteHolder.Visible = corner.Visible and noteText ~= nil
 		end,
 		PopCash = function()
 			Theme.Pop(moneyTag)
 		end,
+		SetNote = function(text: string?)
+			if text == noteText then
+				return
+			end
+			noteText = text
+			if text then
+				noteLabel.Text = text
+				noteHolder.Visible = corner.Visible
+				Theme.Pop(notePill)
+			else
+				noteHolder.Visible = false
+			end
+		end,
 		Destroy = function()
 			root:Destroy()
 			corner:Destroy()
+			noteHolder:Destroy()
 		end,
 	}
 end
@@ -26772,10 +26897,12 @@ return RunnerModels
 	  * barricades  - sandbag walls with an HP bar
 	  * contest rows- "shoot to grow" gates [owner request], drawn UNLIKE the other
 	                  gates: less see-through blue / red panels with dark stripes,
-	                  a glowing gold Neon frame each, "🎯 +3" / "🎯 -4" numbers and a
-	                  "🎯 SHOOT TO GROW" beam over the row. While the squad shoots
-	                  them each side's number grows and the more-shot side widens,
-	                  pushing the middle post (and the other side) aside
+	                  a gold frame each, "🎯 +3" / "🎯 -4" numbers and a blue / red
+	                  tug-of-war meter over the row with "🎯 SHOOT TO GROW" on it.
+	                  While the squad shoots them each side's number grows and the
+	                  meter pushes into the less-shot side. The panels and the
+	                  middle post stay on the real lanes (the lane you pass is the
+	                  one RunnerSim / the server score)
 	  * value labels- a row's cash values, a red toll gate's cash, a squad's
 	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
 	                  previous row has been crossed (owner request: far-away labels
@@ -26887,14 +27014,18 @@ local GATE_HEIGHT = 7
 local POST_HEIGHT = 8.4
 local FORT_DEPTH = 14
 -- Shoot-to-grow ("contest") gates [PROPOSAL, visual only]
-local CONTEST_TRANSPARENCY = 0.22 -- less see-through than normal gates (0.45)
-local CONTEST_POST_HEIGHT = 10.4 -- taller posts that carry the "SHOOT TO GROW" beam
-local CONTEST_BEAM_HEIGHT = 1.8
-local CONTEST_FRAME = 0.45 -- thickness of the glowing frame bars
+-- Shoot-to-grow rows. The panels and the middle post stay exactly on the
+-- lanes RunnerSim / the server score (review: a moving divider showed one
+-- side while the other was paid); which side dominates is shown by the
+-- tug-of-war meter above them and by the growing numbers.
+local CONTEST_TRANSPARENCY = 0.35 -- a little less see-through than normal gates (0.45)
+local CONTEST_FRAME = 0.45 -- thickness of the gold frame bars
 local CONTEST_STRIPES = 5 -- dark vertical stripes per panel
-local CONTEST_SWING = 0.35 -- how far the middle moves at the most growth difference
-local CONTEST_SHARE_MIN = 0.2 -- a side never gets narrower than 20% of the row
-local CONTEST_SHARE_MAX = 0.8
+local CONTEST_METER_Y = GATE_HEIGHT + 1.05 -- centre height of the tug-of-war meter
+local CONTEST_METER_HEIGHT = 0.9
+local CONTEST_SWING = 0.4 -- how far the meter's split moves at the most growth difference
+local CONTEST_SHARE_MIN = 0.1
+local CONTEST_SHARE_MAX = 0.9
 local AIM_SPREAD = 3 -- tenths of a stud: bullets land this close to their target point
 
 -- Boss timing is shared with the economy (RunnerDefs; fallback = same values).
@@ -27157,9 +27288,9 @@ type ContestVisual = {
 	sides: { ContestSide },
 	minX: number, -- lateral extent of both lanes together
 	maxX: number,
-	share: number, -- left side's share of the width now (animated)
+	share: number, -- left side's share of the tug-of-war meter now (animated)
 	goal: number, -- share it is moving to
-	divider: BasePart, -- middle post (moves with the share)
+	meter: { BasePart }, -- left and right halves of the meter (their colours)
 	distance: number,
 }
 
@@ -27407,44 +27538,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		return list
 	end
 
-	-- Lays a shoot-to-grow row out for its current share: both panels, their
-	-- frames, shooting targets and the middle post (CFrame / Size only).
+	-- Puts the tug-of-war meter's split where the share says (two plain
+	-- parts: Size / CFrame only, no SurfaceGui on them).
 	local function layoutContest(cv: ContestVisual)
 		local split = cv.minX + (cv.maxX - cv.minX) * cv.share
-		for i, side in cv.sides do
-			local x0 = if i == 1 then cv.minX else split
-			local x1 = if i == 1 then split else cv.maxX
-			-- Room for the frame bars and half a post on each side.
-			local width = math.max(1, x1 - x0 - 2 * CONTEST_FRAME - 0.9)
-			local centre = worldAt(cv.distance, (x0 + x1) / 2, GATE_HEIGHT / 2 + 0.2)
-			local ov = side.ov
-			ov.centre = centre
-			local panel = ov.panel
-			if side.gone or not panel then
-				continue
-			end
-			panel.Size = Vector3.new(width, GATE_HEIGHT, 0.5)
-			panel.CFrame = CFrame.new(centre)
-			-- Points on the face the runner sees (+Z).
-			ov.targets = {
-				centre + Vector3.new(-width * 0.3, -0.9, 0.35),
-				centre + Vector3.new(0, 0.7, 0.35),
-				centre + Vector3.new(width * 0.3, -0.2, 0.35),
-			}
-			local f = CONTEST_FRAME
-			local top, bottom, left, right = side.frame[1], side.frame[2], side.frame[3], side.frame[4]
-			if top and bottom and left and right then
-				top.Size = Vector3.new(width + 2 * f, f, 0.65)
-				top.CFrame = CFrame.new(centre + Vector3.new(0, GATE_HEIGHT / 2, 0))
-				bottom.Size = top.Size
-				bottom.CFrame = CFrame.new(centre - Vector3.new(0, GATE_HEIGHT / 2, 0))
-				left.Size = Vector3.new(f, GATE_HEIGHT, 0.65)
-				left.CFrame = CFrame.new(centre - Vector3.new(width / 2 + f / 2, 0, 0))
-				right.Size = left.Size
-				right.CFrame = CFrame.new(centre + Vector3.new(width / 2 + f / 2, 0, 0))
-			end
+		local left, right = cv.meter[1], cv.meter[2]
+		if not left or not right then
+			return
 		end
-		cv.divider.CFrame = CFrame.new(worldAt(cv.distance, split, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2))
+		local leftWidth = math.max(0.05, split - cv.minX)
+		local rightWidth = math.max(0.05, cv.maxX - split)
+		left.Size = Vector3.new(leftWidth, CONTEST_METER_HEIGHT, 0.3)
+		left.CFrame = CFrame.new(worldAt(cv.distance, cv.minX + leftWidth / 2, CONTEST_METER_Y))
+		right.Size = Vector3.new(rightWidth, CONTEST_METER_HEIGHT, 0.3)
+		right.CFrame = CFrame.new(worldAt(cv.distance, cv.maxX - rightWidth / 2, CONTEST_METER_Y))
 	end
 
 	-- Shoot-to-grow gates (row kind "contest"): look unlike every other gate.
@@ -27461,13 +27568,16 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		local maxX = rightOpt.x + rightOpt.width / 2
 		local list: { OptionVisual } = {}
 		local sides: { ContestSide } = {}
+		local meter: { BasePart } = {}
 		for _, option in { leftOpt, rightOpt } do
 			local red = option.tone == "growNegative" or option.op == "sub"
 			local color = if red then P.GateNegative else P.GatePositive
 			local centre = worldAt(row.distance, option.x, GATE_HEIGHT / 2 + 0.2)
+			-- The panel fills its own lane (room for the frame and half a post).
+			local width = math.max(2, option.width - 2 * CONTEST_FRAME - 0.9)
 			local panel = RunnerModels.Part({
 				Name = "ContestPanel" .. option.lane,
-				Size = Vector3.new(math.max(2, option.width - 1.2), GATE_HEIGHT, 0.5),
+				Size = Vector3.new(width, GATE_HEIGHT, 0.5),
 				CFrame = CFrame.new(centre),
 				Color = color,
 				Transparency = CONTEST_TRANSPARENCY,
@@ -27477,6 +27587,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			local value = option.amount or 0
 			local label = RunnerModels.SurfaceLabel(panel, Enum.NormalId.Back, contestText(option, value), 160)
 			label.ZIndex = 3
+			label.TextWrapped = false -- "🎯 +12" stays on one line while it grows
 			-- Dark vertical stripes behind the number (same SurfaceGui, lower ZIndex).
 			local gui = label.Parent
 			if gui then
@@ -27492,19 +27603,44 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 					stripe.Parent = gui
 				end
 			end
+			-- Gold frame (solid, not Neon: Neon yellow glows white on the white track).
+			local f = CONTEST_FRAME
 			local frame: { BasePart } = {}
-			for _, name in { "FrameTop", "FrameBottom", "FrameLeft", "FrameRight" } do
-				local bar = RunnerModels.Part({
-					Name = name,
-					Size = Vector3.one,
-					CFrame = CFrame.new(centre),
+			local bars: { { name: string, size: Vector3, offset: Vector3 } } = {
+				{ name = "FrameTop", size = Vector3.new(width + 2 * f, f, 0.65), offset = Vector3.new(0, GATE_HEIGHT / 2, 0) },
+				{
+					name = "FrameBottom",
+					size = Vector3.new(width + 2 * f, f, 0.65),
+					offset = Vector3.new(0, -GATE_HEIGHT / 2, 0),
+				},
+				{
+					name = "FrameLeft",
+					size = Vector3.new(f, GATE_HEIGHT, 0.65),
+					offset = Vector3.new(-(width / 2 + f / 2), 0, 0),
+				},
+				{ name = "FrameRight", size = Vector3.new(f, GATE_HEIGHT, 0.65), offset = Vector3.new(width / 2 + f / 2, 0, 0) },
+			}
+			for _, bar in bars do
+				local part = RunnerModels.Part({
+					Name = bar.name,
+					Size = bar.size,
+					CFrame = CFrame.new(centre + bar.offset),
 					Color = P.Coin,
-					Material = Enum.Material.Neon,
 					Parent = rowFolder,
 				})
-				bar.CastShadow = false
-				table.insert(frame, bar)
+				part.CastShadow = false
+				table.insert(frame, part)
 			end
+			-- This side's half of the tug-of-war meter (layoutContest sizes it).
+			local half = RunnerModels.Part({
+				Name = "ContestMeter" .. option.lane,
+				Size = Vector3.new(1, CONTEST_METER_HEIGHT, 0.3),
+				CFrame = CFrame.new(worldAt(row.distance, option.x, CONTEST_METER_Y)),
+				Color = color,
+				Parent = rowFolder,
+			})
+			half.CastShadow = false
+			table.insert(meter, half)
 			local ov: OptionVisual = {
 				option = option,
 				centre = centre,
@@ -27512,7 +27648,12 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				label = label,
 				model = nil,
 				enemies = {},
-				targets = {},
+				-- Points on the face the runner sees (+Z).
+				targets = {
+					centre + Vector3.new(-width * 0.3, -0.9, 0.35),
+					centre + Vector3.new(0, 0.7, 0.35),
+					centre + Vector3.new(width * 0.3, -0.2, 0.35),
+				},
 				hp = nil,
 				anchor = nil,
 				valueLabel = nil, -- the number is on the panel (like a gate)
@@ -27520,50 +27661,46 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			list[option.lane] = ov
 			table.insert(sides, { lane = option.lane, option = option, ov = ov, frame = frame, shown = value, gone = false })
 		end
-		-- Tall outer posts carrying the sign beam, and the middle post that moves.
+		-- Outer posts hold the meter; the middle post marks the real lane line.
+		local postHeight = CONTEST_METER_Y + CONTEST_METER_HEIGHT / 2 + 0.2
 		for _, x in { minX - 0.35, maxX + 0.35 } do
 			RunnerModels.Part({
 				Name = "ContestPost",
-				Size = Vector3.new(0.8, CONTEST_POST_HEIGHT, 0.8),
-				CFrame = CFrame.new(worldAt(row.distance, x, CONTEST_POST_HEIGHT / 2)),
+				Size = Vector3.new(0.8, postHeight, 0.8),
+				CFrame = CFrame.new(worldAt(row.distance, x, postHeight / 2)),
 				Color = P.GatePost,
 				Parent = rowFolder,
 			})
 		end
-		local divider = RunnerModels.Part({
+		local lineX = ((leftOpt.x + leftOpt.width / 2) + (rightOpt.x - rightOpt.width / 2)) / 2
+		RunnerModels.Part({
 			Name = "ContestDivider",
-			Size = Vector3.new(0.8, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT, 0.8),
-			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2)),
+			Size = Vector3.new(0.8, GATE_HEIGHT + 0.4, 0.8),
+			CFrame = CFrame.new(worldAt(row.distance, lineX, (GATE_HEIGHT + 0.4) / 2)),
 			Color = P.GatePost,
 			Parent = rowFolder,
 		})
-		local beam = RunnerModels.Part({
+		-- "🎯 SHOOT TO GROW" written over the meter on an invisible part (a
+		-- SurfaceGui still draws on it), so nothing solid blocks the view ahead.
+		local signPart = RunnerModels.Part({
 			Name = "ContestSign",
-			Size = Vector3.new(maxX - minX + 1.5, CONTEST_BEAM_HEIGHT, 0.6),
-			CFrame = CFrame.new(
-				worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT / 2)
-			),
-			Color = P.PillBlack,
+			Size = Vector3.new(maxX - minX, CONTEST_METER_HEIGHT + 0.6, 0.1),
+			-- Just in front of the meter (the runner comes from smaller distances).
+			CFrame = CFrame.new(worldAt(row.distance - 0.3, (minX + maxX) / 2, CONTEST_METER_Y)),
+			Color = P.White,
+			Transparency = 1,
 			Parent = rowFolder,
 		})
-		local sign = RunnerModels.SurfaceLabel(beam, Enum.NormalId.Back, "🎯 SHOOT TO GROW", 80)
-		sign.TextColor3 = P.Coin
-		local trim = RunnerModels.Part({
-			Name = "ContestSignTrim",
-			Size = Vector3.new(maxX - minX + 1.7, 0.25, 0.7),
-			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT)),
-			Color = P.Coin,
-			Material = Enum.Material.Neon,
-			Parent = rowFolder,
-		})
-		trim.CastShadow = false
+		signPart.CastShadow = false
+		local sign = RunnerModels.SurfaceLabel(signPart, Enum.NormalId.Back, "🎯 SHOOT TO GROW 🎯", 80)
+		sign.TextWrapped = false
 		local cv: ContestVisual = {
 			sides = sides,
 			minX = minX,
 			maxX = maxX,
 			share = 0.5,
 			goal = 0.5,
-			divider = divider,
+			meter = meter,
 			distance = row.distance,
 		}
 		layoutContest(cv)
@@ -27942,7 +28079,17 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				continue
 			end
 			local row = rowVisual.row
-			local progress = math.clamp((distance - (row.distance - GUN_RANGE)) / GUN_RANGE, 0, 1)
+			-- Bullets go to the nearest engaged row, so a row only "takes hits"
+			-- once the engaged rows before it are crossed (review: a gate grew
+			-- while every bullet went to the row before it).
+			local start = row.distance - GUN_RANGE
+			for other in engaged do
+				local before = rowVisuals[other]
+				if other < index and before then
+					start = math.max(start, before.row.distance)
+				end
+			end
+			local progress = math.clamp((distance - start) / math.max(1, row.distance - start), 0, 1)
 			local fights = e.fights
 			for lane, ov in rowVisual.options do
 				local laneFight = fights[lane]
@@ -27970,7 +28117,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				end
 			end
 			-- Shoot-to-grow: each side's number grows with its share of the
-			-- engagement; the more-shot side takes more of the width.
+			-- engagement; the tug-of-war meter leans towards the more-shot side.
 			local cv = rowVisual.contest
 			if cv then
 				local now: { number } = {}
@@ -28181,7 +28328,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		if #parts > 0 then
 			Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 		end
-		-- Shoot-to-grow rows slide towards their goal width (only while it changes).
+		-- Shoot-to-grow meters slide towards their goal (only while it changes).
 		local slide = 1 - math.exp(-dt * 6)
 		for _, cv in contests do
 			if math.abs(cv.share - cv.goal) > 0.001 then
@@ -28355,6 +28502,20 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 						end
 					end
 					ov.enemies = standing
+					-- Its label shows the soldiers still standing there.
+					local fallen = if outcome and outcome.otherKills then outcome.otherKills else killed
+					local left = math.max(0, math.floor(ov.option.enemies or 0) - fallen)
+					local gui = ov.valueLabel
+					if fallen > 0 and gui then
+						if left <= 0 then
+							gui.Enabled = false
+						else
+							local text = gui:FindFirstChild("Text", true)
+							if text and text:IsA("TextLabel") then
+								text.Text = left .. " SOLDIERS"
+							end
+						end
+					end
 				end
 			end
 			if totalKills > 0 then
