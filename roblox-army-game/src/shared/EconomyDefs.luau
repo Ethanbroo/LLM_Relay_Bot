@@ -36,7 +36,15 @@ EconomyDefs.Runner = {
 	BaseDamage = 10, -- [PROPOSAL] damage of one troop at level 0
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
-	CapacityPerLevel = 0.06, -- [PROPOSAL] +6% of base capacity per level
+	-- [owner request] +20% of base capacity per level (was +6%: "increase the
+	-- upgrade amount of coins so it's easier to progress").
+	CapacityPerLevel = 0.2,
+	-- [PROPOSAL] The area's base bag is still re-based with the OLD +6% step,
+	-- and the 10-run benchmark (prices) still assumes the bag a reference
+	-- player had with it (BaseCapacity x AreaScale^(area-1)). So nobody carries
+	-- less than before, prices do not move, and every capacity level bought
+	-- now pays ~3x more than before: progress is easier, as asked.
+	CapacityBasePerLevel = 0.06,
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]

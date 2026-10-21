@@ -19,15 +19,17 @@
 	                humanoid:Move() forward (-Z) and steer towards a target lane.
 	                The server put a "RunnerGun" Tool in the avatar's hand;
 	                RunnerVisuals welds the gun model of the current weapon to it.
-	                Squads / barricades within RunnerDefs.GUN_RANGE (1.5 rows) are
-	                shot at: we predict that row's fight with RunnerSim.Resolve
-	                (lanes so far + the lane we are in now) so enemies fall and HP
-	                drains exactly as the sim says. When the avatar crosses a row
-	                we record the lane it is in and replay the run so far.
+	                Squads / barricades / shoot-to-grow gates within
+	                RunnerDefs.GUN_RANGE (1.5 rows) are shot at: we predict that
+	                row with RunnerSim.Resolve (lanes + wide-shooting stances so far
+	                + the lane and RunnerSim.Stance we are in now) so enemies fall,
+	                HP drains and gates grow in BOTH lanes exactly as the sim says.
+	                When the avatar crosses a row we record its lane and lateral
+	                position (the stance) and replay the run so far.
 	                Live stats sit in the BOTTOM-LEFT panel (RunnerUI HUD), clear
 	                of Roblox's chat window (top-left).
 	  3. BOSS     - the avatar stops before the castle. Right away we send our
-	                lane choices to the server (RunnerFinish, ONE request, never
+	                lanes + laterals to the server (RunnerFinish, ONE request, never
 	                before RunnerSim.MinDuration + FINISH_SLACK); the server
 	                re-simulates and pays. Meanwhile the castle door opens and
 	                the boss walks out (RunnerDefs.BOSS_INTRO_SECONDS), which
@@ -37,7 +39,11 @@
 	                avatar last), so what you see always matches what is paid.
 	                Only if the request fails (or has no reply FINISH_REPLY_WAIT s
 	                after the intro) do we play our own RunnerSim.Resolve.
-	  4. SUMMARY  - "RUN COMPLETE!" panel from the reply; COLLECT returns to the base.
+	  4. SUMMARY  - "RUN COMPLETE!" panel from the reply; COLLECT returns to the
+	                base (the server puts us at the spawn, away from the ARMY RUN
+	                pad). After a LOST run the level stays (owner request) and the
+	                panel offers TRY AGAIN: RunnerRetry starts the same level on
+	                the track right away.
 
 	Cleanup (camera, controls, jump, visuals incl. guns / boss / bullets /
 	avatar pose, HUD panel, messages, input) happens on COLLECT, Back, any
@@ -82,6 +88,7 @@ type RowOutcome = RunnerSim.RowOutcome
 type BossOutcome = RunnerSim.BossOutcome
 type Option = RunnerCourse.Option
 type Fight = RunnerVisuals.Fight
+type Engagement = RunnerVisuals.Engagement
 type PlayerData = Types.PlayerData
 
 local player = Players.LocalPlayer
@@ -126,6 +133,8 @@ type Session = {
 	runSpeed: number,
 	phase: string, -- "prepare" | "running" | "boss" | "summary" | "ended"
 	choices: { number },
+	laterals: { number }, -- row index -> studs right of the centre line where we crossed it
+	stances: { number }, -- row index -> RunnerSim.Stance at that crossing
 	nextRow: number,
 	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
 	live: Live,
@@ -171,6 +180,7 @@ local opening = false
 local portalArmed = false
 local portalCooldownUntil = 0
 local controlsCache: any = nil
+local startSessionRef: ((reply: { [string]: any }) -> ())? = nil -- startSession (defined further down)
 
 -------------------------------------------------------------------------------
 -- Small helpers
@@ -243,7 +253,7 @@ local function cleanStats(raw: any, fallback: { startTroops: number, damage: num
 end
 
 local function safeResolve(s: Session): Result?
-	local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, s.choices)
+	local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, s.choices, s.stances)
 	if ok and type(result) == "table" then
 		return result
 	end
@@ -280,43 +290,60 @@ local function laneAt(row: Row, lateral: number): number
 	return best
 end
 
--- What a squad / barricade fight looks like for the visuals, from the
--- row's RunnerSim outcome (same rule as RunnerSim: the squad shoots for
--- RunnerDefs.ENGAGE_SECONDS with every unit's UnitDps). Visual only: the
--- troops / cash / destroyed result itself always comes from the outcome.
-local function fightFor(stats: Stats, row: Row, option: Option?, outcome: RowOutcome?): Fight?
-	if not option or not outcome or (row.kind ~= "squad" and row.kind ~= "barricade") then
-		return nil
-	end
-	local okDps, dps = pcall(RunnerSim.UnitDps, stats, outcome.weaponTier, outcome.damageMult)
-	local damage = outcome.troopsBefore * (if okDps then dps else 0) * RunnerDefs.ENGAGE_SECONDS
-	local hp = math.max(1e-6, numberOr(option.hp, 1))
-	if row.kind == "squad" then
-		local enemies = math.max(0, math.floor(numberOr(option.enemies, 0)))
-		local kills = math.min(enemies, math.floor(damage / hp + 1e-9))
-		return {
-			enemies = enemies,
-			kills = kills,
-			share = if enemies > 0 then kills / enemies else 1,
-			destroyed = kills >= enemies,
-		}
-	end
-	local destroyed = outcome.destroyed == true
-	return {
-		enemies = 0,
-		kills = 0,
-		share = if destroyed then 1 else math.clamp(damage / hp, 0, 1),
-		destroyed = destroyed,
-	}
+local function isFightRow(row: Row): boolean
+	return row.kind == "squad" or row.kind == "barricade" or row.kind == "contest"
 end
 
-local function optionAt(row: Row, lane: number): Option?
+-- What a squad / barricade / shoot-to-grow row looks like for the visuals in
+-- EVERY lane (wide shooting hits the other lane too), straight from the row's
+-- RunnerSim outcome. Visual only: troops / cash / destroyed always come from
+-- the outcome itself.
+local function engagementFor(row: Row, lane: number, outcome: RowOutcome?): Engagement?
+	if not outcome or not isFightRow(row) then
+		return nil
+	end
+	local fights: { [number]: Fight } = {}
 	for index, option in row.options do
-		if (if type(option.lane) == "number" then option.lane else index) == lane then
-			return option
+		local l = if type(option.lane) == "number" then option.lane else index
+		local own = l == lane
+		local damage = numberOr(if own then outcome.damage else outcome.otherDamage, 0)
+		if row.kind == "squad" then
+			local enemies = math.max(0, math.floor(numberOr(option.enemies, 0)))
+			local kills = math.clamp(math.floor(numberOr(if own then outcome.kills else outcome.otherKills, 0)), 0, enemies)
+			fights[l] = {
+				enemies = enemies,
+				kills = kills,
+				share = if enemies > 0 then kills / enemies else 1,
+				destroyed = kills >= enemies,
+			}
+		elseif row.kind == "barricade" then
+			local destroyed = if own then outcome.destroyed == true else outcome.otherDestroyed == true
+			local hp = math.max(1e-6, numberOr(option.hp, 1))
+			fights[l] = {
+				enemies = 0,
+				kills = 0,
+				share = if destroyed then 1 else math.clamp(damage / hp, 0, 1),
+				destroyed = destroyed,
+			}
+		else
+			local steps = math.max(0, math.floor(numberOr(if own then outcome.steps else outcome.otherSteps, 0)))
+			local amount = numberOr(if own then outcome.amount else outcome.otherAmount, numberOr(option.amount, 0))
+			fights[l] = {
+				enemies = 0,
+				kills = 0,
+				share = steps / math.max(1, numberOr(option.growMax, 1)),
+				destroyed = false,
+				steps = steps,
+				amount = amount,
+			}
 		end
 	end
-	return row.options[lane]
+	return {
+		lane = lane,
+		stance = math.max(0, math.floor(numberOr(outcome.stance, 0))),
+		across = math.max(0, math.floor(numberOr(outcome.across, 0))),
+		fights = fights,
+	}
 end
 
 local function unitDps(s: Session, tier: number, dmg: number): number
@@ -451,8 +478,11 @@ end
 -------------------------------------------------------------------------------
 -- Run flow
 -------------------------------------------------------------------------------
-local function crossRow(s: Session, index: number, lane: number)
+local function crossRow(s: Session, index: number, lane: number, lateral: number)
+	local crossed = s.course.rows[index]
 	s.choices[index] = lane
+	s.laterals[index] = lateral
+	s.stances[index] = if crossed then RunnerSim.Stance(crossed, lane, lateral) else 0
 	s.nextRow = index + 1
 	s.engageKeys[index] = nil
 	local result = safeResolve(s)
@@ -461,7 +491,7 @@ local function crossRow(s: Session, index: number, lane: number)
 	local visuals = s.visuals
 	local cashBefore = s.live.cash
 	if visuals then
-		visuals:RowCrossed(index, lane, outcome, s.stats.capacity, fightFor(s.stats, row, optionAt(row, lane), outcome))
+		visuals:RowCrossed(index, lane, outcome, s.stats.capacity, engagementFor(row, lane, outcome))
 	end
 	if outcome then
 		s.live = {
@@ -480,9 +510,10 @@ local function crossRow(s: Session, index: number, lane: number)
 	end
 end
 
--- Squads / barricades within gun range: tell the visuals what the fight will
--- look like if we stay in the lane we are in now. Re-predicted only when a
--- relevant lane (or the last crossed row) changes.
+-- Squads / barricades / shoot-to-grow gates within gun range: tell the
+-- visuals what the fight will look like (in both lanes) if we stay where we
+-- are now. Re-predicted only when a relevant lane or stance (or the last
+-- crossed row) changes.
 local function updateEngagements(s: Session, distance: number, lateral: number)
 	local visuals = s.visuals
 	if not visuals then
@@ -490,6 +521,7 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 	end
 	local rows = s.course.rows
 	local lanes: { number } = {}
+	local stances: { number } = {}
 	local key = tostring(s.nextRow)
 	for index = s.nextRow, #rows do
 		local row = rows[index]
@@ -497,17 +529,24 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 			break
 		end
 		local lane = laneAt(row, lateral)
+		local stance = RunnerSim.Stance(row, lane, lateral)
 		lanes[index] = lane
-		key ..= ":" .. lane
-		if (row.kind == "squad" or row.kind == "barricade") and s.engageKeys[index] ~= key then
+		stances[index] = stance
+		key ..= ":" .. lane .. "/" .. stance
+		if isFightRow(row) and s.engageKeys[index] ~= key then
 			s.engageKeys[index] = key
 			local predicted = table.clone(s.choices)
+			local predictedStances = table.clone(s.stances)
 			for j = s.nextRow, index do
 				predicted[j] = lanes[j]
+				predictedStances[j] = stances[j]
 			end
-			local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, predicted)
+			local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, predicted, predictedStances)
 			local outcome = if ok and type(result) == "table" then findOutcome(result, index) else nil
-			visuals:Engage(index, lane, fightFor(s.stats, row, optionAt(row, lane), outcome))
+			local engagement = engagementFor(row, lane, outcome)
+			if engagement then
+				visuals:Engage(index, engagement)
+			end
 		end
 	end
 end
@@ -523,6 +562,32 @@ end
 
 -- The summary appears once BOTH the boss fight has played (fightDone) and the
 -- RunnerFinish reply is in (finishDone). It always shows the server's result.
+-- TRY AGAIN after a lost run: the server ends this run and starts the same
+-- level on the track (RunnerRetry); we then build the new run like a fresh one.
+local function retry(s: Session)
+	if session ~= s or opening then
+		return
+	end
+	opening = true
+	task.spawn(function()
+		local reply = Net.Request("RunnerRetry", s.runId)
+		opening = false
+		if session ~= s then
+			return
+		end
+		if not reply.ok then
+			toast(reply.err or "Could not start the run", "error")
+			leave(s)
+			return
+		end
+		cleanup() -- the old run's visuals, HUD and input
+		local start = startSessionRef
+		if start and not session then
+			start(reply)
+		end
+	end)
+end
+
 local function tryShowSummary(s: Session)
 	if session ~= s or s.phase ~= "boss" or not s.fightDone or not s.finishDone then
 		return
@@ -542,6 +607,7 @@ local function tryShowSummary(s: Session)
 	end
 	local result = reply.result :: Result
 	local paid = numberOr(reply.paid, 0)
+	local lost = type(result.boss) ~= "table" or result.boss.victory ~= true
 	local data = State.Get()
 	local upgrades = if data then data.runner.upgrades else { troops = 0, damage = 0, capacity = 0 }
 	s.closeSummary = RunnerUI.ShowSummary({
@@ -553,7 +619,15 @@ local function tryShowSummary(s: Session)
 		OnCollect = function()
 			s.closeSummary = nil
 			leave(s)
+			toast("💡 Spend your cash on base unlocks - or press 🪖 Army Run to play again", "info")
 		end,
+		-- A lost level is played again until it is won (owner request).
+		OnRetry = if lost
+			then function()
+				s.closeSummary = nil
+				retry(s)
+			end
+			else nil,
 	})
 end
 
@@ -647,7 +721,7 @@ local function sendFinish(s: Session)
 			end
 		end
 	end
-	local reply = Net.Request("RunnerFinish", s.runId, s.choices)
+	local reply = Net.Request("RunnerFinish", s.runId, s.choices, s.laterals)
 	if session ~= s then
 		return
 	end
@@ -669,7 +743,7 @@ local function beginBoss(s: Session, lateral: number)
 	-- Any row we somehow skipped counts with the lane we are in now.
 	local rows = s.course.rows
 	for index = s.nextRow, #rows do
-		crossRow(s, index, laneAt(rows[index], lateral))
+		crossRow(s, index, laneAt(rows[index], lateral), lateral)
 	end
 	s.humanoid:Move(Vector3.zero, false)
 	if s.hud then
@@ -853,7 +927,7 @@ local function step(dt: number)
 		local rows = s.course.rows
 		while s.nextRow <= #rows and distance >= rows[s.nextRow].distance do
 			local index = s.nextRow
-			crossRow(s, index, laneAt(rows[index], lateral))
+			crossRow(s, index, laneAt(rows[index], lateral), lateral)
 		end
 		updateEngagements(s, distance, lateral)
 
@@ -1020,6 +1094,8 @@ local function startSession(reply: { [string]: any })
 		runSpeed = numberOr(reply.runSpeed, DEFAULT_RUN_SPEED),
 		phase = "prepare",
 		choices = {},
+		laterals = {},
+		stances = {},
 		nextRow = 1,
 		engageKeys = {},
 		live = { troops = stats.startTroops, cash = 0, tier = 1, dmg = 1 },
@@ -1113,6 +1189,8 @@ local function startSession(reply: { [string]: any })
 		cleanup()
 	end
 end
+
+startSessionRef = startSession
 
 -------------------------------------------------------------------------------
 -- Public API

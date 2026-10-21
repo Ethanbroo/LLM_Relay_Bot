@@ -45,12 +45,25 @@ return function(H)
 		return RunnerSim.BossDamagePotential(r.boss.units, r.unitDps)
 	end
 
+	-- Random lanes, and random stances (wide shooting) on split rows.
 	local function randomChoices(course, rng)
-		local choices = {}
+		local choices, stances = {}, {}
 		for i, row in course.rows do
 			choices[i] = rng:Int(1, #row.options)
+			stances[i] = if RunnerSim.IsSplitRow(row) then rng:Int(0, RunnerDefs.MAX_STANCE) else 0
 		end
-		return choices
+		return choices, stances
+	end
+
+	-- Every (lane, stance) of row i, in a fixed order.
+	local function movesOf(row)
+		local moves = {}
+		for lane = 1, #row.options do
+			for stance = 0, if RunnerSim.IsSplitRow(row) then RunnerDefs.MAX_STANCE else 0 do
+				table.insert(moves, { lane, stance })
+			end
+		end
+		return moves
 	end
 
 	-- A handful of courses per area: the first benchmark level, a mid one and a late one.
@@ -85,7 +98,15 @@ return function(H)
 	end)
 
 	H.test("Course structure, lanes and sensible options", function()
-		local tones = { positive = true, negative = true, weapon = true, cash = true, enemy = true }
+		local tones = {
+			positive = true,
+			negative = true,
+			weapon = true,
+			cash = true,
+			enemy = true,
+			growPositive = true,
+			growNegative = true,
+		}
 		for _, course in courses do
 			H.expect(#course.rows == RunnerDefs.ROW_COUNT, "row count")
 			H.expect(course.length == RunnerDefs.TRACK_LENGTH, "length")
@@ -94,6 +115,7 @@ return function(H)
 			isWhole(course.boss.reward, "boss reward")
 			local lastDistance = 0
 			local mulRows = 0
+			local contestRows = 0
 			for i, row in course.rows do
 				H.expect(row.index == i, "row index")
 				H.expect(row.distance > lastDistance and row.distance < course.boss.distance, "row distance")
@@ -146,23 +168,66 @@ return function(H)
 					local a, b = row.options[1], row.options[2]
 					H.expect(a.hp ~= b.hp, "weak and strong barricade")
 					sensible = true
+				elseif row.kind == "contest" then
+					contestRows += 1
+					H.expect(#row.options == 2, "contest lanes")
+					local blue, red = 0, 0
+					for _, opt in row.options do
+						H.expect(opt.op == "add" or opt.op == "sub", "contest gates are additive only (no x)")
+						H.expect((opt.amount or 0) >= 1 and math.floor(opt.amount) == opt.amount, "contest start")
+						H.expect((opt.growHp or 0) >= 1 and (opt.growStep or 0) >= 1, "contest growth")
+						H.expect(opt.growMax == RunnerDefs.CONTEST_MAX_STEPS, "contest cap")
+						H.expect(opt.cash == nil, "no cash on contest gates")
+						if opt.tone == "growPositive" then
+							blue += 1
+							H.expect(opt.op == "add", "blue adds")
+						else
+							red += 1
+							H.expect(opt.tone == "growNegative" and opt.op == "sub", "red subtracts")
+						end
+					end
+					H.expect(blue == 1 and red == 1, "one blue + one red")
+					sensible = true
 				else
 					error("unknown row kind " .. row.kind)
 				end
 				H.expect(sensible, ("row %d of %d/%d has no sensible option"):format(i, course.area, course.level))
 			end
 			H.expect(mulRows == RunnerDefs.MUL_ROWS, "x2 rows per course: " .. mulRows)
+			H.expect(contestRows == RunnerDefs.CONTEST_ROWS, "contest rows per course: " .. contestRows)
 		end
+	end)
+
+	H.test("Gate cash is not always behind the red gate (owner request)", function()
+		local onBlue, onRed = 0, 0
+		for level = 1, 200 do
+			local course = RunnerCourse.Generate(1 + level % 8, level)
+			for _, row in course.rows do
+				if row.kind == "gate" then
+					for _, opt in row.options do
+						if (opt.cash or 0) > 0 then
+							if opt.tone == "positive" then
+								onBlue += 1
+							elseif opt.tone == "negative" then
+								onRed += 1
+							end
+							H.expect(opt.label:find("%+%$") ~= nil, "cash shown on the label")
+						end
+					end
+				end
+			end
+		end
+		H.expect(onBlue > 50 and onRed > 50, ("cash gates: %d blue, %d red"):format(onBlue, onRed))
 	end)
 
 	H.test("BestCase >= Resolve for 200 random choice vectors, and it reproduces", function()
 		local rng = Rng.new(4242)
 		for _, course in courses do
 			local stats = refStats(course.area)
-			local best, choices = RunnerSim.BestCase(course, stats)
+			local best, choices, stances = RunnerSim.BestCase(course, stats)
 			H.expect(not RunnerSim.LastSearch.capHit, "state cap hit")
-			H.expect(#choices == #course.rows, "one choice per row")
-			local again = RunnerSim.Resolve(course, stats, choices)
+			H.expect(#choices == #course.rows and #stances == #course.rows, "one choice + stance per row")
+			local again = RunnerSim.Resolve(course, stats, choices, stances)
 			H.expect(again.total == best.total, ("Resolve(best choices) %s ~= %s"):format(again.total, best.total))
 			for _ = 1, 200 do
 				local r = RunnerSim.Resolve(course, stats, randomChoices(course, rng))
@@ -184,19 +249,19 @@ return function(H)
 			for _, level in { 1, 7, 13 } do
 				local full = RunnerCourse.Generate(area, level)
 				local short = table.clone(full)
-				short.rows = table.move(full.rows, 1, 11, 1, {})
+				short.rows = table.move(full.rows, 1, 9, 1, {})
 				local stats = refStats(area)
 				local best = RunnerSim.BestCase(short, stats)
-				-- Enumerate every lane combination.
+				-- Enumerate every lane x stance combination.
 				local bruteBest = -math.huge
-				local choices = {}
+				local choices, stances = {}, {}
 				local function walk(i)
 					if i > #short.rows then
-						bruteBest = math.max(bruteBest, RunnerSim.Resolve(short, stats, choices).total)
+						bruteBest = math.max(bruteBest, RunnerSim.Resolve(short, stats, choices, stances).total)
 						return
 					end
-					for lane = 1, #short.rows[i].options do
-						choices[i] = lane
+					for _, move in movesOf(short.rows[i]) do
+						choices[i], stances[i] = move[1], move[2]
 						walk(i + 1)
 					end
 				end
@@ -381,7 +446,9 @@ return function(H)
 			H.near(RunnerSim.UnitDps(base, tier, 1) / RunnerSim.UnitDps(base, 1, 1), ratio, 0.12, "ratio " .. tier)
 		end
 		-- Damage upgrades and in-run damage gates scale it linearly.
-		H.near(RunnerSim.UnitDps({ startTroops = 3, damage = 12, capacity = 0 }, 2, 1.4), 27 * 1.2 * 1.4, 1e-9, "scale")
+		H.near(RunnerSim.UnitDps({ startTroops = 3, damage = 12, capacity = 0 }, 2, 1.4), 40.5 * 1.2 * 1.4, 1e-9, "scale")
+		-- Owner request: fewer, harder-hitting bullets (half the old fire rate, 1.5x the old DPS).
+		H.expect(W[1].fireRate <= 1 and W[1].damage >= 30, "pistol: slow, hard hits")
 		H.expect(RunnerSim.UnitDps(base, 99, 1) == RunnerSim.UnitDps(base, RunnerDefs.MAX_WEAPON_TIER, 1), "clamp")
 		H.near(RunnerDefs.GUN_RANGE, 1.5 * RunnerDefs.ROW_SPACING, 1e-9, "an option and a half")
 		H.near(RunnerDefs.ENGAGE_SECONDS, RunnerDefs.GUN_RANGE / RunnerDefs.RUN_SPEED, 1e-9, "engage time")
@@ -542,17 +609,17 @@ return function(H)
 			for _, level in { 2, 9 } do
 				local full = RunnerCourse.Generate(area, RunnerDefs.FirstLevelOfArea(area) + level)
 				local short = table.clone(full)
-				short.rows = table.move(full.rows, 1, 10, 1, {})
+				short.rows = table.move(full.rows, 1, 9, 1, {})
 				local stats = refStats(area)
 				local best = 0
-				local choices = {}
+				local choices, stances = {}, {}
 				local function walk(i)
 					if i > #short.rows then
-						best = math.max(best, bossDamage(RunnerSim.Resolve(short, stats, choices)))
+						best = math.max(best, bossDamage(RunnerSim.Resolve(short, stats, choices, stances)))
 						return
 					end
-					for lane = 1, #short.rows[i].options do
-						choices[i] = lane
+					for _, move in movesOf(short.rows[i]) do
+						choices[i], stances[i] = move[1], move[2]
 						walk(i + 1)
 					end
 				end
@@ -574,10 +641,13 @@ return function(H)
 			local first = RunnerDefs.FirstLevelOfArea(area)
 			for level = first, first + 9 do
 				local course = RunnerCourse.Generate(area, level)
-				local best, choices = RunnerSim.BestCase(course, stats)
+				local best, choices, stances = RunnerSim.BestCase(course, stats)
 				H.expect(best.boss.victory, ("area %d level %d: best case loses to the boss"):format(area, level))
 				H.expect(best.troops >= 1, "the avatar survives")
-				H.expect(RunnerSim.Resolve(course, stats, choices).total == best.total, "Resolve(best) == BestCase")
+				H.expect(
+					RunnerSim.Resolve(course, stats, choices, stances).total == best.total,
+					"Resolve(best) == BestCase"
+				)
 				local bossLine
 				for _, line in best.lines do
 					if line.kind == "boss" then
@@ -615,6 +685,129 @@ return function(H)
 							H.expect(line.value == 0, "no troop value on defeat")
 						end
 					end
+				end
+			end
+		end
+	end)
+
+	-- Hand-made one-row courses for the owner's scenarios.
+	local function oneRow(kind, options)
+		for lane, opt in options do
+			opt.lane = lane
+		end
+		return {
+			area = 1,
+			level = 1,
+			seed = 1,
+			length = 900,
+			boss = { distance = 870, hp = 0, reward = 10 },
+			rows = { { index = 1, kind = kind, distance = 200, options = options } },
+		}
+	end
+	local function soldiers(x, width, n)
+		return { x = x, width = width, label = n .. " SOLDIERS", tone = "enemy", enemies = n, hp = 170, reward = 1 }
+	end
+	local function contestGate(x, op, amount)
+		return {
+			x = x,
+			width = 11,
+			op = op,
+			amount = amount,
+			label = (if op == "add" then "+" else "-") .. amount,
+			tone = if op == "add" then "growPositive" else "growNegative",
+			growHp = 100,
+			growStep = 1,
+			growMax = 6,
+		}
+	end
+	local pistol = { startTroops = 5, damage = 10, capacity = 60 }
+
+	H.test("Owner: 5 men beat a squad of 2 soldiers without losing anyone", function()
+		local c = oneRow("squad", { soldiers(0, 22, 2) })
+		local r = RunnerSim.Resolve(c, pistol, { 1 })
+		local oc = r.outcomes[1]
+		H.expect(oc.kills == 2 and oc.troopsAfter == 5, ("kills %s, troops %s"):format(oc.kills, oc.troopsAfter))
+	end)
+
+	H.test("Formation slots and wide-shooting stances", function()
+		local expected = { { -1, 0 }, { 1, 0 }, { -2, 0 }, { 2, 0 }, { 0, 1 }, { -1, 1 }, { 1, 1 } }
+		for i, e in expected do
+			local col, row = RunnerDefs.FormationSlot(i)
+			H.expect(col == e[1] and row == e[2], ("slot %d = %d,%d"):format(i, col, row))
+		end
+		H.expect(RunnerDefs.FormationShift(0) == 0 and RunnerDefs.FormationShift(10) < 0, "edge shift")
+		H.expect(RunnerDefs.FormationShift(-10) > 0, "edge shift left")
+		local c = oneRow("squad", { soldiers(-6, 11, 4), soldiers(6, 11, 4) })
+		local row = c.rows[1]
+		H.expect(RunnerSim.IsSplitRow(row), "2-lane squad row is a split row")
+		for _, case in { { 2, 6, 0 }, { 2, 3.6, 1 }, { 2, 1.2, 2 }, { 2, 10, 0 }, { 1, -6, 0 }, { 1, -1.2, 2 }, { 1, 0.3, 2 } } do
+			local stance = RunnerSim.Stance(row, case[1], case[2])
+			H.expect(stance == case[3], ("lane %d at %.1f: stance %d, want %d"):format(case[1], case[2], stance, case[3]))
+		end
+		-- 7 troops beside the avatar: troops 1, 3, 6 stand in the left two columns.
+		H.expect(RunnerSim.UnitsAcross(8, row, 2, 2) == 3, "across, stance 2")
+		H.expect(RunnerSim.UnitsAcross(8, row, 2, 1) == 1, "across, stance 1 (outer column only)")
+		H.expect(RunnerSim.UnitsAcross(8, row, 1, 2) == 3, "across, other side")
+		-- "More than 4 people with the player": 4 troops beside you shoot your lane only.
+		H.expect(RunnerSim.UnitsAcross(5, row, 2, 2) == 0, "narrow range with 4 troops")
+		H.expect(RunnerSim.UnitsAcross(6, row, 2, 2) > 0, "wide range with 5 troops")
+		local single = oneRow("squad", { soldiers(0, 22, 3) }).rows[1]
+		H.expect(not RunnerSim.IsSplitRow(single) and RunnerSim.Stance(single, 1, 0) == 0, "1-lane squad never splits")
+	end)
+
+	H.test("Owner: standing in the middle hits both squads, a side focuses the fire", function()
+		local c = oneRow("squad", { soldiers(-6, 11, 4), soldiers(6, 11, 4) })
+		local stats = { startTroops = 8, damage = 10, capacity = 60 }
+		local side = RunnerSim.Resolve(c, stats, { 2 }, { 0 }).outcomes[1]
+		local middle = RunnerSim.Resolve(c, stats, { 2 }, { 2 }).outcomes[1]
+		H.expect(side.across == 0 and (side.otherKills or 0) == 0, "a side: nothing hits the other squad")
+		H.expect(middle.across == 3 and middle.stance == 2, "middle: 3 units shoot the other squad")
+		H.expect((middle.otherKills or 0) >= 1, "middle: soldiers fall in BOTH squads")
+		H.expect(side.kills > middle.kills, "a side: more of YOUR squad's soldiers fall")
+		H.near(side.damage, middle.damage + middle.otherDamage, 1e-6, "same total damage, split")
+		-- Too few troops: the stance is ignored.
+		local small = RunnerSim.Resolve(c, pistol, { 2 }, { 2 }).outcomes[1]
+		H.expect(small.across == 0 and small.stance == 0, "narrow range ignores the stance")
+		-- Barricades: the other one can be destroyed too (and pays).
+		local b = oneRow("barricade", {
+			{ x = -6, width = 11, label = "HP 200", tone = "enemy", hp = 200, reward = 7 },
+			{ x = 6, width = 11, label = "HP 300", tone = "enemy", hp = 300, reward = 15 },
+		})
+		local both = RunnerSim.Resolve(b, stats, { 2 }, { 2 })
+		local oc = both.outcomes[1]
+		H.expect(oc.destroyed == true and oc.otherDestroyed == true, "both barricades destroyed")
+		local enemiesLine
+		for _, line in both.lines do
+			if line.kind == "enemies" then
+				enemiesLine = line
+			end
+		end
+		H.expect(enemiesLine.value == 22 and enemiesLine.detail:find("2 barricades") ~= nil, "both pay")
+	end)
+
+	H.test("Owner: shoot-to-grow gates grow with the damage they take (capped, additive)", function()
+		local c = oneRow("contest", { contestGate(-6, "add", 2), contestGate(6, "sub", 3) })
+		local four = { startTroops = 4, damage = 10, capacity = 60 }
+		-- 4 units x 30 DPS x 2.8125 s = 337.5 damage = 3 steps of 100.
+		local blue = RunnerSim.Resolve(c, four, { 1 }).outcomes[1]
+		H.expect(blue.steps == 3 and blue.amount == 5 and blue.troopsAfter == 9, "blue +2 grew to +5")
+		local red = RunnerSim.Resolve(c, four, { 2 }).outcomes[1]
+		H.expect(red.steps == 3 and red.amount == 6 and red.troopsAfter == 1, "red -3 grew to -6 (min 1 troop)")
+		-- Standing in the middle with a big squad grows BOTH sides.
+		local eight = { startTroops = 8, damage = 10, capacity = 60 }
+		local mid = RunnerSim.Resolve(c, eight, { 1 }, { 2 }).outcomes[1]
+		H.expect(mid.across == 3 and mid.otherSteps > 0 and mid.otherAmount > 3, "the red side grew too")
+		local focused = RunnerSim.Resolve(c, eight, { 1 }, { 0 }).outcomes[1]
+		H.expect(focused.amount > mid.amount, "focusing the blue side grows it more")
+		-- Capped: a huge squad still adds at most growMax steps.
+		local huge = RunnerSim.Resolve(c, { startTroops = 60, damage = 10, capacity = 60 }, { 1 }).outcomes[1]
+		H.expect(huge.steps == 6 and huge.amount == 8 and huge.troopsAfter == 68, "cap of 6 steps")
+		-- The best run never passes the red side of a contest gate.
+		for _, course in courses do
+			local best = RunnerSim.BestCase(course, refStats(course.area))
+			for _, oc in best.outcomes do
+				if oc.kind == "contest" then
+					H.expect(course.rows[oc.row].options[oc.lane].tone == "growPositive", "best run takes blue")
 				end
 			end
 		end

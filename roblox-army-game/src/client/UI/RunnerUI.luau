@@ -40,7 +40,11 @@
 			Level = number, Result = RunnerSim.Result, Paid = number,
 			Boosted = boolean, Upgrades = { troops, damage, capacity },
 			OnCollect = function() end,
+			OnRetry = (function() end)?,   -- only after a LOST run (boss not beaten)
 		}) -> close()
+		  A lost run keeps its level (owner request: play it until you win), so
+		  with OnRetry the panel says "Beat the boss to unlock Level N+1" and
+		  shows TRY AGAIN (same level right away, OnRetry) next to BASE (OnCollect).
 		  "RUN COMPLETE!" panel with a boss status pill ("Boss defeated!" /
 		  "Defeated by the boss"). A sub-heading "COLLECTED THIS RUN" lists every
 		  result line (what you picked up during this run and its cash value,
@@ -831,8 +835,10 @@ function RunnerUI.ShowSummary(props: {
 	Boosted: boolean,
 	Upgrades: { troops: number, damage: number, capacity: number },
 	OnCollect: () -> (),
+	OnRetry: (() -> ())?,
 }): () -> ()
 	local collected = false
+	local onRetry = props.OnRetry
 	local _, content, close = Theme.Panel({
 		Name = "RunnerSummary",
 		Title = "RUN COMPLETE!",
@@ -842,7 +848,9 @@ function RunnerUI.ShowSummary(props: {
 	Theme.List(content, "Vertical", 8)
 
 	Theme.Label({
-		Text = "Level " .. props.Level,
+		Text = if onRetry
+			then ("Level %d - beat the boss to unlock Level %d"):format(props.Level, props.Level + 1)
+			else "Level " .. props.Level,
 		TextColor3 = P.PriceGold,
 		MaxTextSize = 28,
 		Size = UDim2.new(1, 0, 0, 30),
@@ -965,25 +973,60 @@ function RunnerUI.ShowSummary(props: {
 	buttonRow.Size = UDim2.new(1, 0, 0, 66)
 	buttonRow.LayoutOrder = 8
 	buttonRow.Parent = content
-	Theme.Button({
-		Name = "Collect",
-		Text = "COLLECT",
-		Color = P.ButtonGreen,
-		DarkColor = P.ButtonGreenDark,
-		Size = UDim2.fromOffset(240, 64),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		MaxTextSize = 32,
-		OnClick = function()
-			if collected then
-				return
-			end
-			collected = true
-			close()
-			props.OnCollect()
-		end,
-		Parent = buttonRow,
-	})
+	local function finish(action: () -> ())
+		if collected then
+			return
+		end
+		collected = true
+		close()
+		action()
+	end
+	if onRetry then
+		-- Lost: TRY AGAIN (the same level, right away) is the big button.
+		Theme.Button({
+			Name = "TryAgain",
+			Text = "🔁 TRY AGAIN",
+			Color = P.CardOrange,
+			DarkColor = P.CardOrangeDark,
+			Size = UDim2.fromOffset(250, 64),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(0.5, -6, 0, 0),
+			MaxTextSize = 30,
+			OnClick = function()
+				finish(onRetry)
+			end,
+			Parent = buttonRow,
+		})
+		Theme.Button({
+			Name = "Collect",
+			Text = "🏠 BASE",
+			Color = P.ButtonGreen,
+			DarkColor = P.ButtonGreenDark,
+			Size = UDim2.fromOffset(190, 64),
+			AnchorPoint = Vector2.new(0, 0),
+			Position = UDim2.new(0.5, 6, 0, 0),
+			MaxTextSize = 30,
+			OnClick = function()
+				finish(props.OnCollect)
+			end,
+			Parent = buttonRow,
+		})
+	else
+		Theme.Button({
+			Name = "Collect",
+			Text = "COLLECT",
+			Color = P.ButtonGreen,
+			DarkColor = P.ButtonGreenDark,
+			Size = UDim2.fromOffset(240, 64),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.fromScale(0.5, 0),
+			MaxTextSize = 32,
+			OnClick = function()
+				finish(props.OnCollect)
+			end,
+			Parent = buttonRow,
+		})
+	end
 
 	return close
 end

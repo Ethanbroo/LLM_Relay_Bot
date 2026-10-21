@@ -65,16 +65,18 @@ were measured from the pixels, not guessed (section 10).
 
 | Row type | Lanes | What happens |
 |---|---|---|
-| **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red) |
+| **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red). Some carry a **cash bonus** — behind a red gate *or* the smaller blue one (owner request) |
+| **🎯 Shoot-to-grow gate** | 2 | Blue **+N** and red **−N** side by side, with glowing frames and a "SHOOT TO GROW" sign. **Shooting a side makes its number bigger and the side wider** (blue: more troops, red: more lost). Only + and −, capped at 6 growth steps; 2 per course (owner request) |
 | **Weapon / damage gate** | 2 | Gold weapon gate (shows the gun you will get: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
 | **Cash row** | 3 | Stacks of cash, small/medium/large. **Their values only appear once you pass the row before** (owner request: no clutter far ahead) |
-| **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1. **The "N SOLDIERS" label also appears only once you pass the row before** (owner request) |
+| **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1. **The "N SOLDIERS" label also appears only once you pass the row before** (owner request). With a big squad you can hit both squads at once (§2.2) |
 | **Barricade** | 2 | Weak or strong; destroyed if your squad's damage in range is high enough (cash), otherwise you lose 25% of troops |
 | **Castle boss (end)** | – | See 2.3 |
 
 ❓ **Q2 — Original maths modifiers.** 💡 *Kept.* **+, ×, −, ÷ change the troop count** (the troops replace the
 coins of the original game). Exactly two **×2** gates appear per course, so troop counts stay readable.
-Red gates can also carry cash ("toll gates": −3 troops but +$15), which gives a real choice.
+Gates can also carry cash: a red "toll" gate (−3 troops but +$15), the smaller of two blue gates (+3 and +$12 vs +6),
+or the troop gate next to a gold weapon gate — so the money is not always behind the red gate (owner request).
 ✅ The gate (or cash stack) you run through **disappears instantly** (owner request). 💡 Every label on the track
 (cash values, toll cash, "N SOLDIERS", barricade HP) appears one row ahead only (a squad or barricade a moment
 earlier if your guns already reach it), as outlined text with no dark background, so nothing hides the track
@@ -90,12 +92,21 @@ Weapons and damage use their own gold gates, not maths.
 
 | Gun | Damage per bullet | Bullets per second | Damage per second (per unit) | Bullets |
 |---|---|---|---|---|
-| Pistol | 10 | 2 | 20 | small orange |
-| Rifle | 18 | 1.5 | 27 | long teal tracer |
-| SMG | 5 | 7 | 35 | small fast pink |
-| Assault Rifle | 9 | 5 | 45 | blue tracers |
-| Minigun | 6 | 10 | 60 | thin purple streams |
-| Rocket | 150 | 0.5 | 75 | big dark-red rocket, smoke, explosion |
+| Pistol | 30 | 1 | 30 | small orange |
+| Rifle | 54 | 0.75 | 40.5 | long teal tracer |
+| SMG | 15 | 3.5 | 52.5 | small fast pink |
+| Assault Rifle | 27 | 2.5 | 67.5 | blue tracers |
+| Minigun | 18 | 5 | 90 | thin purple streams |
+| Rocket | 300 | 0.375 | 112.5 | big dark-red rocket, smoke, explosion |
+
+* ✅ **Fewer bullets that all hit** (owner request): every gun fires half as often as before with 3× the damage per
+  bullet (1.5× the old damage per second), and bullets are only fired at targets in range, so none fly past. 5 men now
+  beat a squad of 2 soldiers without losing anyone (a soldier has 170 HP; one pistol unit deals 84 in a fight).
+* ✅ **Wide shooting** (owner request): with **more than 4 troops beside you**, each column of your formation shoots
+  what is in front of it. Stand in the **middle** of two squads, barricades or shoot-to-grow gates and you hit **both**
+  (the outer 1–2 columns reach the other side: kills there pay $1 each, a barricade destroyed there pays its reward);
+  move to a **side** and all the damage goes there. With 4 or fewer troops beside you, everyone shoots your lane.
+  The server uses the same rule from where it saw you cross the row.
 
 * ✅ Bullets are solid, strong colours (owner request: the old yellow/pale glowing bullets were invisible on the
   white track).
@@ -110,8 +121,13 @@ Weapons and damage use their own gold gates, not maths.
 * ✅ It is **only defeated if you chose all the best lanes**. 💡 Its HP is 99.9% of the most damage *any* lane choice
   could deal, so only the best army (most troops × best gun and damage) beats it. In testing, about 1–4 of every
   2,000 random lane choices win, and those tie the best army.
-* 💡 Win: the boss reward (about a quarter of a perfect run). Lose: the boss wipes your squad, so the troop payout and
+* 💡 Win: the boss reward (about a fifth of a perfect run). Lose: the boss wipes your squad, so the troop payout and
   the boss reward are lost, but you keep your cash, weapon and enemy rewards.
+* ✅ **Lose = play the level again** (owner request): the run level only goes up when you beat the boss, so you replay
+  the same course until you win. The defeat screen has **TRY AGAIN** (straight back to the start of the track) and
+  **BASE**.
+* ✅ After a run you return to the **spawn, on the far side of the area from the ARMY RUN pad** (owner request: not
+  back on the pad), next to the unlocks; the **🪖 Army Run** button on the left still starts a run at once.
 * 💡 Even a perfect run ends with only a few troops left: the boss's HP equals the best possible damage, so it falls
   just before it would finish your squad.
 
@@ -124,7 +140,7 @@ Weapons and damage use their own gold gates, not maths.
 | +20% Damage (each damage gate) | $9 |
 | Troops at finish × N | about $1.50 per troop still alive after the boss (line rounded to whole dollars). It also shows how many you started with from permanent upgrades, gained this run and lost to the boss |
 | Cash carried | Cash you picked up, **capped by your coin-carrying capacity** (overflow shown as lost) |
-| Enemies defeated × N | $1 per soldier, plus barricade rewards |
+| Enemies defeated × N | $1 per soldier (in either lane), plus barricade rewards |
 | Boss defeated! / Defeated by the boss | the boss reward on a win, $0 on a loss |
 | Vehicle bonus | +2% to +20%, from your equipped vehicle |
 | 2× CASH | Doubles the total while a 2× boost is active |
@@ -143,16 +159,18 @@ blue stripes, translucent red/blue gates with dark posts and huge outlined numbe
 ## 3. Permanent runner upgrades (before a run)
 
 ✅ Bought on the pre-run screen (cards on the left, like image 2) and kept forever.
-✅ Each level is a **small** improvement.
+✅ Each level is a **small** improvement — except carry capacity, which you asked to make bigger (⚠️ §12.8).
 
 | Upgrade | Start | Per level 💡 | Max 💡 | Price 💡 |
 |---|---|---|---|---|
-| **Starting troops** | 3 | +1 troop | level 50 | $67 at level 0, ×1.17 per level |
+| **Starting troops** | 3 | +1 troop | level 50 | $78 at level 0, ×1.17 per level |
 | **Damage** | 10 | +4% | level 50 | same as troops |
-| **Coin-carrying capacity** | $60 in area 1 | +6% | level 50 | 90% of the troops price |
+| **Coin-carrying capacity** | $60 in area 1 | **+20%** (+$12 in area 1; was +6%) | level 50 | 90% of the troops price |
 
-💡 Carry capacity is re-based per area: an un-upgraded player carries $60 / $77 / $104 in areas 1 / 2 / 3, and a player at the
-reference upgrade level carries $60 × 1.6^(area − 1). This keeps the capacity upgrade meaningful in every area.
+💡 Carry capacity is re-based per area: an un-upgraded player carries $60 / $77 / $104 in areas 1 / 2 / 3, exactly as
+before, and each level adds 20% of that. Prices still assume the old bag of a reference-level player ($60 × 1.6^(area − 1)),
+so **every capacity level you buy now earns about 3× more than before while prices stay the same**: progress is easier,
+as asked. (Area 1: the first level costs $70 and pays back in about 6 runs, was about 17.)
 
 ✅ **Permanent upgrades vs in-run pickups** are kept separate: the pre-run cards are titled **PERMANENT UPGRADES**.
 The summary lists **Collected this run** (troops, weapons, damage gates, cash), which reset every run.
@@ -512,6 +530,9 @@ Colours were measured from the reference pixels (`Config.Palette`).
 7. ⚠️ **"A chest after every combat game" vs free-chest farming.** If every game gave a chest, you could start a fight
    and quit at once for free chests. *Used:* a loss gives a wooden chest only after ≥ 1 kill or ≥ 20 s of fighting.
    *Alternative:* always give a wooden chest (`CombatDefs.CHEST_MIN_SECONDS = 0`).
+8. ⚠️ **"Each purchase must provide only a small improvement" (brief) vs "increase the upgrade amount of coins"
+   (your later request).** *Used:* your later request — carry capacity is +20% per level (troops and damage stay small:
+   +1 troop, +4%). *Alternative:* `EconomyDefs.Runner.CapacityPerLevel = 0.06` restores the small step.
 
 ## 13. Requirement checklist
 
@@ -524,7 +545,7 @@ Every requirement in the brief, and where it lives in the game (checked by an in
 | 3 | Collect troops and weapon upgrades for that round | `Shared/Runner/RunnerCourse.Generate` (troop gates, gold WEAPON +1 / +20% DMG gates); `RunnerSim.Resolve` | ✅ |
 | 4 | Keep / clarify + × − ÷ | `RunnerCourse` troopGate (`add`/`mul`/`sub`/`div` act on troop count); §2.1 Q2 | ✅ |
 | 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, enemies, boss, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
-| 6 | Permanent upgrades before a run: starting troops, damage, carry capacity, small steps, kept | `RunnerUI.ShowPrepare` (PERMANENT UPGRADES cards); `RunnerService.onBuyUpgrade`; `Economy.RunnerUpgradePrice/RunnerStats` (+1 troop, +4%, +6%; max 50) | ✅ |
+| 6 | Permanent upgrades before a run: starting troops, damage, carry capacity, small steps, kept | `RunnerUI.ShowPrepare` (PERMANENT UPGRADES cards); `RunnerService.onBuyUpgrade`; `Economy.RunnerUpgradePrice/RunnerStats` (+1 troop, +4%, +20% carry; max 50) | ✅ (carry step enlarged on request, §12.8) |
 | 7 | Keep permanent upgrades distinct from in-run pickups | Separate pre-run cards; summary headings "COLLECTED THIS RUN" vs "PERMANENT UPGRADES" | ✅ (the troops line shows starting troops vs troops gained this run) |
 | 8 | Runner matches reference colours/saturation | `Config.Palette`, `Client/World/RunnerVisuals`, `RunnerService.buildTrack`, `MapBuilder.fillWater/applyLighting` | ✅ track, gates, sea, UI, plus a cyan `Atmosphere` sky (`MapBuilder.applyLighting`) |
 | 9 | Spend money to upgrade base, unlock areas, unlock and improve revenue sections | `Server/Services/BaseService` (UnlockSlot, UpgradeSection, UnlockGate); `Economy.SlotUnlockPrice/SectionUpgradePrice/GatePrice` | ✅ |
@@ -560,3 +581,15 @@ Every requirement in the brief, and where it lives in the game (checked by an in
 | 39 | Ten points to resolve kept visible with proposals | §11 (Q1–Q10) and inline ❓ marks | ✅ |
 | 40 | Requested output sections | §1 loop, §2 runner, §3 permanent upgrades, §4 base, §5 combat, §6 equipment, §7 difficulty/costs, §8 benchmark, §9 purchases, §10 visuals | ✅ |
 | 41 | Separate requirements from proposals; list conflicts | Legend (✅ / 💡 / ❓ / ⚠️), `[REQUIREMENT]` / `[PROPOSAL]` tags in code; §12 | ✅ |
+
+**Owner requests after the first version** (round 4):
+
+| # | Request | Where it is in the game | Status |
+|---|---|---|---|
+| R1 | Cash bonus not always behind the red gate | `RunnerCourse` (`toll`, `bonusAdd`, weapon-vs-troops+cash variants) | ✅ |
+| R2 | More bullets hit, lower fire rate; 5 men beat 2 soldiers | `RunnerDefs.WEAPONS` (½ rate, 3× damage); `RunnerVisuals` fires only at targets in range | ✅ |
+| R3 | Bigger coin (carry capacity) upgrade, easier progress | `EconomyDefs.Runner.CapacityPerLevel = 0.2`, `CapacityBasePerLevel`; `Economy.BenchmarkStats` | ✅ (§12.8) |
+| R4 | Wide shooting with > 4 troops: middle hits both, a side focuses | `RunnerSim.Stance/UnitsAcross`, `RunnerService.chooseStances`, `RunnerVisuals` per-column targets | ✅ |
+| R5 | Shoot-to-grow gates (red/blue grow and widen when shot), different look, no × | `RunnerCourse.contestRow`, `RunnerSim` contest rule, `RunnerVisuals` contest rows | ✅ |
+| R6 | After a run, spawn on the other side of the base | `Layout.RunnerReturnCFrame`, `RunnerService.onLeave` | ✅ |
+| R7 | A lost level is replayed until won | `RunnerService.onFinish` (level up only on victory), `RunnerRetry`, `RunnerUI` TRY AGAIN | ✅ |

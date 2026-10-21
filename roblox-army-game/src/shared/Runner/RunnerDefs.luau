@@ -21,7 +21,12 @@
 		RunnerDefs.GUN_RANGE              studs a gun reaches = 1.5 rows ("an option and a half")
 		RunnerDefs.ENGAGE_SECONDS         seconds the squad shoots before reaching a squad / barricade
 		RunnerDefs.FORMATION_WIDTH        units per formation row (2 troops, the avatar, 2 troops)
-		RunnerDefs.FORMATION_SPACING_X, FORMATION_SPACING_Z   studs between units / rows (visual)
+		RunnerDefs.FORMATION_SPACING_X, FORMATION_SPACING_Z   studs between units / rows
+		RunnerDefs.FormationSlot(i) -> (column, row)   where troop i stands (the avatar is column 0 of row 0)
+		RunnerDefs.FormationShift(lateral) -> number   whole columns the formation shifts near a track edge
+		RunnerDefs.WIDE_RANGE_MIN_COMPANIONS  troops beside the avatar needed for wide shooting
+		RunnerDefs.MAX_STANCE             formation columns that can reach into the other lane
+		RunnerDefs.CONTEST_ROWS, CONTEST_*  "shoot to grow" gates (see RunnerCourse "contest")
 		RunnerDefs.TROOP_VALUE, DAMAGE_GATE_AMOUNT, DAMAGE_GATE_VALUE, ...
 		RunnerDefs.BARRICADE_TROOP_LOSS
 		RunnerDefs.BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS, BOSS_HP_SHARE, BOSS_REWARD,
@@ -96,14 +101,18 @@ RunnerDefs.LANES = {
 -- Damage per second of one unit = damage x fireRate (x the player's damage
 -- upgrades / base damage, x in-run damage gates). The tiers feel different
 -- (SMG: weak bullets, very fast; Rocket: huge hits, slow) but the DPS always
--- rises with the tier: 20, 27, 35, 45, 60, 75 (x1, 1.35, 1.75, 2.25, 3, 3.75).
+-- rises with the tier: 30, 40.5, 52.5, 67.5, 90, 112.5 (x1, 1.35, 1.75, 2.25, 3, 3.75).
+-- [owner request] "More bullets hit but a lower fire rate": every gun fires
+-- half as often as before with 3x the damage per bullet (Rocket 0.75x as often,
+-- 2x damage), i.e. 1.5x the old damage per second, so a small squad (5 men vs
+-- 2 soldiers) wins its fights.
 RunnerDefs.WEAPONS = {
 	{
 		name = "Pistol",
 		short = "PISTOL",
 		value = 0,
-		damage = 10,
-		fireRate = 2,
+		damage = 30,
+		fireRate = 1,
 		bulletSpeed = 120,
 		bulletStyle = "pistol",
 	},
@@ -111,8 +120,8 @@ RunnerDefs.WEAPONS = {
 		name = "Rifle",
 		short = "RIFLE",
 		value = 8,
-		damage = 18,
-		fireRate = 1.5,
+		damage = 54,
+		fireRate = 0.75,
 		bulletSpeed = 180,
 		bulletStyle = "rifle",
 	},
@@ -120,8 +129,8 @@ RunnerDefs.WEAPONS = {
 		name = "SMG",
 		short = "SMG",
 		value = 12,
-		damage = 5,
-		fireRate = 7,
+		damage = 15,
+		fireRate = 3.5,
 		bulletSpeed = 140,
 		bulletStyle = "smg",
 	},
@@ -129,8 +138,8 @@ RunnerDefs.WEAPONS = {
 		name = "Assault Rifle",
 		short = "ASSAULT",
 		value = 18,
-		damage = 9,
-		fireRate = 5,
+		damage = 27,
+		fireRate = 2.5,
 		bulletSpeed = 170,
 		bulletStyle = "assault",
 	},
@@ -138,8 +147,8 @@ RunnerDefs.WEAPONS = {
 		name = "Minigun",
 		short = "MINIGUN",
 		value = 25,
-		damage = 6,
-		fireRate = 10,
+		damage = 18,
+		fireRate = 5,
 		bulletSpeed = 160,
 		bulletStyle = "minigun",
 	},
@@ -147,8 +156,8 @@ RunnerDefs.WEAPONS = {
 		name = "Rocket",
 		short = "ROCKET",
 		value = 35,
-		damage = 150,
-		fireRate = 0.5,
+		damage = 300,
+		fireRate = 0.375,
 		bulletSpeed = 70,
 		bulletStyle = "rocket",
 	},
@@ -162,10 +171,62 @@ RunnerDefs.GUN_RANGE = 1.5 * RunnerDefs.ROW_SPACING -- 67.5 studs
 RunnerDefs.ENGAGE_SECONDS = RunnerDefs.GUN_RANGE / RunnerDefs.RUN_SPEED -- 2.8125 s
 
 -- [REQUIREMENT] Troops stand next to the player, 5 per row (2 left, the
--- avatar in the middle, 2 right); extra rows form behind. Visual only.
+-- avatar in the middle, 2 right); extra rows form behind. The visuals draw it
+-- and RunnerSim uses its columns for wide shooting (below).
 RunnerDefs.FORMATION_WIDTH = 5
 RunnerDefs.FORMATION_SPACING_X = 2.4 -- [PROPOSAL] studs between units in a row
 RunnerDefs.FORMATION_SPACING_Z = 2.8 -- [PROPOSAL] studs between rows
+-- A unit never stands closer than this to a track edge (the formation shifts).
+RunnerDefs.FORMATION_EDGE_MARGIN = 0.8
+
+-- Formation slot of troop i (1-based; the avatar is the centre of row 0).
+-- Row 0 holds FORMATION_WIDTH - 1 troops (closest to the avatar first), every
+-- later row FORMATION_WIDTH (centre first). Returns (column, row): column in
+-- units of FORMATION_SPACING_X (+ = right), row in units of FORMATION_SPACING_Z
+-- behind the avatar. Odd troops go left, even troops right.
+function RunnerDefs.FormationSlot(i: number): (number, number)
+	local width = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+	local half = math.floor(width / 2)
+	local front = width - 1
+	if i <= front then
+		local k = math.ceil(i / 2)
+		return if i % 2 == 1 then -k else k, 0
+	end
+	local j = i - front - 1 -- 0-based in the back rows
+	local row = 1 + math.floor(j / width)
+	local index = j % width -- 0 = centre, then left/right pairs
+	if index == 0 then
+		return 0, row
+	end
+	local k = math.min(half, math.ceil(index / 2))
+	return if index % 2 == 1 then -k else k, row
+end
+
+-- Near a track edge the WHOLE formation moves over by whole columns (the
+-- same shift for every troop) so no unit stands off the track; the avatar
+-- stays where the player steers and a front-row troop takes the spot it left
+-- free. `lateral` = the avatar's studs right of the centre line.
+function RunnerDefs.FormationShift(lateral: number): number
+	local width = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+	local half = math.floor(width / 2)
+	local spacing = RunnerDefs.FORMATION_SPACING_X
+	local minX = -RunnerDefs.TRACK_WIDTH / 2 + RunnerDefs.FORMATION_EDGE_MARGIN
+	local maxX = RunnerDefs.TRACK_WIDTH / 2 - RunnerDefs.FORMATION_EDGE_MARGIN
+	local lo = math.ceil((minX - (lateral - half * spacing)) / spacing - 1e-6)
+	local hi = math.floor((maxX - (lateral + half * spacing)) / spacing + 1e-6)
+	local shift = if lo <= hi then math.clamp(0, lo, hi) else 0
+	return math.clamp(shift, -half, half)
+end
+
+-- [owner request] Wide shooting: with MORE than 4 troops beside the avatar,
+-- every formation column shoots what stands in front of IT. Standing between
+-- two squads / barricades / shoot-to-grow gates hits both (the columns over
+-- the other lane shoot that one); moving to a side puts all the fire on it.
+-- With fewer troops everyone shoots the lane the avatar is in.
+RunnerDefs.WIDE_RANGE_MIN_COMPANIONS = 5
+-- At most the 2 outer columns of the 5 can stand over the other lane (the
+-- avatar's own column is always in its lane): the "stance" 0, 1 or 2.
+RunnerDefs.MAX_STANCE = 2
 
 -------------------------------------------------------------------------------
 -- Payout values (area 1 dollars; multiplied by the area scale and level factor)
@@ -177,7 +238,7 @@ RunnerDefs.CASH_ROW_BASE = 9 -- [PROPOSAL] middle cash lane of the first cash ro
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
 RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trade troops for cash)
-RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars)
+RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars), either lane
 RunnerDefs.BARRICADE_REWARD = 7 -- [PROPOSAL] $ for destroying a weak barricade (strong pays ~2.2x)
 -- [PROPOSAL] $ for beating the boss, x the area cash scale x ArmyScale(area)^BOSS_REWARD_ARMY_EXP
 -- (bigger armies guard more loot), so beating it is worth ~20-30% of a best-case run in every area.
@@ -192,6 +253,24 @@ RunnerDefs.ADD_PER_ROW = 0.25 -- [PROPOSAL] extra +N per row index
 RunnerDefs.MUL_ROWS = 2 -- [PROPOSAL] troop gates per course that offer "x2"
 RunnerDefs.SUB_BASE = 2 -- [PROPOSAL] "-N" at row 1
 RunnerDefs.SUB_PER_ROW = 0.2 -- [PROPOSAL]
+-- [owner request] The cash bonus behind a gate is not always on the red one:
+-- it rides a red "-N" (troops for cash) or the SMALLER of two blue "+N"
+-- gates (fewer troops + cash vs more troops), at random.
+
+-------------------------------------------------------------------------------
+-- "Shoot to grow" gates (row kind "contest") [owner request]
+-------------------------------------------------------------------------------
+-- A blue "+N" and a red "-N" side by side. Shooting a side makes its number
+-- bigger (blue: more troops gained, red: more troops lost) and makes it wider,
+-- pushing the other side aside. Additive only (no x), and capped, so they can
+-- not make a player overpowered right away.
+RunnerDefs.CONTEST_ROWS = 2 -- [PROPOSAL] per course (RunnerCourse puts them in two of its row blocks)
+RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" gate of that row
+RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row
+-- [PROPOSAL] Growth steps (+1 troop each in area 1, x TroopScale) a reference
+-- squad reaches by shooting ONE side for the whole engagement, and the cap.
+RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 3
+RunnerDefs.CONTEST_MAX_STEPS = 6
 
 -------------------------------------------------------------------------------
 -- Enemies (squads, barricades, the enemy base)
@@ -204,10 +283,10 @@ RunnerDefs.EXPECTED_TROOPS_BASE = 3
 RunnerDefs.EXPECTED_TROOPS_PER_ROW = 2.2
 RunnerDefs.EXPECTED_POWER_PER_ROW = 0.04
 -- [PROPOSAL] Hit points of one enemy soldier in area 1: one un-upgraded
--- Pistol unit deals 20 x 2.8125 = 56 damage per engagement, so a soldier
--- needs about 3 units (same balance as before guns had a fire rate).
+-- Pistol unit deals 30 x 2.8125 = 84 damage per engagement, so a soldier
+-- needs 2 units (owner request: 5 men beat a squad of 2 without losses).
 RunnerDefs.ENEMY_HP = 170
-RunnerDefs.SQUAD_SHARE = 0.35 -- [PROPOSAL] soldiers per expected troop (normal squad)
+RunnerDefs.SQUAD_SHARE = 0.4 -- [PROPOSAL] soldiers per expected troop (normal squad)
 RunnerDefs.SQUAD_SMALL = 0.6 -- [PROPOSAL] size of the small squad in a 2-squad row
 RunnerDefs.SQUAD_BIG = 1.45 -- [PROPOSAL] size of the big squad (pays more, costs more)
 RunnerDefs.SQUAD_FINAL = 1.25 -- [PROPOSAL] size of the last squad before the castle

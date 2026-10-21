@@ -9,11 +9,29 @@
 	the economy can compute the best possible run.
 
 	Public API:
-		RunnerSim.Resolve(course, stats, choices): Result
+		RunnerSim.Resolve(course, stats, choices, stances?): Result
 			choices[i] = lane picked in row i (1..#row.options). A missing,
 			non-integer or out-of-range lane counts as lane 1.
-		RunnerSim.BestCase(course, stats): (Result, { number })
-			EXACT best run and the lane choices that produce it.
+			stances[i] = 0..RunnerDefs.MAX_STANCE: formation columns that stood
+			over the OTHER lane of a 2-lane squad / barricade / contest row
+			(wide shooting, see RunnerSim.Stance). Missing / invalid -> 0.
+		RunnerSim.BestCase(course, stats): (Result, { number }, { number })
+			EXACT best run and the lane choices + stances that produce it.
+		RunnerSim.IsSplitRow(row): boolean
+			a row whose fire can be split between its two lanes (2-lane squad,
+			barricade or contest row)
+		RunnerSim.Stance(row, lane, lateral): number
+			stance of a squad whose avatar is `lateral` studs right of the centre
+			line and passes `lane`: how many of the formation's outer columns
+			(FORMATION_SPACING_X apart) reach over the line between the two lanes,
+			0..2: closer than 1 column to the line -> 2, closer than 2 -> 1, else 0.
+			(The edge shift of RunnerDefs.FormationShift only happens deep in a
+			lane, where no column reaches across.) The server computes it from
+			where it saw the avatar cross the row.
+		RunnerSim.UnitsAcross(units, row, lane, stance): number
+			of `units` (troops incl. the avatar) how many shoot the other lane:
+			the troops in the outer `stance` columns on that side, and only with
+			more than WIDE_RANGE_MIN_COMPANIONS - 1 troops beside the avatar.
 		RunnerSim.MinDuration(course): number
 			fastest legal completion time in seconds (running only, anti-cheat floor).
 		RunnerSim.UnitDps(stats, weaponTier, damageMult): number
@@ -48,6 +66,13 @@
 		hp) soldiers (reward each); every surviving soldier costs 1 troop.
 		Barricade: destroyed if troops x UnitDps x ENGAGE_SECONDS >= hp (reward
 		banked), otherwise you lose 25% of your troops (min 1 left).
+		Wide shooting [owner request]: in a 2-lane squad / barricade / contest
+		row, UnitsAcross(...) of the units shoot the OTHER lane instead: they
+		kill soldiers there (reward, no troop cost), can destroy that barricade
+		(reward) or grow that contest gate. The rest shoot the lane you pass.
+		Contest ("shoot to grow") gate: the damage a side takes adds
+		min(growMax, floor(damage / growHp)) steps of growStep troops to its
+		number; you pass one side: blue "+N" adds N troops, red "-N" removes N.
 		Boss at the castle: every BossKillInterval(N) seconds it kills one unit
 		(troops first, the avatar last) while all living units shoot it. Its HP
 		is BossHp(course, stats), so only (near) best lane paths beat it.
@@ -65,10 +90,16 @@
 	Why BestCase is exact: the final payout never goes down when any of
 	(troops, weaponTier, damageMult, carried, banked) goes up (the boss damage
 	potential, victory and the survivors all rise with troops and unit DPS),
-	and every row rule keeps that order. So a partial run that is <= another
-	one in all five numbers can never finish ahead of it, and dropping it
-	(Pareto pruning) never loses the optimum. The same argument with only
-	(troops, weaponTier, damageMult) makes BossHp's search exact.
+	and every row rule keeps that order for a fixed (lane, stance): more units
+	or DPS means more damage on BOTH lanes (UnitsAcross grows by at most one
+	unit per extra troop). The one exception is a red contest gate, which
+	takes more troops from a stronger squad - but its blue side is better in
+	every state (more troops, nothing else differs), so some best run never
+	passes a red contest gate and every other rule is monotone. So a partial
+	run that is <= another one in all five numbers can never finish ahead of
+	it, and dropping it (Pareto pruning) never loses the optimum. The same
+	argument with only (troops, weaponTier, damageMult) makes BossHp's search
+	exact. Each split row is searched for every lane x stance 0..MAX_STANCE.
 ]]
 
 local Shared = script.Parent.Parent
@@ -92,6 +123,18 @@ export type RowOutcome = {
 	damageMult: number,
 	destroyed: boolean?,
 	note: string?,
+	-- Fights and contest gates (nil elsewhere):
+	stance: number?, -- 0..MAX_STANCE used (0 when the squad was too small for wide shooting)
+	across: number?, -- units that shot the other lane
+	damage: number?, -- damage dealt to the lane you passed
+	otherDamage: number?, -- damage dealt to the other lane
+	kills: number?, -- squad: soldiers killed in the lane you passed
+	otherKills: number?, -- squad: soldiers killed in the other lane
+	otherDestroyed: boolean?, -- barricade: the other barricade was destroyed too
+	amount: number?, -- contest: the number of the gate you passed after growing
+	steps: number?, -- contest: growth steps of the gate you passed
+	otherAmount: number?, -- contest: the other gate's number after growing
+	otherSteps: number?,
 }
 
 export type Line = { kind: string, label: string, detail: string, value: number }
@@ -145,6 +188,18 @@ type Step = {
 	upgradeKind: string?, -- "weapon" | "damage"
 	upgradeValue: number,
 	note: string?,
+	barricades: number, -- barricades destroyed (yours + the other lane's)
+	stance: number?,
+	across: number?,
+	damage: number?,
+	otherDamage: number?,
+	ownKills: number?,
+	otherKills: number?,
+	otherDestroyed: boolean?,
+	amount: number?,
+	steps: number?,
+	otherAmount: number?,
+	otherSteps: number?,
 }
 
 -- Search node for BestCase.
@@ -155,6 +210,7 @@ type Node = {
 	carried: number,
 	bank: number,
 	lane: number,
+	stance: number,
 	parent: Node?,
 }
 
@@ -328,10 +384,99 @@ local function laneFor(row: Row, choice: any): number
 	return 1
 end
 
+function RunnerSim.IsSplitRow(row: Row): boolean
+	return #row.options == 2 and (row.kind == "squad" or row.kind == "barricade" or row.kind == "contest")
+end
+
+-- Stance actually used (invalid / missing / not a split row -> 0).
+local function stanceFor(row: Row, value: any): number
+	if
+		RunnerSim.IsSplitRow(row)
+		and type(value) == "number"
+		and value == math.floor(value)
+		and value >= 0
+		and value <= RunnerDefs.MAX_STANCE
+	then
+		return value
+	end
+	return 0
+end
+
+-- The other option of a 2-lane row, the x of the line between the two lanes
+-- and the side the other lane is on (+1 = right of the lane you pass).
+local function otherOf(row: Row, lane: number): (Option?, number, number)
+	local own, other = row.options[lane], row.options[if lane == 1 then 2 else 1]
+	if not own or not other then
+		return nil, 0, 1
+	end
+	local left, right = own, other
+	if other.x < own.x then
+		left, right = other, own
+	end
+	local boundary = ((left.x + left.width / 2) + (right.x - right.width / 2)) / 2
+	return other, boundary, if other.x >= own.x then 1 else -1
+end
+
+function RunnerSim.Stance(row: Row, lane: number, lateral: number): number
+	if not RunnerSim.IsSplitRow(row) then
+		return 0
+	end
+	local _, boundary, side = otherOf(row, laneFor(row, lane))
+	-- How far the avatar stands inside its own lane, from the line (negative:
+	-- it is over the line, e.g. a lane accepted within the edge tolerance).
+	local inside = side * (boundary - finite(lateral, 0))
+	local half = math.floor(math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH)) / 2)
+	local count = 0
+	for column = 1, half do
+		if column * RunnerDefs.FORMATION_SPACING_X > inside + EPS then
+			count += 1
+		end
+	end
+	return math.clamp(count, 0, RunnerDefs.MAX_STANCE)
+end
+
+-- Troops (of units - 1 beside the avatar) standing in the outer `stance`
+-- formation columns on the `side` of the other lane (RunnerDefs.FormationSlot;
+-- the edge shift never moves a troop into or out of the outermost columns).
+local function unitsAcross(units: number, side: number, stance: number): number
+	local companions = units - 1
+	if stance <= 0 or companions < RunnerDefs.WIDE_RANGE_MIN_COMPANIONS then
+		return 0
+	end
+	local half = math.floor(math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH)) / 2)
+	local first = half - stance + 1 -- outer columns: first .. half on that side
+	local count = 0
+	for i = 1, companions do
+		local column = RunnerDefs.FormationSlot(i)
+		if side * column >= first then
+			count += 1
+		end
+	end
+	return count
+end
+
+function RunnerSim.UnitsAcross(units: number, row: Row, lane: number, stance: number): number
+	if not RunnerSim.IsSplitRow(row) then
+		return 0
+	end
+	local _, _, side = otherOf(row, laneFor(row, lane))
+	return unitsAcross(math.max(0, math.floor(finite(units, 0))), side, stanceFor(row, stance))
+end
+
+-- Growth steps and the number of a contest gate after taking `damage`.
+local function contestGrowth(opt: Option, damage: number): (number, number)
+	local growHp = math.max(EPS, finite(opt.growHp, math.huge))
+	local maxSteps = math.max(0, math.floor(finite(opt.growMax, 0)))
+	local steps = math.clamp(math.floor(damage / growHp + EPS), 0, maxSteps)
+	local amount = math.max(0, math.floor(finite(opt.amount, 0))) + steps * math.max(0, math.floor(finite(opt.growStep, 0)))
+	return steps, amount
+end
+
 -- Walk through one option. Pure: returns the new state numbers + what happened.
 local function step(
 	row: Row,
-	opt: Option,
+	lane: number,
+	stance: number,
 	stats: CleanStats,
 	scale: number,
 	troops: number,
@@ -339,6 +484,7 @@ local function step(
 	dmg: number,
 	carried: number
 ): Step
+	local opt = row.options[lane]
 	local s: Step = {
 		troops = troops,
 		tier = tier,
@@ -354,11 +500,12 @@ local function step(
 		upgradeKind = nil,
 		upgradeValue = 0,
 		note = nil,
+		barricades = 0,
 	}
 	local amount = finite(opt.amount, 0)
 
-	-- 1) Troop maths / gold gates
-	local op = opt.op
+	-- 1) Troop maths / gold gates (contest gates grow first, see 3)
+	local op = if row.kind == "contest" then nil else opt.op
 	if op == "add" then
 		s.troops = troops + math.max(0, math.floor(amount))
 	elseif op == "mul" then
@@ -394,30 +541,83 @@ local function step(
 		end
 	end
 
-	-- 3) Fights: the squad shoots for ENGAGE_SECONDS before it arrives
-	if row.kind == "squad" and opt.enemies then
-		local enemies = math.max(0, math.floor(finite(opt.enemies, 0)))
-		local hp = math.max(EPS, finite(opt.hp, 1))
-		local damage = s.troops * unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
-		local kills = math.min(enemies, math.floor(damage / hp + EPS))
-		local survivors = enemies - kills
-		local before = s.troops
-		s.troops = math.max(1, s.troops - survivors)
-		s.kills = kills
-		s.killReward = kills * math.max(0, round(finite(opt.reward, 0)))
-		s.note = "Defeated " .. kills .. " of " .. enemies .. " soldiers, lost " .. (before - s.troops) .. " troops"
-	elseif row.kind == "barricade" and opt.hp then
-		local hp = math.max(0, finite(opt.hp, 0))
-		local damage = s.troops * unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
-		if damage + EPS >= hp then
-			s.destroyed = true
-			s.barricadeReward = math.max(0, round(finite(opt.reward, 0)))
-			s.note = "Barricade destroyed! +" .. Format.Money(s.barricadeReward)
-		else
+	-- 3) Fights and contest gates: the squad shoots for ENGAGE_SECONDS before
+	-- it arrives; with wide shooting the outer columns over the other lane
+	-- shoot that one (UnitsAcross).
+	local fight = row.kind == "squad" or row.kind == "barricade" or row.kind == "contest"
+	if fight then
+		local other, _, side = otherOf(row, lane)
+		local cleanStance = if other then stanceFor(row, stance) else 0
+		local units = s.troops
+		local across = if other then unitsAcross(units, side, cleanStance) else 0
+		local perUnit = unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
+		local damage = (units - across) * perUnit
+		local otherDamage = across * perUnit
+		s.stance = if across > 0 then cleanStance else 0
+		s.across = across
+		s.damage = damage
+		s.otherDamage = otherDamage
+
+		if row.kind == "squad" and opt.enemies then
+			local enemies = math.max(0, math.floor(finite(opt.enemies, 0)))
+			local hp = math.max(EPS, finite(opt.hp, 1))
+			local kills = math.min(enemies, math.floor(damage / hp + EPS))
+			local survivors = enemies - kills
 			local before = s.troops
-			s.destroyed = false
-			s.troops = math.max(1, math.floor(s.troops * (1 - RunnerDefs.BARRICADE_TROOP_LOSS)))
-			s.note = "Barricade too strong: lost " .. (before - s.troops) .. " troops"
+			s.troops = math.max(1, s.troops - survivors)
+			s.ownKills = kills
+			s.kills = kills
+			s.killReward = kills * math.max(0, round(finite(opt.reward, 0)))
+			s.note = "Defeated " .. kills .. " of " .. enemies .. " soldiers, lost " .. (before - s.troops) .. " troops"
+			if other and other.enemies and across > 0 then
+				local otherEnemies = math.max(0, math.floor(finite(other.enemies, 0)))
+				local otherKills =
+					math.min(otherEnemies, math.floor(otherDamage / math.max(EPS, finite(other.hp, 1)) + EPS))
+				s.otherKills = otherKills
+				s.kills += otherKills
+				s.killReward += otherKills * math.max(0, round(finite(other.reward, 0)))
+				if otherKills > 0 then
+					s.note = (s.note :: string) .. " (+" .. otherKills .. " in the other squad)"
+				end
+			end
+		elseif row.kind == "barricade" and opt.hp then
+			local hp = math.max(0, finite(opt.hp, 0))
+			if damage + EPS >= hp then
+				s.destroyed = true
+				s.barricades += 1
+				s.barricadeReward = math.max(0, round(finite(opt.reward, 0)))
+				s.note = "Barricade destroyed! +" .. Format.Money(s.barricadeReward)
+			else
+				local before = s.troops
+				s.destroyed = false
+				s.troops = math.max(1, math.floor(s.troops * (1 - RunnerDefs.BARRICADE_TROOP_LOSS)))
+				s.note = "Barricade too strong: lost " .. (before - s.troops) .. " troops"
+			end
+			if other and other.hp and across > 0 then
+				local otherDestroyed = otherDamage + EPS >= math.max(0, finite(other.hp, 0))
+				s.otherDestroyed = otherDestroyed
+				if otherDestroyed then
+					local reward = math.max(0, round(finite(other.reward, 0)))
+					s.barricades += 1
+					s.barricadeReward += reward
+					s.note = (s.note :: string) .. " (other barricade too: +" .. Format.Money(reward) .. ")"
+				end
+			end
+		elseif row.kind == "contest" then
+			local steps, grown = contestGrowth(opt, damage)
+			s.steps = steps
+			s.amount = grown
+			local before = s.troops
+			if opt.op == "add" then
+				s.troops = before + grown
+			elseif opt.op == "sub" then
+				s.troops = math.max(1, before - grown)
+			end
+			if other then
+				s.otherSteps, s.otherAmount = contestGrowth(other, otherDamage)
+			end
+			local change = s.troops - before
+			s.note = (if change >= 0 then "+" else "") .. change .. " troops (shot it " .. steps .. "x bigger)"
 		end
 	end
 
@@ -475,7 +675,7 @@ local function search(
 	troopsOnly: boolean
 ): ({ Node }, number, number, boolean)
 	local frontier: { Node } = {
-		{ troops = st.startTroops, tier = 1, dmg = 1, carried = 0, bank = 0, lane = 0, parent = nil },
+		{ troops = st.startTroops, tier = 1, dmg = 1, carried = 0, bank = 0, lane = 0, stance = 0, parent = nil },
 	}
 	local visited, maxFrontier, capHit = 1, 1, false
 
@@ -491,35 +691,45 @@ local function search(
 					carried = node.carried,
 					bank = node.bank,
 					lane = 1,
+					stance = 0,
 					parent = node,
 				})
 			end
 		else
 			-- Merge exact duplicates (same troops/tier/damage/cash): keep the richer bank.
 			local byKey: { [string]: Node } = {}
+			local split = RunnerSim.IsSplitRow(row)
 			for _, node in frontier do
-				for lane, opt in row.options do
-					local s = step(row, opt, st, scale, node.troops, node.tier, node.dmg, node.carried)
-					local child: Node = {
-						troops = s.troops,
-						tier = s.tier,
-						dmg = s.dmg,
-						carried = if troopsOnly then 0 else s.carried,
-						bank = if troopsOnly then 0 else node.bank + s.bankDelta,
-						lane = lane,
-						parent = node,
-					}
-					visited += 1
-					local key = string.format("%d|%d|%.4f|%d", child.troops, child.tier, child.dmg, child.carried)
-					local existing = byKey[key]
-					if existing == nil then
-						byKey[key] = child
-						table.insert(nextNodes, child)
-					elseif child.bank > existing.bank + 0.001 then
-						-- Replace in place so the array order stays deterministic.
-						existing.bank = child.bank
-						existing.lane = child.lane
-						existing.parent = child.parent
+				-- Wide shooting only matters with enough troops beside the avatar.
+				local maxStance = if split and node.troops - 1 >= RunnerDefs.WIDE_RANGE_MIN_COMPANIONS
+					then RunnerDefs.MAX_STANCE
+					else 0
+				for lane = 1, #row.options do
+					for stance = 0, maxStance do
+						local s = step(row, lane, stance, st, scale, node.troops, node.tier, node.dmg, node.carried)
+						local child: Node = {
+							troops = s.troops,
+							tier = s.tier,
+							dmg = s.dmg,
+							carried = if troopsOnly then 0 else s.carried,
+							bank = if troopsOnly then 0 else node.bank + s.bankDelta,
+							lane = lane,
+							stance = stance,
+							parent = node,
+						}
+						visited += 1
+						local key = string.format("%d|%d|%.4f|%d", child.troops, child.tier, child.dmg, child.carried)
+						local existing = byKey[key]
+						if existing == nil then
+							byKey[key] = child
+							table.insert(nextNodes, child)
+						elseif child.bank > existing.bank + 0.001 then
+							-- Replace in place so the array order stays deterministic.
+							existing.bank = child.bank
+							existing.lane = child.lane
+							existing.stance = child.stance
+							existing.parent = child.parent
+						end
 					end
 				end
 			end
@@ -600,10 +810,11 @@ local function totalOf(course: Course, st: CleanStats, scale: number, node: Node
 	return total
 end
 
-function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): Result
+function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, stances: { number }?): Result
 	local st = cleanStats(stats)
 	local scale = RunnerCourse.ValueScale(course.area, course.level)
 	local picks: { any } = if type(choices) == "table" then choices else {}
+	local aims: { any } = if type(stances) == "table" then stances else {}
 
 	local troops, tier, dmg, carried = st.startTroops, 1, 1, 0
 	local collected = 0
@@ -619,7 +830,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 		end
 		local lane = laneFor(row, picks[index])
 		local opt = row.options[lane]
-		local s = step(row, opt, st, scale, troops, tier, dmg, carried)
+		local s = step(row, lane, stanceFor(row, aims[index]), st, scale, troops, tier, dmg, carried)
 
 		table.insert(outcomes, {
 			row = index,
@@ -634,6 +845,17 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 			damageMult = s.dmg,
 			destroyed = s.destroyed,
 			note = s.note,
+			stance = s.stance,
+			across = s.across,
+			damage = s.damage,
+			otherDamage = s.otherDamage,
+			kills = s.ownKills,
+			otherKills = s.otherKills,
+			otherDestroyed = s.otherDestroyed,
+			amount = s.amount,
+			steps = s.steps,
+			otherAmount = s.otherAmount,
+			otherSteps = s.otherSteps,
 		})
 
 		if s.upgradeKind == "weapon" then
@@ -657,10 +879,8 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 		overflowTotal += s.overflow
 		kills += s.kills
 		killValue += s.killReward
-		if s.destroyed then
-			barricades += 1
-			barricadeValue += s.barricadeReward
-		end
+		barricades += s.barricades
+		barricadeValue += s.barricadeReward
 		troops, tier, dmg, carried = s.troops, s.tier, s.dmg, s.carried
 	end
 
@@ -745,7 +965,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 	}
 end
 
-function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
+function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number }, { number })
 	local st = cleanStats(stats)
 	local scale = RunnerCourse.ValueScale(course.area, course.level)
 	bossHpClean(course, st) -- memoized; its search is cheaper (3 dimensions)
@@ -762,16 +982,18 @@ function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
 		end
 	end
 
-	-- Walk back up the parents to recover the lane of every row.
-	local reversed: { number } = {}
+	-- Walk back up the parents to recover the lane + stance of every row.
+	local reversed: { Node } = {}
 	local cursor: Node? = best
 	while cursor and cursor.parent do
-		table.insert(reversed, cursor.lane)
+		table.insert(reversed, cursor)
 		cursor = cursor.parent
 	end
 	local choices: { number } = {}
+	local stances: { number } = {}
 	for i = #reversed, 1, -1 do
-		table.insert(choices, reversed[i])
+		table.insert(choices, reversed[i].lane)
+		table.insert(stances, reversed[i].stance)
 	end
 
 	RunnerSim.LastSearch = {
@@ -779,7 +1001,7 @@ function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
 		maxFrontier = maxFrontier,
 		capHit = capHit or bossSearch.capHit,
 	}
-	return RunnerSim.Resolve(course, stats, choices), choices
+	return RunnerSim.Resolve(course, stats, choices, stances), choices, stances
 end
 
 function RunnerSim.MinDuration(course: Course): number

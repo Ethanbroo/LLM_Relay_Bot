@@ -13,7 +13,8 @@
 		ModeService:SetMode(player, mode)
 		ModeService:GetSlot(player): number
 		ModeService:Teleport(player, cframe): boolean
-		ModeService:ReturnToBase(player)
+		ModeService:ReturnToBase(player, target: CFrame?)
+			back to Base mode at `target`, or where the player stood before leaving the base
 		ModeService.ModeChanged: Signal(player, newMode, oldMode)
 			Services that run sessions (runner, combat) listen to this and clean
 			up when a player leaves their mode for any reason (death, leaving...).
@@ -129,8 +130,8 @@ function ModeService:Teleport(player: Player, cframe: CFrame): boolean
 	return true
 end
 
-function ModeService:ReturnToBase(player: Player)
-	local target = lastBaseCFrame[player]
+function ModeService:ReturnToBase(player: Player, place: CFrame?)
+	local target = place or lastBaseCFrame[player]
 	if not target then
 		target = CFrame.new(Layout.SpawnPosition())
 	end

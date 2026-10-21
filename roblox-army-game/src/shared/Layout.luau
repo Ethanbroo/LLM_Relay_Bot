@@ -83,6 +83,14 @@ function Layout.RunnerPortalPosition(): Vector3
 	return Layout.AreaCenter(1) + Vector3.new(0, 0, -60)
 end
 
+-- Where a player lands after an army run: the spawn, on the far side of the
+-- area from the ARMY RUN pad, facing the area's unlocks (owner request: not
+-- back on the pad, and next to what the money can buy).
+function Layout.RunnerReturnCFrame(): CFrame
+	local at = Layout.SpawnPosition()
+	return CFrame.lookAt(at, Layout.AreaCenter(1))
+end
+
 -- Runner -------------------------------------------------------------------------
 Layout.RUNNER_TRACK_WIDTH = 24
 Layout.RUNNER_TRACK_LENGTH = 900

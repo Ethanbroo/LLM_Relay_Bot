@@ -99,7 +99,7 @@ plain folders — just create the files inside them.
 | Owner | `Net.Handle` actions | Push channel (`Net.Fire(channel, player, msg, payload)`) |
 |---|---|---|
 | ECON | – | – |
-| RUNNER | `RunnerPrepare`, `RunnerGo`, `RunnerFinish`, `RunnerLeave`, `BuyRunnerUpgrade` | `"Runner"` |
+| RUNNER | `RunnerPrepare`, `RunnerGo`, `RunnerFinish`, `RunnerRetry`, `RunnerLeave`, `BuyRunnerUpgrade` | `"Runner"` |
 | BASE | `UnlockSlot`, `UpgradeSection`, `Restock`, `HireEmployeeCash`, `AssignEmployeeToken`, `UnlockGate` | `"Base"`, `"Fx"` |
 | COMBAT | `CombatPrepare`, `CombatStart`, `CombatChooseAbility`, `CombatLeave` | `"Combat"` (reliable, both directions), `"CombatSnap"` (unreliable, server→client) |
 | GEAR | `EquipItem`, `UpgradeItem`, `ScrapItem` | `"Inventory"` |
@@ -302,6 +302,15 @@ are written by the lead after the build — do not create them.
   hidden until the previous row is crossed (a squad/barricade also as soon as it is
   engaged, so it is never shot unlabelled), and is outlined text without a background.
   The option you run through (gate panel, toll cash, cash stack) is removed instantly.
+  Gate cash rides a red "-N", the smaller of two blue "+N" or the troop gate next to a
+  weapon gate. **Shoot-to-grow gates** (row kind `contest`, 2 per course, owner request):
+  a blue "+N" and a red "-N" that each grow by `growStep` troops per `growHp` damage they
+  take (capped at `growMax` steps, additive only) and widen visually; you pass one.
+  **Wide shooting** (owner request): in a 2-lane squad / barricade / contest row, with
+  more than 4 troops beside the avatar, the outer 0–2 formation columns over the other
+  lane (`RunnerSim.Stance` from the avatar's lateral position) shoot that lane
+  (`RunnerSim.UnitsAcross` units): kills / barricade / growth there count too.
+  Guns: half the old fire rate with 3x the damage per bullet (1.5x DPS).
   Final **castle boss** (owner request): walks out of the castle with a head HP bar and
   kills one unit per interval (troops first, the avatar last); HP = BOSS_HP_SHARE × the
   best path's potential damage, so only the best lanes win. Reward only on victory.
@@ -310,17 +319,23 @@ are written by the lead after the build — do not create them.
   avatar in rows of 5 (2 + avatar + 2, new rows behind) holding the same gun. Run stats
   (troops, gun, squad DPS, carried / capacity cash) sit in a bottom-left screen panel.
 * Permanent upgrades (bought on the pre-run screen or anywhere): **Starting troops**,
-  **Damage**, **Coin-carrying capacity**. Each level is a *small* improvement.
+  **Damage**, **Coin-carrying capacity**. Troops/damage levels are *small*; capacity is
+  +20% per level (owner request; prices use `Economy.BenchmarkStats`, the old bag).
   In-run pickups only last for that run.
 * Completion summary: every upgrade collected with its cash value, troops ×
   value, cash carried vs capacity, enemies defeated, boss line, vehicle
-  bonus, 2x boost, **total**. Then back to base.
+  bonus, 2x boost, **total**. Then back to base at `Layout.RunnerReturnCFrame` (the
+  spawn, away from the ARMY RUN pad). After a LOST run the summary also offers
+  TRY AGAIN (`RunnerRetry`: same level, straight back to the track start).
 * Server authority: `RunnerPrepare` generates the course (server) and teleports
-  to the track start; `RunnerGo` locks stats + start time; `RunnerFinish(runId, choices)`
-  re-simulates with `RunnerSim.Resolve` (lanes checked against the server-observed path),
-  rejects runs faster than `MinDuration × 0.9`, pays `result.total` (already includes the
-  vehicle bonus) as boostable cash, increments `runner.level`. The client sends RunnerFinish
-  when the squad reaches the castle and animates the SERVER's boss outcome.
+  to the track start; `RunnerGo` locks stats + start time; `RunnerFinish(runId, choices,
+  laterals)` re-simulates with `RunnerSim.Resolve(course, stats, lanes, stances)` (lanes
+  checked against the server-observed path; stances from the client's lateral when within
+  3 studs of the server's, else the server's), rejects runs faster than `MinDuration × 0.9`,
+  pays `result.total` (already includes the vehicle bonus) as boostable cash, and raises
+  `runner.level` **only on a boss victory** (a lost level is replayed: same course). The
+  client sends RunnerFinish when the squad reaches the castle and animates the SERVER's
+  boss outcome. `RunnerVisuals:Engage(row, Engagement)` gets both lanes' fights.
 
 ### 6.2 Base, revenue sections, employees (BASE)
 * 8 areas × 4 slots (`Config.Areas`). Area 2 slot 4 is the Combat Arena (kind `"arena"`).

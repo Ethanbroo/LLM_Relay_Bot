@@ -3095,7 +3095,11 @@ EconomyDefs.Runner = {
 	BaseDamage = 10, -- [PROPOSAL] damage of one troop at level 0
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
-	CapacityPerLevel = 0.06, -- [PROPOSAL] +6% of base capacity per level
+	-- [owner request] +20% of base capacity per level (was +6%: "increase the
+	-- upgrade amount of coins so it's easier to progress"). Prices do not move:
+	-- Economy divides the base by the reference player's bonus, so the
+	-- benchmark bag is unchanged and every bought level beats it by more.
+	CapacityPerLevel = 0.2,
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
@@ -3362,6 +3366,14 @@ end
 -- Big "ARMY RUN" pad in area 1 that starts the runner.
 function Layout.RunnerPortalPosition(): Vector3
 	return Layout.AreaCenter(1) + Vector3.new(0, 0, -60)
+end
+
+-- Where a player lands after an army run: the spawn, on the far side of the
+-- area from the ARMY RUN pad, facing the area's unlocks (owner request: not
+-- back on the pad, and next to what the money can buy).
+function Layout.RunnerReturnCFrame(): CFrame
+	local at = Layout.SpawnPosition()
+	return CFrame.lookAt(at, Layout.AreaCenter(1))
 end
 
 -- Runner -------------------------------------------------------------------------
@@ -3769,8 +3781,15 @@ return Rng
 		            the TROOP COUNT): "+N" and "xN" are blue (tone "positive"),
 		            "-N" and "÷N" are red (tone "negative"). Gold gates
 		            (tone "weapon"): op "weapon" (+1 weapon tier) or op "damage"
-		            (+20% damage). A red "toll" gate (op "sub") may ALSO carry a
-		            cash stack (`cash`): you lose troops but grab the money.
+		            (+20% damage). A gate may ALSO carry a cash stack (`cash`):
+		            a red "toll" gate (lose troops, grab the money) or the
+		            smaller of two blue gates (fewer troops + money vs more
+		            troops) - so the money is not always behind the red gate.
+		"contest"   2 lanes: "shoot to grow" gates [owner request]. A blue "+N"
+		            (tone "growPositive") and a red "-N" (tone "growNegative").
+		            `growHp` = damage that adds one step, `growStep` = troops
+		            per step, `growMax` = the most steps. Shooting a side for the
+		            engagement makes its number bigger (RunnerSim); additive only.
 		"cash"      3 lanes of cash stacks (tone "cash", `cash` = value).
 		"squad"     1 lane (unavoidable) or 2 lanes (pick the squad to fight).
 		            `enemies` = soldiers, `hp` = hit points of EACH soldier,
@@ -3800,10 +3819,14 @@ export type Option = {
 	amount: number?, -- +N troops, xN, -N, /N, +tiers, +damage fraction (0.2 = +20%)
 	label: string, -- what the gate panel shows: "+5", "x2", "-3", "÷2", "WEAPON +1", "+20% DMG", "$12"
 	tone: string, -- "positive" (blue) | "negative" (red) | "weapon" (gold) | "cash" | "enemy"
+	-- | "growPositive" / "growNegative" (contest: shoot-to-grow blue / red)
 	cash: number?, -- cash row (or toll gate): value of the cash stack in this lane
 	enemies: number?, -- squad row: number of enemy soldiers
 	hp: number?, -- barricade row: hit points; squad row: hit points of each soldier
 	reward: number?, -- cash for destroying the barricade / per enemy defeated
+	growHp: number?, -- contest: damage that grows the gate by one step
+	growStep: number?, -- contest: troops added to the gate's number per step
+	growMax: number?, -- contest: the most steps the gate can grow
 }
 
 export type Row = { index: number, kind: string, distance: number, options: { Option } }
@@ -3827,6 +3850,9 @@ type Draft = {
 	enemies: number?,
 	hp: number?,
 	reward: number?,
+	growHp: number?,
+	growStep: number?,
+	growMax: number?,
 }
 
 local RunnerCourse = {}
@@ -3869,6 +3895,9 @@ local function addLanes(laneKey: string, drafts: { Draft }, rng: Rng.Rng, shuffl
 			enemies = d.enemies,
 			hp = d.hp,
 			reward = d.reward,
+			growHp = d.growHp,
+			growStep = d.growStep,
+			growMax = d.growMax,
 		})
 	end
 	return options
@@ -3915,14 +3944,21 @@ function RunnerCourse.Generate(area: number, level: number): Course
 		local d = if rowIndex >= 10 and rng:Chance(0.15) then 3 else 2
 		return { op = "div", amount = d, label = "÷" .. d, tone = "negative" }
 	end
-	local function toll(rowIndex: number): Draft
-		local d = subN(rowIndex)
+	-- Puts a cash stack behind a gate ("-4  +$20" / "+3  +$15").
+	local function withCash(d: Draft, rowIndex: number, share: number): Draft
 		local cash = niceMoney(
-			RunnerDefs.TOLL_CASH_BASE * (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex) * scale * rng:Range(0.85, 1.2)
+			RunnerDefs.TOLL_CASH_BASE
+				* share
+				* (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex)
+				* scale
+				* rng:Range(0.85, 1.2)
 		)
 		d.cash = cash
 		d.label = d.label .. "  +" .. Format.Money(cash)
 		return d
+	end
+	local function toll(rowIndex: number): Draft
+		return withCash(subN(rowIndex), rowIndex, 1)
 	end
 	local function weapon(): Draft
 		return { op = "weapon", amount = 1, label = "WEAPON +1", tone = "weapon" }
@@ -3943,8 +3979,9 @@ function RunnerCourse.Generate(area: number, level: number): Course
 	}
 	local PLAIN_VARIANTS = {
 		{ id = "addSub", weight = 2 }, -- blue vs red (classic)
-		{ id = "toll", weight = 2 }, -- "+3" vs "-4 +$20": troops or cash?
-		{ id = "addAdd", weight = 1.5 }, -- two blue gates of different size
+		{ id = "toll", weight = 1.2 }, -- "+3" vs "-4 +$20": troops or cash?
+		{ id = "bonusAdd", weight = 1.2 }, -- "+3 +$15" vs "+6": the cash rides a BLUE gate
+		{ id = "addAdd", weight = 1 }, -- two blue gates of different size
 	}
 	local UPGRADE_VARIANTS = {
 		{ id = "weaponTroops", weight = 3 }, -- gold weapon gate vs more troops
@@ -3966,6 +4003,14 @@ function RunnerCourse.Generate(area: number, level: number): Course
 			drafts = { addN(rowIndex), subN(rowIndex) }
 		elseif variant.id == "toll" then
 			drafts = { addN(rowIndex), toll(rowIndex) }
+		elseif variant.id == "bonusAdd" then
+			-- [PROPOSAL] the cash gate gives fewer troops: the other gives ~60-100% more.
+			local small, big = addN(rowIndex), addN(rowIndex)
+			local smallN = small.amount :: number
+			local bigN = math.max(big.amount :: number, smallN + math.max(2, math.floor(0.6 * smallN + 0.5)))
+			big.amount = bigN
+			big.label = "+" .. bigN
+			drafts = { withCash(small, rowIndex, 0.75), big }
 		else
 			local a, b = addN(rowIndex), addN(rowIndex)
 			if a.amount == b.amount then
@@ -3982,12 +4027,67 @@ function RunnerCourse.Generate(area: number, level: number): Course
 		local variant = rng:Weighted(UPGRADE_VARIANTS, weightOf)
 		local drafts: { Draft }
 		if variant.id == "weaponTroops" then
-			drafts = { weapon(), addN(rowIndex) }
+			-- [PROPOSAL] 30%: the troop gate also carries cash (weapon vs troops + cash).
+			local troops = addN(rowIndex)
+			if rng:Chance(0.3) then
+				troops = withCash(troops, rowIndex, 0.75)
+			end
+			drafts = { weapon(), troops }
 		elseif variant.id == "damageTroops" then
 			drafts = { damage(), addN(rowIndex) }
 		else
 			drafts = { weapon(), damage() }
 		end
+		return addLanes("gate", drafts, rng, true)
+	end
+
+	-- Shoot-to-grow gates (see RunnerDefs "contest"): blue starts below a "+N"
+	-- gate of the row, red like a "-N"; a reference squad shooting one side for
+	-- the whole engagement adds CONTEST_STEPS_AT_EXPECTED steps.
+	local function contestRow(rowIndex: number): { Option }
+		local blueN = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.ADD_BASE + RunnerDefs.ADD_PER_ROW * rowIndex)
+						* troopScale
+						* RunnerDefs.CONTEST_BLUE_START
+						* rng:Range(0.9, 1.1)
+					+ 0.5
+			)
+		)
+		local redN = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.SUB_BASE + RunnerDefs.SUB_PER_ROW * rowIndex)
+						* troopScale
+						* RunnerDefs.CONTEST_RED_START
+						* rng:Range(0.9, 1.1)
+					+ 0.5
+			)
+		)
+		local power = RunnerDefs.ExpectedFirepower(rowIndex) * hpScale * armyScale
+		local growHp = math.max(1, math.floor(power / RunnerDefs.CONTEST_STEPS_AT_EXPECTED + 0.5))
+		local growStep = math.max(1, math.floor(troopScale + 0.5))
+		local drafts: { Draft } = {
+			{
+				op = "add",
+				amount = blueN,
+				label = "+" .. blueN,
+				tone = "growPositive",
+				growHp = growHp,
+				growStep = growStep,
+				growMax = RunnerDefs.CONTEST_MAX_STEPS,
+			},
+			{
+				op = "sub",
+				amount = redN,
+				label = "-" .. redN,
+				tone = "growNegative",
+				growHp = growHp,
+				growStep = growStep,
+				growMax = RunnerDefs.CONTEST_MAX_STEPS,
+			},
+		}
 		return addLanes("gate", drafts, rng, true)
 	end
 
@@ -4046,15 +4146,16 @@ function RunnerCourse.Generate(area: number, level: number): Course
 
 	-- Course blueprint ------------------------------------------------------------
 	-- [PROPOSAL] 18 rows. Row 1 is always a troop gate; rows 2-16 come in blocks
-	-- of three that are shuffled for variety; rows 17-18 are a final squad and a
-	-- last upgrade/troop gate before the castle boss.
+	-- of three that are shuffled for variety (two blocks hold the
+	-- RunnerDefs.CONTEST_ROWS shoot-to-grow gates); rows 17-18 are a final squad
+	-- and a last upgrade/troop gate before the castle boss.
 	local kinds: { string } = { "troop" }
 	local blocks = {
 		{ "cash", "troop", "squad" },
-		{ "upgrade", "cash", "troop" },
+		{ "upgrade", "contest", "troop" },
 		{ "barricade", "upgrade", "squad" },
 		{ "cash", "troop", "upgrade" },
-		{ "barricade", "troop", "cash" },
+		{ "barricade", "contest", "cash" },
 	}
 	for _, block in blocks do
 		local copy = table.clone(block)
@@ -4087,6 +4188,8 @@ function RunnerCourse.Generate(area: number, level: number): Course
 			rowKind, options = "gate", troopGate(index, mulRows[index] == true)
 		elseif k == "upgrade" then
 			rowKind, options = "gate", upgradeGate(index)
+		elseif k == "contest" then
+			rowKind, options = "contest", contestRow(index)
 		elseif k == "cash" then
 			rowKind, options = "cash", cashRow(index)
 		elseif k == "barricade" then
@@ -4148,7 +4251,12 @@ return RunnerCourse
 		RunnerDefs.GUN_RANGE              studs a gun reaches = 1.5 rows ("an option and a half")
 		RunnerDefs.ENGAGE_SECONDS         seconds the squad shoots before reaching a squad / barricade
 		RunnerDefs.FORMATION_WIDTH        units per formation row (2 troops, the avatar, 2 troops)
-		RunnerDefs.FORMATION_SPACING_X, FORMATION_SPACING_Z   studs between units / rows (visual)
+		RunnerDefs.FORMATION_SPACING_X, FORMATION_SPACING_Z   studs between units / rows
+		RunnerDefs.FormationSlot(i) -> (column, row)   where troop i stands (the avatar is column 0 of row 0)
+		RunnerDefs.FormationShift(lateral) -> number   whole columns the formation shifts near a track edge
+		RunnerDefs.WIDE_RANGE_MIN_COMPANIONS  troops beside the avatar needed for wide shooting
+		RunnerDefs.MAX_STANCE             formation columns that can reach into the other lane
+		RunnerDefs.CONTEST_ROWS, CONTEST_*  "shoot to grow" gates (see RunnerCourse "contest")
 		RunnerDefs.TROOP_VALUE, DAMAGE_GATE_AMOUNT, DAMAGE_GATE_VALUE, ...
 		RunnerDefs.BARRICADE_TROOP_LOSS
 		RunnerDefs.BOSS_KILL_INTERVAL, BOSS_MAX_FIGHT_SECONDS, BOSS_HP_SHARE, BOSS_REWARD,
@@ -4223,14 +4331,18 @@ RunnerDefs.LANES = {
 -- Damage per second of one unit = damage x fireRate (x the player's damage
 -- upgrades / base damage, x in-run damage gates). The tiers feel different
 -- (SMG: weak bullets, very fast; Rocket: huge hits, slow) but the DPS always
--- rises with the tier: 20, 27, 35, 45, 60, 75 (x1, 1.35, 1.75, 2.25, 3, 3.75).
+-- rises with the tier: 30, 40.5, 52.5, 67.5, 90, 112.5 (x1, 1.35, 1.75, 2.25, 3, 3.75).
+-- [owner request] "More bullets hit but a lower fire rate": every gun fires
+-- half as often as before with 3x the damage per bullet (Rocket 0.75x as often,
+-- 2x damage), i.e. 1.5x the old damage per second, so a small squad (5 men vs
+-- 2 soldiers) wins its fights.
 RunnerDefs.WEAPONS = {
 	{
 		name = "Pistol",
 		short = "PISTOL",
 		value = 0,
-		damage = 10,
-		fireRate = 2,
+		damage = 30,
+		fireRate = 1,
 		bulletSpeed = 120,
 		bulletStyle = "pistol",
 	},
@@ -4238,8 +4350,8 @@ RunnerDefs.WEAPONS = {
 		name = "Rifle",
 		short = "RIFLE",
 		value = 8,
-		damage = 18,
-		fireRate = 1.5,
+		damage = 54,
+		fireRate = 0.75,
 		bulletSpeed = 180,
 		bulletStyle = "rifle",
 	},
@@ -4247,8 +4359,8 @@ RunnerDefs.WEAPONS = {
 		name = "SMG",
 		short = "SMG",
 		value = 12,
-		damage = 5,
-		fireRate = 7,
+		damage = 15,
+		fireRate = 3.5,
 		bulletSpeed = 140,
 		bulletStyle = "smg",
 	},
@@ -4256,8 +4368,8 @@ RunnerDefs.WEAPONS = {
 		name = "Assault Rifle",
 		short = "ASSAULT",
 		value = 18,
-		damage = 9,
-		fireRate = 5,
+		damage = 27,
+		fireRate = 2.5,
 		bulletSpeed = 170,
 		bulletStyle = "assault",
 	},
@@ -4265,8 +4377,8 @@ RunnerDefs.WEAPONS = {
 		name = "Minigun",
 		short = "MINIGUN",
 		value = 25,
-		damage = 6,
-		fireRate = 10,
+		damage = 18,
+		fireRate = 5,
 		bulletSpeed = 160,
 		bulletStyle = "minigun",
 	},
@@ -4274,8 +4386,8 @@ RunnerDefs.WEAPONS = {
 		name = "Rocket",
 		short = "ROCKET",
 		value = 35,
-		damage = 150,
-		fireRate = 0.5,
+		damage = 300,
+		fireRate = 0.375,
 		bulletSpeed = 70,
 		bulletStyle = "rocket",
 	},
@@ -4289,10 +4401,62 @@ RunnerDefs.GUN_RANGE = 1.5 * RunnerDefs.ROW_SPACING -- 67.5 studs
 RunnerDefs.ENGAGE_SECONDS = RunnerDefs.GUN_RANGE / RunnerDefs.RUN_SPEED -- 2.8125 s
 
 -- [REQUIREMENT] Troops stand next to the player, 5 per row (2 left, the
--- avatar in the middle, 2 right); extra rows form behind. Visual only.
+-- avatar in the middle, 2 right); extra rows form behind. The visuals draw it
+-- and RunnerSim uses its columns for wide shooting (below).
 RunnerDefs.FORMATION_WIDTH = 5
 RunnerDefs.FORMATION_SPACING_X = 2.4 -- [PROPOSAL] studs between units in a row
 RunnerDefs.FORMATION_SPACING_Z = 2.8 -- [PROPOSAL] studs between rows
+-- A unit never stands closer than this to a track edge (the formation shifts).
+RunnerDefs.FORMATION_EDGE_MARGIN = 0.8
+
+-- Formation slot of troop i (1-based; the avatar is the centre of row 0).
+-- Row 0 holds FORMATION_WIDTH - 1 troops (closest to the avatar first), every
+-- later row FORMATION_WIDTH (centre first). Returns (column, row): column in
+-- units of FORMATION_SPACING_X (+ = right), row in units of FORMATION_SPACING_Z
+-- behind the avatar. Odd troops go left, even troops right.
+function RunnerDefs.FormationSlot(i: number): (number, number)
+	local width = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+	local half = math.floor(width / 2)
+	local front = width - 1
+	if i <= front then
+		local k = math.ceil(i / 2)
+		return if i % 2 == 1 then -k else k, 0
+	end
+	local j = i - front - 1 -- 0-based in the back rows
+	local row = 1 + math.floor(j / width)
+	local index = j % width -- 0 = centre, then left/right pairs
+	if index == 0 then
+		return 0, row
+	end
+	local k = math.min(half, math.ceil(index / 2))
+	return if index % 2 == 1 then -k else k, row
+end
+
+-- Near a track edge the WHOLE formation moves over by whole columns (the
+-- same shift for every troop) so no unit stands off the track; the avatar
+-- stays where the player steers and a front-row troop takes the spot it left
+-- free. `lateral` = the avatar's studs right of the centre line.
+function RunnerDefs.FormationShift(lateral: number): number
+	local width = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+	local half = math.floor(width / 2)
+	local spacing = RunnerDefs.FORMATION_SPACING_X
+	local minX = -RunnerDefs.TRACK_WIDTH / 2 + RunnerDefs.FORMATION_EDGE_MARGIN
+	local maxX = RunnerDefs.TRACK_WIDTH / 2 - RunnerDefs.FORMATION_EDGE_MARGIN
+	local lo = math.ceil((minX - (lateral - half * spacing)) / spacing - 1e-6)
+	local hi = math.floor((maxX - (lateral + half * spacing)) / spacing + 1e-6)
+	local shift = if lo <= hi then math.clamp(0, lo, hi) else 0
+	return math.clamp(shift, -half, half)
+end
+
+-- [owner request] Wide shooting: with MORE than 4 troops beside the avatar,
+-- every formation column shoots what stands in front of IT. Standing between
+-- two squads / barricades / shoot-to-grow gates hits both (the columns over
+-- the other lane shoot that one); moving to a side puts all the fire on it.
+-- With fewer troops everyone shoots the lane the avatar is in.
+RunnerDefs.WIDE_RANGE_MIN_COMPANIONS = 5
+-- At most the 2 outer columns of the 5 can stand over the other lane (the
+-- avatar's own column is always in its lane): the "stance" 0, 1 or 2.
+RunnerDefs.MAX_STANCE = 2
 
 -------------------------------------------------------------------------------
 -- Payout values (area 1 dollars; multiplied by the area scale and level factor)
@@ -4304,7 +4468,7 @@ RunnerDefs.CASH_ROW_BASE = 9 -- [PROPOSAL] middle cash lane of the first cash ro
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
 RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trade troops for cash)
-RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars)
+RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars), either lane
 RunnerDefs.BARRICADE_REWARD = 7 -- [PROPOSAL] $ for destroying a weak barricade (strong pays ~2.2x)
 -- [PROPOSAL] $ for beating the boss, x the area cash scale x ArmyScale(area)^BOSS_REWARD_ARMY_EXP
 -- (bigger armies guard more loot), so beating it is worth ~20-30% of a best-case run in every area.
@@ -4319,6 +4483,24 @@ RunnerDefs.ADD_PER_ROW = 0.25 -- [PROPOSAL] extra +N per row index
 RunnerDefs.MUL_ROWS = 2 -- [PROPOSAL] troop gates per course that offer "x2"
 RunnerDefs.SUB_BASE = 2 -- [PROPOSAL] "-N" at row 1
 RunnerDefs.SUB_PER_ROW = 0.2 -- [PROPOSAL]
+-- [owner request] The cash bonus behind a gate is not always on the red one:
+-- it rides a red "-N" (troops for cash) or the SMALLER of two blue "+N"
+-- gates (fewer troops + cash vs more troops), at random.
+
+-------------------------------------------------------------------------------
+-- "Shoot to grow" gates (row kind "contest") [owner request]
+-------------------------------------------------------------------------------
+-- A blue "+N" and a red "-N" side by side. Shooting a side makes its number
+-- bigger (blue: more troops gained, red: more troops lost) and makes it wider,
+-- pushing the other side aside. Additive only (no x), and capped, so they can
+-- not make a player overpowered right away.
+RunnerDefs.CONTEST_ROWS = 2 -- [PROPOSAL] per course (RunnerCourse puts them in two of its row blocks)
+RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" gate of that row
+RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row
+-- [PROPOSAL] Growth steps (+1 troop each in area 1, x TroopScale) a reference
+-- squad reaches by shooting ONE side for the whole engagement, and the cap.
+RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 3
+RunnerDefs.CONTEST_MAX_STEPS = 6
 
 -------------------------------------------------------------------------------
 -- Enemies (squads, barricades, the enemy base)
@@ -4331,10 +4513,10 @@ RunnerDefs.EXPECTED_TROOPS_BASE = 3
 RunnerDefs.EXPECTED_TROOPS_PER_ROW = 2.2
 RunnerDefs.EXPECTED_POWER_PER_ROW = 0.04
 -- [PROPOSAL] Hit points of one enemy soldier in area 1: one un-upgraded
--- Pistol unit deals 20 x 2.8125 = 56 damage per engagement, so a soldier
--- needs about 3 units (same balance as before guns had a fire rate).
+-- Pistol unit deals 30 x 2.8125 = 84 damage per engagement, so a soldier
+-- needs 2 units (owner request: 5 men beat a squad of 2 without losses).
 RunnerDefs.ENEMY_HP = 170
-RunnerDefs.SQUAD_SHARE = 0.35 -- [PROPOSAL] soldiers per expected troop (normal squad)
+RunnerDefs.SQUAD_SHARE = 0.4 -- [PROPOSAL] soldiers per expected troop (normal squad)
 RunnerDefs.SQUAD_SMALL = 0.6 -- [PROPOSAL] size of the small squad in a 2-squad row
 RunnerDefs.SQUAD_BIG = 1.45 -- [PROPOSAL] size of the big squad (pays more, costs more)
 RunnerDefs.SQUAD_FINAL = 1.25 -- [PROPOSAL] size of the last squad before the castle
@@ -4469,11 +4651,29 @@ return RunnerDefs
 	the economy can compute the best possible run.
 
 	Public API:
-		RunnerSim.Resolve(course, stats, choices): Result
+		RunnerSim.Resolve(course, stats, choices, stances?): Result
 			choices[i] = lane picked in row i (1..#row.options). A missing,
 			non-integer or out-of-range lane counts as lane 1.
-		RunnerSim.BestCase(course, stats): (Result, { number })
-			EXACT best run and the lane choices that produce it.
+			stances[i] = 0..RunnerDefs.MAX_STANCE: formation columns that stood
+			over the OTHER lane of a 2-lane squad / barricade / contest row
+			(wide shooting, see RunnerSim.Stance). Missing / invalid -> 0.
+		RunnerSim.BestCase(course, stats): (Result, { number }, { number })
+			EXACT best run and the lane choices + stances that produce it.
+		RunnerSim.IsSplitRow(row): boolean
+			a row whose fire can be split between its two lanes (2-lane squad,
+			barricade or contest row)
+		RunnerSim.Stance(row, lane, lateral): number
+			stance of a squad whose avatar is `lateral` studs right of the centre
+			line and passes `lane`: how many of the formation's outer columns
+			(FORMATION_SPACING_X apart) reach over the line between the two lanes,
+			0..2: closer than 1 column to the line -> 2, closer than 2 -> 1, else 0.
+			(The edge shift of RunnerDefs.FormationShift only happens deep in a
+			lane, where no column reaches across.) The server computes it from
+			where it saw the avatar cross the row.
+		RunnerSim.UnitsAcross(units, row, lane, stance): number
+			of `units` (troops incl. the avatar) how many shoot the other lane:
+			the troops in the outer `stance` columns on that side, and only with
+			more than WIDE_RANGE_MIN_COMPANIONS - 1 troops beside the avatar.
 		RunnerSim.MinDuration(course): number
 			fastest legal completion time in seconds (running only, anti-cheat floor).
 		RunnerSim.UnitDps(stats, weaponTier, damageMult): number
@@ -4508,6 +4708,13 @@ return RunnerDefs
 		hp) soldiers (reward each); every surviving soldier costs 1 troop.
 		Barricade: destroyed if troops x UnitDps x ENGAGE_SECONDS >= hp (reward
 		banked), otherwise you lose 25% of your troops (min 1 left).
+		Wide shooting [owner request]: in a 2-lane squad / barricade / contest
+		row, UnitsAcross(...) of the units shoot the OTHER lane instead: they
+		kill soldiers there (reward, no troop cost), can destroy that barricade
+		(reward) or grow that contest gate. The rest shoot the lane you pass.
+		Contest ("shoot to grow") gate: the damage a side takes adds
+		min(growMax, floor(damage / growHp)) steps of growStep troops to its
+		number; you pass one side: blue "+N" adds N troops, red "-N" removes N.
 		Boss at the castle: every BossKillInterval(N) seconds it kills one unit
 		(troops first, the avatar last) while all living units shoot it. Its HP
 		is BossHp(course, stats), so only (near) best lane paths beat it.
@@ -4525,10 +4732,16 @@ return RunnerDefs
 	Why BestCase is exact: the final payout never goes down when any of
 	(troops, weaponTier, damageMult, carried, banked) goes up (the boss damage
 	potential, victory and the survivors all rise with troops and unit DPS),
-	and every row rule keeps that order. So a partial run that is <= another
-	one in all five numbers can never finish ahead of it, and dropping it
-	(Pareto pruning) never loses the optimum. The same argument with only
-	(troops, weaponTier, damageMult) makes BossHp's search exact.
+	and every row rule keeps that order for a fixed (lane, stance): more units
+	or DPS means more damage on BOTH lanes (UnitsAcross grows by at most one
+	unit per extra troop). The one exception is a red contest gate, which
+	takes more troops from a stronger squad - but its blue side is better in
+	every state (more troops, nothing else differs), so some best run never
+	passes a red contest gate and every other rule is monotone. So a partial
+	run that is <= another one in all five numbers can never finish ahead of
+	it, and dropping it (Pareto pruning) never loses the optimum. The same
+	argument with only (troops, weaponTier, damageMult) makes BossHp's search
+	exact. Each split row is searched for every lane x stance 0..MAX_STANCE.
 ]]
 
 local Shared = script.Parent.Parent
@@ -4552,6 +4765,18 @@ export type RowOutcome = {
 	damageMult: number,
 	destroyed: boolean?,
 	note: string?,
+	-- Fights and contest gates (nil elsewhere):
+	stance: number?, -- 0..MAX_STANCE used (0 when the squad was too small for wide shooting)
+	across: number?, -- units that shot the other lane
+	damage: number?, -- damage dealt to the lane you passed
+	otherDamage: number?, -- damage dealt to the other lane
+	kills: number?, -- squad: soldiers killed in the lane you passed
+	otherKills: number?, -- squad: soldiers killed in the other lane
+	otherDestroyed: boolean?, -- barricade: the other barricade was destroyed too
+	amount: number?, -- contest: the number of the gate you passed after growing
+	steps: number?, -- contest: growth steps of the gate you passed
+	otherAmount: number?, -- contest: the other gate's number after growing
+	otherSteps: number?,
 }
 
 export type Line = { kind: string, label: string, detail: string, value: number }
@@ -4605,6 +4830,18 @@ type Step = {
 	upgradeKind: string?, -- "weapon" | "damage"
 	upgradeValue: number,
 	note: string?,
+	barricades: number, -- barricades destroyed (yours + the other lane's)
+	stance: number?,
+	across: number?,
+	damage: number?,
+	otherDamage: number?,
+	ownKills: number?,
+	otherKills: number?,
+	otherDestroyed: boolean?,
+	amount: number?,
+	steps: number?,
+	otherAmount: number?,
+	otherSteps: number?,
 }
 
 -- Search node for BestCase.
@@ -4615,6 +4852,7 @@ type Node = {
 	carried: number,
 	bank: number,
 	lane: number,
+	stance: number,
 	parent: Node?,
 }
 
@@ -4788,10 +5026,99 @@ local function laneFor(row: Row, choice: any): number
 	return 1
 end
 
+function RunnerSim.IsSplitRow(row: Row): boolean
+	return #row.options == 2 and (row.kind == "squad" or row.kind == "barricade" or row.kind == "contest")
+end
+
+-- Stance actually used (invalid / missing / not a split row -> 0).
+local function stanceFor(row: Row, value: any): number
+	if
+		RunnerSim.IsSplitRow(row)
+		and type(value) == "number"
+		and value == math.floor(value)
+		and value >= 0
+		and value <= RunnerDefs.MAX_STANCE
+	then
+		return value
+	end
+	return 0
+end
+
+-- The other option of a 2-lane row, the x of the line between the two lanes
+-- and the side the other lane is on (+1 = right of the lane you pass).
+local function otherOf(row: Row, lane: number): (Option?, number, number)
+	local own, other = row.options[lane], row.options[if lane == 1 then 2 else 1]
+	if not own or not other then
+		return nil, 0, 1
+	end
+	local left, right = own, other
+	if other.x < own.x then
+		left, right = other, own
+	end
+	local boundary = ((left.x + left.width / 2) + (right.x - right.width / 2)) / 2
+	return other, boundary, if other.x >= own.x then 1 else -1
+end
+
+function RunnerSim.Stance(row: Row, lane: number, lateral: number): number
+	if not RunnerSim.IsSplitRow(row) then
+		return 0
+	end
+	local _, boundary, side = otherOf(row, laneFor(row, lane))
+	-- How far the avatar stands inside its own lane, from the line (negative:
+	-- it is over the line, e.g. a lane accepted within the edge tolerance).
+	local inside = side * (boundary - finite(lateral, 0))
+	local half = math.floor(math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH)) / 2)
+	local count = 0
+	for column = 1, half do
+		if column * RunnerDefs.FORMATION_SPACING_X > inside + EPS then
+			count += 1
+		end
+	end
+	return math.clamp(count, 0, RunnerDefs.MAX_STANCE)
+end
+
+-- Troops (of units - 1 beside the avatar) standing in the outer `stance`
+-- formation columns on the `side` of the other lane (RunnerDefs.FormationSlot;
+-- the edge shift never moves a troop into or out of the outermost columns).
+local function unitsAcross(units: number, side: number, stance: number): number
+	local companions = units - 1
+	if stance <= 0 or companions < RunnerDefs.WIDE_RANGE_MIN_COMPANIONS then
+		return 0
+	end
+	local half = math.floor(math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH)) / 2)
+	local first = half - stance + 1 -- outer columns: first .. half on that side
+	local count = 0
+	for i = 1, companions do
+		local column = RunnerDefs.FormationSlot(i)
+		if side * column >= first then
+			count += 1
+		end
+	end
+	return count
+end
+
+function RunnerSim.UnitsAcross(units: number, row: Row, lane: number, stance: number): number
+	if not RunnerSim.IsSplitRow(row) then
+		return 0
+	end
+	local _, _, side = otherOf(row, laneFor(row, lane))
+	return unitsAcross(math.max(0, math.floor(finite(units, 0))), side, stanceFor(row, stance))
+end
+
+-- Growth steps and the number of a contest gate after taking `damage`.
+local function contestGrowth(opt: Option, damage: number): (number, number)
+	local growHp = math.max(EPS, finite(opt.growHp, math.huge))
+	local maxSteps = math.max(0, math.floor(finite(opt.growMax, 0)))
+	local steps = math.clamp(math.floor(damage / growHp + EPS), 0, maxSteps)
+	local amount = math.max(0, math.floor(finite(opt.amount, 0))) + steps * math.max(0, math.floor(finite(opt.growStep, 0)))
+	return steps, amount
+end
+
 -- Walk through one option. Pure: returns the new state numbers + what happened.
 local function step(
 	row: Row,
-	opt: Option,
+	lane: number,
+	stance: number,
 	stats: CleanStats,
 	scale: number,
 	troops: number,
@@ -4799,6 +5126,7 @@ local function step(
 	dmg: number,
 	carried: number
 ): Step
+	local opt = row.options[lane]
 	local s: Step = {
 		troops = troops,
 		tier = tier,
@@ -4814,11 +5142,12 @@ local function step(
 		upgradeKind = nil,
 		upgradeValue = 0,
 		note = nil,
+		barricades = 0,
 	}
 	local amount = finite(opt.amount, 0)
 
-	-- 1) Troop maths / gold gates
-	local op = opt.op
+	-- 1) Troop maths / gold gates (contest gates grow first, see 3)
+	local op = if row.kind == "contest" then nil else opt.op
 	if op == "add" then
 		s.troops = troops + math.max(0, math.floor(amount))
 	elseif op == "mul" then
@@ -4854,30 +5183,83 @@ local function step(
 		end
 	end
 
-	-- 3) Fights: the squad shoots for ENGAGE_SECONDS before it arrives
-	if row.kind == "squad" and opt.enemies then
-		local enemies = math.max(0, math.floor(finite(opt.enemies, 0)))
-		local hp = math.max(EPS, finite(opt.hp, 1))
-		local damage = s.troops * unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
-		local kills = math.min(enemies, math.floor(damage / hp + EPS))
-		local survivors = enemies - kills
-		local before = s.troops
-		s.troops = math.max(1, s.troops - survivors)
-		s.kills = kills
-		s.killReward = kills * math.max(0, round(finite(opt.reward, 0)))
-		s.note = "Defeated " .. kills .. " of " .. enemies .. " soldiers, lost " .. (before - s.troops) .. " troops"
-	elseif row.kind == "barricade" and opt.hp then
-		local hp = math.max(0, finite(opt.hp, 0))
-		local damage = s.troops * unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
-		if damage + EPS >= hp then
-			s.destroyed = true
-			s.barricadeReward = math.max(0, round(finite(opt.reward, 0)))
-			s.note = "Barricade destroyed! +" .. Format.Money(s.barricadeReward)
-		else
+	-- 3) Fights and contest gates: the squad shoots for ENGAGE_SECONDS before
+	-- it arrives; with wide shooting the outer columns over the other lane
+	-- shoot that one (UnitsAcross).
+	local fight = row.kind == "squad" or row.kind == "barricade" or row.kind == "contest"
+	if fight then
+		local other, _, side = otherOf(row, lane)
+		local cleanStance = if other then stanceFor(row, stance) else 0
+		local units = s.troops
+		local across = if other then unitsAcross(units, side, cleanStance) else 0
+		local perUnit = unitDps(stats.damage, s.tier, s.dmg) * RunnerDefs.ENGAGE_SECONDS
+		local damage = (units - across) * perUnit
+		local otherDamage = across * perUnit
+		s.stance = if across > 0 then cleanStance else 0
+		s.across = across
+		s.damage = damage
+		s.otherDamage = otherDamage
+
+		if row.kind == "squad" and opt.enemies then
+			local enemies = math.max(0, math.floor(finite(opt.enemies, 0)))
+			local hp = math.max(EPS, finite(opt.hp, 1))
+			local kills = math.min(enemies, math.floor(damage / hp + EPS))
+			local survivors = enemies - kills
 			local before = s.troops
-			s.destroyed = false
-			s.troops = math.max(1, math.floor(s.troops * (1 - RunnerDefs.BARRICADE_TROOP_LOSS)))
-			s.note = "Barricade too strong: lost " .. (before - s.troops) .. " troops"
+			s.troops = math.max(1, s.troops - survivors)
+			s.ownKills = kills
+			s.kills = kills
+			s.killReward = kills * math.max(0, round(finite(opt.reward, 0)))
+			s.note = "Defeated " .. kills .. " of " .. enemies .. " soldiers, lost " .. (before - s.troops) .. " troops"
+			if other and other.enemies and across > 0 then
+				local otherEnemies = math.max(0, math.floor(finite(other.enemies, 0)))
+				local otherKills =
+					math.min(otherEnemies, math.floor(otherDamage / math.max(EPS, finite(other.hp, 1)) + EPS))
+				s.otherKills = otherKills
+				s.kills += otherKills
+				s.killReward += otherKills * math.max(0, round(finite(other.reward, 0)))
+				if otherKills > 0 then
+					s.note = (s.note :: string) .. " (+" .. otherKills .. " in the other squad)"
+				end
+			end
+		elseif row.kind == "barricade" and opt.hp then
+			local hp = math.max(0, finite(opt.hp, 0))
+			if damage + EPS >= hp then
+				s.destroyed = true
+				s.barricades += 1
+				s.barricadeReward = math.max(0, round(finite(opt.reward, 0)))
+				s.note = "Barricade destroyed! +" .. Format.Money(s.barricadeReward)
+			else
+				local before = s.troops
+				s.destroyed = false
+				s.troops = math.max(1, math.floor(s.troops * (1 - RunnerDefs.BARRICADE_TROOP_LOSS)))
+				s.note = "Barricade too strong: lost " .. (before - s.troops) .. " troops"
+			end
+			if other and other.hp and across > 0 then
+				local otherDestroyed = otherDamage + EPS >= math.max(0, finite(other.hp, 0))
+				s.otherDestroyed = otherDestroyed
+				if otherDestroyed then
+					local reward = math.max(0, round(finite(other.reward, 0)))
+					s.barricades += 1
+					s.barricadeReward += reward
+					s.note = (s.note :: string) .. " (other barricade too: +" .. Format.Money(reward) .. ")"
+				end
+			end
+		elseif row.kind == "contest" then
+			local steps, grown = contestGrowth(opt, damage)
+			s.steps = steps
+			s.amount = grown
+			local before = s.troops
+			if opt.op == "add" then
+				s.troops = before + grown
+			elseif opt.op == "sub" then
+				s.troops = math.max(1, before - grown)
+			end
+			if other then
+				s.otherSteps, s.otherAmount = contestGrowth(other, otherDamage)
+			end
+			local change = s.troops - before
+			s.note = (if change >= 0 then "+" else "") .. change .. " troops (shot it " .. steps .. "x bigger)"
 		end
 	end
 
@@ -4935,7 +5317,7 @@ local function search(
 	troopsOnly: boolean
 ): ({ Node }, number, number, boolean)
 	local frontier: { Node } = {
-		{ troops = st.startTroops, tier = 1, dmg = 1, carried = 0, bank = 0, lane = 0, parent = nil },
+		{ troops = st.startTroops, tier = 1, dmg = 1, carried = 0, bank = 0, lane = 0, stance = 0, parent = nil },
 	}
 	local visited, maxFrontier, capHit = 1, 1, false
 
@@ -4951,35 +5333,45 @@ local function search(
 					carried = node.carried,
 					bank = node.bank,
 					lane = 1,
+					stance = 0,
 					parent = node,
 				})
 			end
 		else
 			-- Merge exact duplicates (same troops/tier/damage/cash): keep the richer bank.
 			local byKey: { [string]: Node } = {}
+			local split = RunnerSim.IsSplitRow(row)
 			for _, node in frontier do
-				for lane, opt in row.options do
-					local s = step(row, opt, st, scale, node.troops, node.tier, node.dmg, node.carried)
-					local child: Node = {
-						troops = s.troops,
-						tier = s.tier,
-						dmg = s.dmg,
-						carried = if troopsOnly then 0 else s.carried,
-						bank = if troopsOnly then 0 else node.bank + s.bankDelta,
-						lane = lane,
-						parent = node,
-					}
-					visited += 1
-					local key = string.format("%d|%d|%.4f|%d", child.troops, child.tier, child.dmg, child.carried)
-					local existing = byKey[key]
-					if existing == nil then
-						byKey[key] = child
-						table.insert(nextNodes, child)
-					elseif child.bank > existing.bank + 0.001 then
-						-- Replace in place so the array order stays deterministic.
-						existing.bank = child.bank
-						existing.lane = child.lane
-						existing.parent = child.parent
+				-- Wide shooting only matters with enough troops beside the avatar.
+				local maxStance = if split and node.troops - 1 >= RunnerDefs.WIDE_RANGE_MIN_COMPANIONS
+					then RunnerDefs.MAX_STANCE
+					else 0
+				for lane = 1, #row.options do
+					for stance = 0, maxStance do
+						local s = step(row, lane, stance, st, scale, node.troops, node.tier, node.dmg, node.carried)
+						local child: Node = {
+							troops = s.troops,
+							tier = s.tier,
+							dmg = s.dmg,
+							carried = if troopsOnly then 0 else s.carried,
+							bank = if troopsOnly then 0 else node.bank + s.bankDelta,
+							lane = lane,
+							stance = stance,
+							parent = node,
+						}
+						visited += 1
+						local key = string.format("%d|%d|%.4f|%d", child.troops, child.tier, child.dmg, child.carried)
+						local existing = byKey[key]
+						if existing == nil then
+							byKey[key] = child
+							table.insert(nextNodes, child)
+						elseif child.bank > existing.bank + 0.001 then
+							-- Replace in place so the array order stays deterministic.
+							existing.bank = child.bank
+							existing.lane = child.lane
+							existing.stance = child.stance
+							existing.parent = child.parent
+						end
 					end
 				end
 			end
@@ -5060,10 +5452,11 @@ local function totalOf(course: Course, st: CleanStats, scale: number, node: Node
 	return total
 end
 
-function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): Result
+function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, stances: { number }?): Result
 	local st = cleanStats(stats)
 	local scale = RunnerCourse.ValueScale(course.area, course.level)
 	local picks: { any } = if type(choices) == "table" then choices else {}
+	local aims: { any } = if type(stances) == "table" then stances else {}
 
 	local troops, tier, dmg, carried = st.startTroops, 1, 1, 0
 	local collected = 0
@@ -5079,7 +5472,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 		end
 		local lane = laneFor(row, picks[index])
 		local opt = row.options[lane]
-		local s = step(row, opt, st, scale, troops, tier, dmg, carried)
+		local s = step(row, lane, stanceFor(row, aims[index]), st, scale, troops, tier, dmg, carried)
 
 		table.insert(outcomes, {
 			row = index,
@@ -5094,6 +5487,17 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 			damageMult = s.dmg,
 			destroyed = s.destroyed,
 			note = s.note,
+			stance = s.stance,
+			across = s.across,
+			damage = s.damage,
+			otherDamage = s.otherDamage,
+			kills = s.ownKills,
+			otherKills = s.otherKills,
+			otherDestroyed = s.otherDestroyed,
+			amount = s.amount,
+			steps = s.steps,
+			otherAmount = s.otherAmount,
+			otherSteps = s.otherSteps,
 		})
 
 		if s.upgradeKind == "weapon" then
@@ -5117,10 +5521,8 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 		overflowTotal += s.overflow
 		kills += s.kills
 		killValue += s.killReward
-		if s.destroyed then
-			barricades += 1
-			barricadeValue += s.barricadeReward
-		end
+		barricades += s.barricades
+		barricadeValue += s.barricadeReward
 		troops, tier, dmg, carried = s.troops, s.tier, s.dmg, s.carried
 	end
 
@@ -5205,7 +5607,7 @@ function RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): R
 	}
 end
 
-function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
+function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number }, { number })
 	local st = cleanStats(stats)
 	local scale = RunnerCourse.ValueScale(course.area, course.level)
 	bossHpClean(course, st) -- memoized; its search is cheaper (3 dimensions)
@@ -5222,16 +5624,18 @@ function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
 		end
 	end
 
-	-- Walk back up the parents to recover the lane of every row.
-	local reversed: { number } = {}
+	-- Walk back up the parents to recover the lane + stance of every row.
+	local reversed: { Node } = {}
 	local cursor: Node? = best
 	while cursor and cursor.parent do
-		table.insert(reversed, cursor.lane)
+		table.insert(reversed, cursor)
 		cursor = cursor.parent
 	end
 	local choices: { number } = {}
+	local stances: { number } = {}
 	for i = #reversed, 1, -1 do
-		table.insert(choices, reversed[i])
+		table.insert(choices, reversed[i].lane)
+		table.insert(stances, reversed[i].stance)
 	end
 
 	RunnerSim.LastSearch = {
@@ -5239,7 +5643,7 @@ function RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })
 		maxFrontier = maxFrontier,
 		capHit = capHit or bossSearch.capHit,
 	}
-	return RunnerSim.Resolve(course, stats, choices), choices
+	return RunnerSim.Resolve(course, stats, choices, stances), choices, stances
 end
 
 function RunnerSim.MinDuration(course: Course): number
@@ -11166,7 +11570,8 @@ return MapBuilder
 		ModeService:SetMode(player, mode)
 		ModeService:GetSlot(player): number
 		ModeService:Teleport(player, cframe): boolean
-		ModeService:ReturnToBase(player)
+		ModeService:ReturnToBase(player, target: CFrame?)
+			back to Base mode at `target`, or where the player stood before leaving the base
 		ModeService.ModeChanged: Signal(player, newMode, oldMode)
 			Services that run sessions (runner, combat) listen to this and clean
 			up when a player leaves their mode for any reason (death, leaving...).
@@ -11282,8 +11687,8 @@ function ModeService:Teleport(player: Player, cframe: CFrame): boolean
 	return true
 end
 
-function ModeService:ReturnToBase(player: Player)
-	local target = lastBaseCFrame[player]
+function ModeService:ReturnToBase(player: Player, place: CFrame?)
+	local target = place or lastBaseCFrame[player]
 	if not target then
 		target = CFrame.new(Layout.SpawnPosition())
 	end
@@ -11313,18 +11718,24 @@ return ModeService
 	     the client only reports which lane it picked in each row, the server
 	     re-simulates the whole run with RunnerSim.Resolve and pays the result.
 	  3. While a run is going it watches the avatar every Heartbeat and notes
-	     which lane it was really in as it crossed each row. RunnerFinish only
-	     believes the client's lane when it matches what the server saw (or is
-	     the next lane over and the avatar was within LANE_EDGE_TOLERANCE studs
-	     of it - the server sees the avatar 0.1-0.3 s late), so a cheater can
-	     not simply send the best lanes.
+	     which lane it was really in (and where across the track) as it crossed
+	     each row. RunnerFinish only believes the client's lane when it matches
+	     what the server saw (or is the next lane over and the avatar was within
+	     LANE_EDGE_TOLERANCE studs of it - the server sees the avatar 0.1-0.3 s
+	     late), so a cheater can not simply send the best lanes. The wide-shooting
+	     stance of a split row (RunnerSim.Stance) comes from the same position:
+	     the client's lateral when it is within LANE_EDGE_TOLERANCE of the
+	     server's, else the server's.
 
 	Net actions (client -> server, see ARCHITECTURE §3):
 		RunnerPrepare()               -> { runId, course, level, area, slot, stats, runSpeed }
 		BuyRunnerUpgrade(kind)        -> { kind, level, stats }   kind = "troops" | "damage" | "capacity"
 		RunnerGo(runId)               -> { stats, runSpeed, bossHp }
-		RunnerFinish(runId, choices)  -> { result, paid, boosted, level }
-		RunnerLeave()                 -> {}
+		RunnerFinish(runId, choices, laterals) -> { result, paid, boosted, level, victory }
+			laterals[i] = studs right of the centre line where the client crossed row i
+		RunnerRetry(runId)            -> same as RunnerPrepare: a new run on the same track,
+		                                 after a finished one (the defeat screen's TRY AGAIN)
+		RunnerLeave()                 -> {}   back to the base, at Layout.RunnerReturnCFrame
 
 	Push channel "Runner" (server -> client):
 		"Ended", { runId }   -- the server ended the session (death, mode change)
@@ -11352,10 +11763,16 @@ return ModeService
 		                 on screen is the one that is paid.
 		                 anti-cheat time + position checks (fails if the avatar
 		                 is missing), picks the lanes (client's if plausible, else
-		                 the ones the server saw), re-simulates, pays boostable
-		                 cash, raises runner.level. A repeated request gets the
-		                 same reply again (never pays twice).
-		RunnerLeave    - restores the avatar and returns to the base.
+		                 the ones the server saw) and stances, re-simulates, pays
+		                 boostable cash, and raises runner.level ONLY when the boss
+		                 was beaten (owner request: a lost level is played again
+		                 until it is won; the same level = the same course). A
+		                 repeated request gets the same reply again (never pays twice).
+		RunnerRetry    - after RunnerFinish: ends that session and starts a new one
+		                 at the player's current level without leaving the track.
+		RunnerLeave    - restores the avatar and returns to the base at the spawn,
+		                 on the far side from the ARMY RUN pad (owner request: not
+		                 back on the pad; the base's unlocks are right there).
 
 	Every way a session ends (RunnerLeave, death / respawn / any mode change,
 	leaving the game, a failed teleport) goes through endSession, which stops
@@ -11707,6 +12124,27 @@ local function chooseLanes(session: Session, choices: any): { number }
 	return clean
 end
 
+-- Wide-shooting stance per row (RunnerSim.Stance) for the lanes that are
+-- paid: from the client's lateral when it is within LANE_EDGE_TOLERANCE of
+-- where the server saw the avatar cross, else from the server's own sample.
+local function chooseStances(session: Session, lanes: { number }, laterals: any): { number }
+	local clean: { number } = {}
+	local source = if type(laterals) == "table" then laterals else {}
+	for i, row in session.course.rows do
+		if not RunnerSim.IsSplitRow(row) then
+			clean[i] = 0
+			continue
+		end
+		local at = session.serverLaterals[i] or session.lastLateral or 0
+		local claimed = rawget(source, i)
+		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= LANE_EDGE_TOLERANCE then
+			at = claimed :: number
+		end
+		clean[i] = RunnerSim.Stance(row, lanes[i], at)
+	end
+	return clean
+end
+
 -------------------------------------------------------------------------------
 -- Static track building
 -------------------------------------------------------------------------------
@@ -11909,29 +12347,11 @@ local function dataService(): any
 	return registry.DataService
 end
 
-local function onPrepare(player: Player)
+-- Creates a session at the player's current level and puts the avatar at
+-- the start of its track, frozen. `fromBase` = coming from the base (switch
+-- the mode to Runner first); false = a retry on the track (already Runner).
+local function startRun(player: Player, data: any, character: Model, humanoid: Humanoid, fromBase: boolean)
 	local Mode = modeService()
-	local Data = dataService()
-	if not Mode or not Data then
-		return Net.Fail("The game is still starting, try again")
-	end
-	if sessions[player] then
-		return Net.Fail("You are already on a run")
-	end
-	if Mode:GetMode(player) ~= "Base" then
-		return Net.Fail("Finish what you are doing first")
-	end
-	local data = Data:Get(player)
-	if not data then
-		return Net.Fail("Your data is still loading")
-	end
-	local character = player.Character
-	local humanoid = getHumanoid(character)
-	local root = getRoot(character)
-	if not character or not humanoid or not root or humanoid.Health <= 0 then
-		return Net.Fail("Your character is not ready")
-	end
-
 	local area = math.clamp(math.floor(data.base.highestArea), 1, #Config.Areas)
 	local level = math.max(1, math.floor(data.runner.level))
 	local course = RunnerCourse.Generate(area, level)
@@ -11971,12 +12391,18 @@ local function onPrepare(player: Player)
 	}
 
 	-- Mode first (ModeService remembers where you stood in the base), then teleport.
-	Mode:SetMode(player, "Runner")
+	if fromBase then
+		Mode:SetMode(player, "Runner")
+	end
 	sessions[player] = session
 	local startCFrame = Layout.RunnerTrackStart(slot) * CFrame.new(0, 0, 4)
 	if not Mode:Teleport(player, startCFrame) then
 		endSession(player, false)
-		Mode:SetMode(player, "Base")
+		if fromBase then
+			Mode:SetMode(player, "Base") -- never left the base
+		else
+			Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+		end
 		return Net.Fail("Could not reach the track, try again")
 	end
 	humanoid.WalkSpeed = 0
@@ -11992,6 +12418,67 @@ local function onPrepare(player: Player)
 		stats = currentStats(data),
 		runSpeed = RUN_SPEED,
 	})
+end
+
+-- The checks every new run needs; returns (data, character, humanoid) or a failure reply.
+local function readyToRun(player: Player): (any, Model?, Humanoid?, any)
+	local Data = dataService()
+	local data = Data:Get(player)
+	if not data then
+		return nil, nil, nil, Net.Fail("Your data is still loading")
+	end
+	local character = player.Character
+	local humanoid = getHumanoid(character)
+	local root = getRoot(character)
+	if not character or not humanoid or not root or humanoid.Health <= 0 then
+		return nil, nil, nil, Net.Fail("Your character is not ready")
+	end
+	return data, character, humanoid, nil
+end
+
+local function onPrepare(player: Player)
+	local Mode = modeService()
+	local Data = dataService()
+	if not Mode or not Data then
+		return Net.Fail("The game is still starting, try again")
+	end
+	if sessions[player] then
+		return Net.Fail("You are already on a run")
+	end
+	if Mode:GetMode(player) ~= "Base" then
+		return Net.Fail("Finish what you are doing first")
+	end
+	local data, character, humanoid, failure = readyToRun(player)
+	if failure or not character or not humanoid then
+		return failure
+	end
+	return startRun(player, data, character, humanoid, true)
+end
+
+-- TRY AGAIN on the defeat screen: a new run at the current level (a lost
+-- level did not go up) without the trip back to the base.
+local function onRetry(player: Player, runId: any)
+	local Mode = modeService()
+	local Data = dataService()
+	if not Mode or not Data then
+		return Net.Fail("The game is still starting, try again")
+	end
+	local old = sessions[player]
+	if not old or type(runId) ~= "string" or runId ~= old.runId then
+		return Net.Fail("This run has ended")
+	end
+	if not old.finished then
+		return Net.Fail("Finish the run first")
+	end
+	if Mode:GetMode(player) ~= "Runner" then
+		return Net.Fail("This run has ended")
+	end
+	local data, character, humanoid, failure = readyToRun(player)
+	if failure or not character or not humanoid then
+		return failure
+	end
+	endSession(player, false) -- restores the avatar and removes the gun first
+	return startRun(player, data, character, humanoid, false)
 end
 
 local function onBuyUpgrade(player: Player, kind: any)
@@ -12105,7 +12592,7 @@ local function ensureBonus(result: Result, bonus: number?)
 	result.total = Format.RoundWhole(result.total + extra)
 end
 
-local function onFinish(player: Player, runId: any, choices: any)
+local function onFinish(player: Player, runId: any, choices: any, laterals: any)
 	local Data = dataService()
 	local session = sessions[player]
 	if not session or type(runId) ~= "string" or runId ~= session.runId then
@@ -12143,14 +12630,17 @@ local function onFinish(player: Player, runId: any, choices: any)
 
 	local stats = session.stats :: Stats
 	local clean = chooseLanes(session, choices)
-	local result = RunnerSim.Resolve(session.course, stats, clean)
+	local stances = chooseStances(session, clean, laterals)
+	local result = RunnerSim.Resolve(session.course, stats, clean, stances)
 	ensureBonus(result, stats.payoutBonus)
+	local victory = type(result.boss) == "table" and result.boss.victory == true
 
 	local total = if isFiniteNumber(result.total) then math.max(0, Format.RoundWhole(result.total)) else 0
 	local paid = if total > 0 then Data:AddCash(player, total, { boostable = true, source = "runner" }) else 0
 
 	local runner = data.runner
-	runner.level = math.max(1, math.floor(runner.level)) + 1
+	-- Owner request: a lost level is played again until the boss is beaten.
+	runner.level = math.max(1, math.floor(runner.level)) + (if victory then 1 else 0)
 	runner.runs += 1
 	runner.bestPayout = math.max(runner.bestPayout, paid)
 	Data:MarkDirty(player)
@@ -12159,7 +12649,8 @@ local function onFinish(player: Player, runId: any, choices: any)
 		result = result,
 		paid = paid,
 		boosted = paid > total + 0.001,
-		level = runner.level,
+		level = runner.level, -- the level of the NEXT run
+		victory = victory,
 	}
 	session.finished = true
 	session.reply = reply
@@ -12171,7 +12662,7 @@ local function onLeave(player: Player)
 	local Mode = modeService()
 	endSession(player, false)
 	if Mode and Mode:GetMode(player) == "Runner" then
-		Mode:ReturnToBase(player)
+		Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
 	end
 	return Net.Ok()
 end
@@ -12185,6 +12676,7 @@ function RunnerService:Init(reg: { [string]: any })
 	Net.Handle("BuyRunnerUpgrade", onBuyUpgrade)
 	Net.Handle("RunnerGo", onGo)
 	Net.Handle("RunnerFinish", onFinish)
+	Net.Handle("RunnerRetry", onRetry)
 	Net.Handle("RunnerLeave", onLeave)
 end
 
@@ -14670,15 +15162,17 @@ return InventoryController
 	                humanoid:Move() forward (-Z) and steer towards a target lane.
 	                The server put a "RunnerGun" Tool in the avatar's hand;
 	                RunnerVisuals welds the gun model of the current weapon to it.
-	                Squads / barricades within RunnerDefs.GUN_RANGE (1.5 rows) are
-	                shot at: we predict that row's fight with RunnerSim.Resolve
-	                (lanes so far + the lane we are in now) so enemies fall and HP
-	                drains exactly as the sim says. When the avatar crosses a row
-	                we record the lane it is in and replay the run so far.
+	                Squads / barricades / shoot-to-grow gates within
+	                RunnerDefs.GUN_RANGE (1.5 rows) are shot at: we predict that
+	                row with RunnerSim.Resolve (lanes + wide-shooting stances so far
+	                + the lane and RunnerSim.Stance we are in now) so enemies fall,
+	                HP drains and gates grow in BOTH lanes exactly as the sim says.
+	                When the avatar crosses a row we record its lane and lateral
+	                position (the stance) and replay the run so far.
 	                Live stats sit in the BOTTOM-LEFT panel (RunnerUI HUD), clear
 	                of Roblox's chat window (top-left).
 	  3. BOSS     - the avatar stops before the castle. Right away we send our
-	                lane choices to the server (RunnerFinish, ONE request, never
+	                lanes + laterals to the server (RunnerFinish, ONE request, never
 	                before RunnerSim.MinDuration + FINISH_SLACK); the server
 	                re-simulates and pays. Meanwhile the castle door opens and
 	                the boss walks out (RunnerDefs.BOSS_INTRO_SECONDS), which
@@ -14688,7 +15182,11 @@ return InventoryController
 	                avatar last), so what you see always matches what is paid.
 	                Only if the request fails (or has no reply FINISH_REPLY_WAIT s
 	                after the intro) do we play our own RunnerSim.Resolve.
-	  4. SUMMARY  - "RUN COMPLETE!" panel from the reply; COLLECT returns to the base.
+	  4. SUMMARY  - "RUN COMPLETE!" panel from the reply; COLLECT returns to the
+	                base (the server puts us at the spawn, away from the ARMY RUN
+	                pad). After a LOST run the level stays (owner request) and the
+	                panel offers TRY AGAIN: RunnerRetry starts the same level on
+	                the track right away.
 
 	Cleanup (camera, controls, jump, visuals incl. guns / boss / bullets /
 	avatar pose, HUD panel, messages, input) happens on COLLECT, Back, any
@@ -14733,6 +15231,7 @@ type RowOutcome = RunnerSim.RowOutcome
 type BossOutcome = RunnerSim.BossOutcome
 type Option = RunnerCourse.Option
 type Fight = RunnerVisuals.Fight
+type Engagement = RunnerVisuals.Engagement
 type PlayerData = Types.PlayerData
 
 local player = Players.LocalPlayer
@@ -14777,6 +15276,8 @@ type Session = {
 	runSpeed: number,
 	phase: string, -- "prepare" | "running" | "boss" | "summary" | "ended"
 	choices: { number },
+	laterals: { number }, -- row index -> studs right of the centre line where we crossed it
+	stances: { number }, -- row index -> RunnerSim.Stance at that crossing
 	nextRow: number,
 	engageKeys: { [number]: string }, -- row index -> prediction key last sent to the visuals
 	live: Live,
@@ -14822,6 +15323,7 @@ local opening = false
 local portalArmed = false
 local portalCooldownUntil = 0
 local controlsCache: any = nil
+local startSessionRef: ((reply: { [string]: any }) -> ())? = nil -- startSession (defined further down)
 
 -------------------------------------------------------------------------------
 -- Small helpers
@@ -14894,7 +15396,7 @@ local function cleanStats(raw: any, fallback: { startTroops: number, damage: num
 end
 
 local function safeResolve(s: Session): Result?
-	local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, s.choices)
+	local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, s.choices, s.stances)
 	if ok and type(result) == "table" then
 		return result
 	end
@@ -14931,43 +15433,60 @@ local function laneAt(row: Row, lateral: number): number
 	return best
 end
 
--- What a squad / barricade fight looks like for the visuals, from the
--- row's RunnerSim outcome (same rule as RunnerSim: the squad shoots for
--- RunnerDefs.ENGAGE_SECONDS with every unit's UnitDps). Visual only: the
--- troops / cash / destroyed result itself always comes from the outcome.
-local function fightFor(stats: Stats, row: Row, option: Option?, outcome: RowOutcome?): Fight?
-	if not option or not outcome or (row.kind ~= "squad" and row.kind ~= "barricade") then
-		return nil
-	end
-	local okDps, dps = pcall(RunnerSim.UnitDps, stats, outcome.weaponTier, outcome.damageMult)
-	local damage = outcome.troopsBefore * (if okDps then dps else 0) * RunnerDefs.ENGAGE_SECONDS
-	local hp = math.max(1e-6, numberOr(option.hp, 1))
-	if row.kind == "squad" then
-		local enemies = math.max(0, math.floor(numberOr(option.enemies, 0)))
-		local kills = math.min(enemies, math.floor(damage / hp + 1e-9))
-		return {
-			enemies = enemies,
-			kills = kills,
-			share = if enemies > 0 then kills / enemies else 1,
-			destroyed = kills >= enemies,
-		}
-	end
-	local destroyed = outcome.destroyed == true
-	return {
-		enemies = 0,
-		kills = 0,
-		share = if destroyed then 1 else math.clamp(damage / hp, 0, 1),
-		destroyed = destroyed,
-	}
+local function isFightRow(row: Row): boolean
+	return row.kind == "squad" or row.kind == "barricade" or row.kind == "contest"
 end
 
-local function optionAt(row: Row, lane: number): Option?
+-- What a squad / barricade / shoot-to-grow row looks like for the visuals in
+-- EVERY lane (wide shooting hits the other lane too), straight from the row's
+-- RunnerSim outcome. Visual only: troops / cash / destroyed always come from
+-- the outcome itself.
+local function engagementFor(row: Row, lane: number, outcome: RowOutcome?): Engagement?
+	if not outcome or not isFightRow(row) then
+		return nil
+	end
+	local fights: { [number]: Fight } = {}
 	for index, option in row.options do
-		if (if type(option.lane) == "number" then option.lane else index) == lane then
-			return option
+		local l = if type(option.lane) == "number" then option.lane else index
+		local own = l == lane
+		local damage = numberOr(if own then outcome.damage else outcome.otherDamage, 0)
+		if row.kind == "squad" then
+			local enemies = math.max(0, math.floor(numberOr(option.enemies, 0)))
+			local kills = math.clamp(math.floor(numberOr(if own then outcome.kills else outcome.otherKills, 0)), 0, enemies)
+			fights[l] = {
+				enemies = enemies,
+				kills = kills,
+				share = if enemies > 0 then kills / enemies else 1,
+				destroyed = kills >= enemies,
+			}
+		elseif row.kind == "barricade" then
+			local destroyed = if own then outcome.destroyed == true else outcome.otherDestroyed == true
+			local hp = math.max(1e-6, numberOr(option.hp, 1))
+			fights[l] = {
+				enemies = 0,
+				kills = 0,
+				share = if destroyed then 1 else math.clamp(damage / hp, 0, 1),
+				destroyed = destroyed,
+			}
+		else
+			local steps = math.max(0, math.floor(numberOr(if own then outcome.steps else outcome.otherSteps, 0)))
+			local amount = numberOr(if own then outcome.amount else outcome.otherAmount, numberOr(option.amount, 0))
+			fights[l] = {
+				enemies = 0,
+				kills = 0,
+				share = steps / math.max(1, numberOr(option.growMax, 1)),
+				destroyed = false,
+				steps = steps,
+				amount = amount,
+			}
 		end
 	end
-	return row.options[lane]
+	return {
+		lane = lane,
+		stance = math.max(0, math.floor(numberOr(outcome.stance, 0))),
+		across = math.max(0, math.floor(numberOr(outcome.across, 0))),
+		fights = fights,
+	}
 end
 
 local function unitDps(s: Session, tier: number, dmg: number): number
@@ -15102,8 +15621,11 @@ end
 -------------------------------------------------------------------------------
 -- Run flow
 -------------------------------------------------------------------------------
-local function crossRow(s: Session, index: number, lane: number)
+local function crossRow(s: Session, index: number, lane: number, lateral: number)
+	local crossed = s.course.rows[index]
 	s.choices[index] = lane
+	s.laterals[index] = lateral
+	s.stances[index] = if crossed then RunnerSim.Stance(crossed, lane, lateral) else 0
 	s.nextRow = index + 1
 	s.engageKeys[index] = nil
 	local result = safeResolve(s)
@@ -15112,7 +15634,7 @@ local function crossRow(s: Session, index: number, lane: number)
 	local visuals = s.visuals
 	local cashBefore = s.live.cash
 	if visuals then
-		visuals:RowCrossed(index, lane, outcome, s.stats.capacity, fightFor(s.stats, row, optionAt(row, lane), outcome))
+		visuals:RowCrossed(index, lane, outcome, s.stats.capacity, engagementFor(row, lane, outcome))
 	end
 	if outcome then
 		s.live = {
@@ -15131,9 +15653,10 @@ local function crossRow(s: Session, index: number, lane: number)
 	end
 end
 
--- Squads / barricades within gun range: tell the visuals what the fight will
--- look like if we stay in the lane we are in now. Re-predicted only when a
--- relevant lane (or the last crossed row) changes.
+-- Squads / barricades / shoot-to-grow gates within gun range: tell the
+-- visuals what the fight will look like (in both lanes) if we stay where we
+-- are now. Re-predicted only when a relevant lane or stance (or the last
+-- crossed row) changes.
 local function updateEngagements(s: Session, distance: number, lateral: number)
 	local visuals = s.visuals
 	if not visuals then
@@ -15141,6 +15664,7 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 	end
 	local rows = s.course.rows
 	local lanes: { number } = {}
+	local stances: { number } = {}
 	local key = tostring(s.nextRow)
 	for index = s.nextRow, #rows do
 		local row = rows[index]
@@ -15148,17 +15672,24 @@ local function updateEngagements(s: Session, distance: number, lateral: number)
 			break
 		end
 		local lane = laneAt(row, lateral)
+		local stance = RunnerSim.Stance(row, lane, lateral)
 		lanes[index] = lane
-		key ..= ":" .. lane
-		if (row.kind == "squad" or row.kind == "barricade") and s.engageKeys[index] ~= key then
+		stances[index] = stance
+		key ..= ":" .. lane .. "/" .. stance
+		if isFightRow(row) and s.engageKeys[index] ~= key then
 			s.engageKeys[index] = key
 			local predicted = table.clone(s.choices)
+			local predictedStances = table.clone(s.stances)
 			for j = s.nextRow, index do
 				predicted[j] = lanes[j]
+				predictedStances[j] = stances[j]
 			end
-			local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, predicted)
+			local ok, result = pcall(RunnerSim.Resolve, s.course, s.stats, predicted, predictedStances)
 			local outcome = if ok and type(result) == "table" then findOutcome(result, index) else nil
-			visuals:Engage(index, lane, fightFor(s.stats, row, optionAt(row, lane), outcome))
+			local engagement = engagementFor(row, lane, outcome)
+			if engagement then
+				visuals:Engage(index, engagement)
+			end
 		end
 	end
 end
@@ -15174,6 +15705,32 @@ end
 
 -- The summary appears once BOTH the boss fight has played (fightDone) and the
 -- RunnerFinish reply is in (finishDone). It always shows the server's result.
+-- TRY AGAIN after a lost run: the server ends this run and starts the same
+-- level on the track (RunnerRetry); we then build the new run like a fresh one.
+local function retry(s: Session)
+	if session ~= s or opening then
+		return
+	end
+	opening = true
+	task.spawn(function()
+		local reply = Net.Request("RunnerRetry", s.runId)
+		opening = false
+		if session ~= s then
+			return
+		end
+		if not reply.ok then
+			toast(reply.err or "Could not start the run", "error")
+			leave(s)
+			return
+		end
+		cleanup() -- the old run's visuals, HUD and input
+		local start = startSessionRef
+		if start and not session then
+			start(reply)
+		end
+	end)
+end
+
 local function tryShowSummary(s: Session)
 	if session ~= s or s.phase ~= "boss" or not s.fightDone or not s.finishDone then
 		return
@@ -15193,6 +15750,7 @@ local function tryShowSummary(s: Session)
 	end
 	local result = reply.result :: Result
 	local paid = numberOr(reply.paid, 0)
+	local lost = type(result.boss) ~= "table" or result.boss.victory ~= true
 	local data = State.Get()
 	local upgrades = if data then data.runner.upgrades else { troops = 0, damage = 0, capacity = 0 }
 	s.closeSummary = RunnerUI.ShowSummary({
@@ -15204,7 +15762,15 @@ local function tryShowSummary(s: Session)
 		OnCollect = function()
 			s.closeSummary = nil
 			leave(s)
+			toast("💡 Spend your cash on base unlocks - or press 🪖 Army Run to play again", "info")
 		end,
+		-- A lost level is played again until it is won (owner request).
+		OnRetry = if lost
+			then function()
+				s.closeSummary = nil
+				retry(s)
+			end
+			else nil,
 	})
 end
 
@@ -15298,7 +15864,7 @@ local function sendFinish(s: Session)
 			end
 		end
 	end
-	local reply = Net.Request("RunnerFinish", s.runId, s.choices)
+	local reply = Net.Request("RunnerFinish", s.runId, s.choices, s.laterals)
 	if session ~= s then
 		return
 	end
@@ -15320,7 +15886,7 @@ local function beginBoss(s: Session, lateral: number)
 	-- Any row we somehow skipped counts with the lane we are in now.
 	local rows = s.course.rows
 	for index = s.nextRow, #rows do
-		crossRow(s, index, laneAt(rows[index], lateral))
+		crossRow(s, index, laneAt(rows[index], lateral), lateral)
 	end
 	s.humanoid:Move(Vector3.zero, false)
 	if s.hud then
@@ -15504,7 +16070,7 @@ local function step(dt: number)
 		local rows = s.course.rows
 		while s.nextRow <= #rows and distance >= rows[s.nextRow].distance do
 			local index = s.nextRow
-			crossRow(s, index, laneAt(rows[index], lateral))
+			crossRow(s, index, laneAt(rows[index], lateral), lateral)
 		end
 		updateEngagements(s, distance, lateral)
 
@@ -15671,6 +16237,8 @@ local function startSession(reply: { [string]: any })
 		runSpeed = numberOr(reply.runSpeed, DEFAULT_RUN_SPEED),
 		phase = "prepare",
 		choices = {},
+		laterals = {},
+		stances = {},
 		nextRow = 1,
 		engageKeys = {},
 		live = { troops = stats.startTroops, cash = 0, tier = 1, dmg = 1 },
@@ -15764,6 +16332,8 @@ local function startSession(reply: { [string]: any })
 		cleanup()
 	end
 end
+
+startSessionRef = startSession
 
 -------------------------------------------------------------------------------
 -- Public API
@@ -18786,7 +19356,11 @@ return InventoryUI
 			Level = number, Result = RunnerSim.Result, Paid = number,
 			Boosted = boolean, Upgrades = { troops, damage, capacity },
 			OnCollect = function() end,
+			OnRetry = (function() end)?,   -- only after a LOST run (boss not beaten)
 		}) -> close()
+		  A lost run keeps its level (owner request: play it until you win), so
+		  with OnRetry the panel says "Beat the boss to unlock Level N+1" and
+		  shows TRY AGAIN (same level right away, OnRetry) next to BASE (OnCollect).
 		  "RUN COMPLETE!" panel with a boss status pill ("Boss defeated!" /
 		  "Defeated by the boss"). A sub-heading "COLLECTED THIS RUN" lists every
 		  result line (what you picked up during this run and its cash value,
@@ -19577,8 +20151,10 @@ function RunnerUI.ShowSummary(props: {
 	Boosted: boolean,
 	Upgrades: { troops: number, damage: number, capacity: number },
 	OnCollect: () -> (),
+	OnRetry: (() -> ())?,
 }): () -> ()
 	local collected = false
+	local onRetry = props.OnRetry
 	local _, content, close = Theme.Panel({
 		Name = "RunnerSummary",
 		Title = "RUN COMPLETE!",
@@ -19588,7 +20164,9 @@ function RunnerUI.ShowSummary(props: {
 	Theme.List(content, "Vertical", 8)
 
 	Theme.Label({
-		Text = "Level " .. props.Level,
+		Text = if onRetry
+			then ("Level %d - beat the boss to unlock Level %d"):format(props.Level, props.Level + 1)
+			else "Level " .. props.Level,
 		TextColor3 = P.PriceGold,
 		MaxTextSize = 28,
 		Size = UDim2.new(1, 0, 0, 30),
@@ -19711,25 +20289,60 @@ function RunnerUI.ShowSummary(props: {
 	buttonRow.Size = UDim2.new(1, 0, 0, 66)
 	buttonRow.LayoutOrder = 8
 	buttonRow.Parent = content
-	Theme.Button({
-		Name = "Collect",
-		Text = "COLLECT",
-		Color = P.ButtonGreen,
-		DarkColor = P.ButtonGreenDark,
-		Size = UDim2.fromOffset(240, 64),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		MaxTextSize = 32,
-		OnClick = function()
-			if collected then
-				return
-			end
-			collected = true
-			close()
-			props.OnCollect()
-		end,
-		Parent = buttonRow,
-	})
+	local function finish(action: () -> ())
+		if collected then
+			return
+		end
+		collected = true
+		close()
+		action()
+	end
+	if onRetry then
+		-- Lost: TRY AGAIN (the same level, right away) is the big button.
+		Theme.Button({
+			Name = "TryAgain",
+			Text = "🔁 TRY AGAIN",
+			Color = P.CardOrange,
+			DarkColor = P.CardOrangeDark,
+			Size = UDim2.fromOffset(250, 64),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(0.5, -6, 0, 0),
+			MaxTextSize = 30,
+			OnClick = function()
+				finish(onRetry)
+			end,
+			Parent = buttonRow,
+		})
+		Theme.Button({
+			Name = "Collect",
+			Text = "🏠 BASE",
+			Color = P.ButtonGreen,
+			DarkColor = P.ButtonGreenDark,
+			Size = UDim2.fromOffset(190, 64),
+			AnchorPoint = Vector2.new(0, 0),
+			Position = UDim2.new(0.5, 6, 0, 0),
+			MaxTextSize = 30,
+			OnClick = function()
+				finish(props.OnCollect)
+			end,
+			Parent = buttonRow,
+		})
+	else
+		Theme.Button({
+			Name = "Collect",
+			Text = "COLLECT",
+			Color = P.ButtonGreen,
+			DarkColor = P.ButtonGreenDark,
+			Size = UDim2.fromOffset(240, 64),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.fromScale(0.5, 0),
+			MaxTextSize = 32,
+			OnClick = function()
+				finish(props.OnCollect)
+			end,
+			Parent = buttonRow,
+		})
+	end
 
 	return close
 end
@@ -26141,6 +26754,12 @@ return RunnerModels
 	                  vanishes at once
 	  * enemy squads- red-uniform soldiers with rifles and a "N SOLDIERS" label
 	  * barricades  - sandbag walls with an HP bar
+	  * contest rows- "shoot to grow" gates [owner request], drawn UNLIKE the other
+	                  gates: less see-through blue / red panels with dark stripes,
+	                  a glowing gold Neon frame each, "🎯 +3" / "🎯 -4" numbers and a
+	                  "🎯 SHOOT TO GROW" beam over the row. While the squad shoots
+	                  them each side's number grows and the more-shot side widens,
+	                  pushing the middle post (and the other side) aside
 	  * value labels- a row's cash values, a red toll gate's cash, a squad's
 	                  "N SOLDIERS" and a barricade's HP bar stay hidden until the
 	                  previous row has been crossed (owner request: far-away labels
@@ -26156,14 +26775,22 @@ return RunnerModels
 	                  avatar, 2 troops; more rows behind), each holding the same gun.
 	                  Near a track edge the WHOLE formation shifts sideways by whole
 	                  columns (the avatar's own spot stays free), so troops never
-	                  overlap; the avatar itself stays where the player steers
+	                  overlap; the avatar itself stays where the player steers.
+	                  Slots and shift come from RunnerDefs.FormationSlot / FormationShift
+	                  (the same definition RunnerSim uses for wide shooting)
 	  * guns        - the avatar holds the server's "RunnerGun" Tool; we weld the
 	                  part-built gun of the current weapon tier (RunnerGuns) to its
 	                  Handle. The avatar and the front row fire at the gun's TRUE
 	                  fireRate (up to FRONT_MAX_RATE = 12/s); the back rows share what
 	                  is left of the bullet budget (BULLET_BUDGET of the pool alive),
 	                  so the pistol, SMG, assault rifle and minigun clearly differ in
-	                  rate, bullet style, colour and speed. Range: RunnerDefs.GUN_RANGE
+	                  rate, bullet style, colour and speed. Range: RunnerDefs.GUN_RANGE:
+	                  a unit whose target is farther holds its fire, so every bullet
+	                  flies to its target and hits it (owner request: more bullets hit)
+	  * wide shooting [owner request] - with Engagement.across > 0 the troops in
+	                  the outer `stance` formation columns on the other lane's side
+	                  shoot that lane (RunnerSim's UnitsAcross rule); everyone else
+	                  and the avatar shoot the lane the avatar is in
 	  * effects     - pop text, gate flashes, hit flashes, falling enemies, confetti
 
 	The OUTCOME of every fight comes from RunnerSim (RunnerController passes it
@@ -26179,8 +26806,9 @@ return RunnerModels
 		visuals.stopDistance: number      -- where the avatar stops to fight the boss
 		visuals:SetSquad(troops, weaponTier)   -- troops to draw (true count; drawn capped at 40) + gun
 		visuals:Update(dt, root: BasePart?, moving: boolean)   -- call every frame
-		visuals:Engage(rowIndex, lane, fight: Fight?)   -- shoot that row's option (lane may change)
-		visuals:RowCrossed(rowIndex, lane, outcome?, capacity, fight: Fight?)  -- play the row's result
+		visuals:Engage(rowIndex, engagement: Engagement)   -- shoot that squad / barricade / contest
+			row (re-send when the lane, stance or prediction changes)
+		visuals:RowCrossed(rowIndex, lane, outcome?, capacity, engagement: Engagement?)  -- play the row's result
 		visuals:OpenCastle(maxHp) -> number   -- intro: the door sinks, then the boss
 			appears and walks out; returns its length (RunnerDefs.BOSS_INTRO_SECONDS).
 			Call it on arrival; the fight outcome can follow later. Calling again is a no-op.
@@ -26192,8 +26820,14 @@ return RunnerModels
 		visuals:BossFocus() -> Vector3?   -- boss chest (camera framing)
 		visuals:Destroy()                 -- removes every instance it created, restores the avatar pose
 
-		Fight = { enemies: number, kills: number, share: number, destroyed: boolean }
-			squads: kills of enemies; barricades: share = fraction of its HP taken off
+		Fight = { enemies, kills, share, destroyed, steps?, amount? }   -- one lane at the end of
+			the engagement. squads: kills of enemies; barricades: share = fraction of
+			its HP taken off; contest: steps it grows by, amount = its number after them
+			(share = steps / growMax)
+		Engagement = { lane, stance, across, fights: { [lane]: Fight } }
+			lane = the lane the avatar is in; stance 0..RunnerDefs.MAX_STANCE and
+			across = units shooting the other lane (RunnerSim.UnitsAcross, 0 = none);
+			fights = what EACH lane of the row looks like at the end of the engagement
 
 	This module never talks to the server; RunnerController feeds it.
 ]]
@@ -26236,6 +26870,16 @@ local BULLET_BUDGET = math.floor(RunnerGuns.POOL_SIZE * 0.8) -- [PROPOSAL] bulle
 local GATE_HEIGHT = 7
 local POST_HEIGHT = 8.4
 local FORT_DEPTH = 14
+-- Shoot-to-grow ("contest") gates [PROPOSAL, visual only]
+local CONTEST_TRANSPARENCY = 0.22 -- less see-through than normal gates (0.45)
+local CONTEST_POST_HEIGHT = 10.4 -- taller posts that carry the "SHOOT TO GROW" beam
+local CONTEST_BEAM_HEIGHT = 1.8
+local CONTEST_FRAME = 0.45 -- thickness of the glowing frame bars
+local CONTEST_STRIPES = 5 -- dark vertical stripes per panel
+local CONTEST_SWING = 0.35 -- how far the middle moves at the most growth difference
+local CONTEST_SHARE_MIN = 0.2 -- a side never gets narrower than 20% of the row
+local CONTEST_SHARE_MAX = 0.8
+local AIM_SPREAD = 3 -- tenths of a stud: bullets land this close to their target point
 
 -- Boss timing is shared with the economy (RunnerDefs; fallback = same values).
 local function defNumber(name: string, fallback: number): number
@@ -26253,6 +26897,7 @@ local HIDDEN = CFrame.new(0, -500, 0)
 
 local GUN_RANGE = RunnerDefs.GUN_RANGE
 local FORMATION_WIDTH = math.max(1, math.floor(RunnerDefs.FORMATION_WIDTH))
+local FORMATION_HALF = math.floor(FORMATION_WIDTH / 2)
 local SPACING_X = RunnerDefs.FORMATION_SPACING_X
 local SPACING_Z = RunnerDefs.FORMATION_SPACING_Z
 
@@ -26273,25 +26918,10 @@ local function toneColor(option: Option): Color3
 	return P.GatePositive
 end
 
--- Formation slot of troop i (1-based; the avatar is the centre of row 0).
--- Row 0 holds FORMATION_WIDTH - 1 troops (closest to the avatar first), every
--- later row FORMATION_WIDTH (centre first). Returns (column, row): column in
--- units of SPACING_X (+ = right), row in units of SPACING_Z behind the avatar.
-local function slotOf(i: number): (number, number)
-	local half = math.floor(FORMATION_WIDTH / 2)
-	local front = FORMATION_WIDTH - 1
-	if i <= front then
-		local k = math.ceil(i / 2)
-		return if i % 2 == 1 then -k else k, 0
-	end
-	local j = i - front - 1 -- 0-based in the back rows
-	local row = 1 + math.floor(j / FORMATION_WIDTH)
-	local index = j % FORMATION_WIDTH -- 0 = centre, then left/right pairs
-	if index == 0 then
-		return 0, row
-	end
-	local k = math.min(half, math.ceil(index / 2))
-	return if index % 2 == 1 then -k else k, row
+-- Number shown on a shoot-to-grow panel: "🎯 +5" (blue) / "🎯 -6" (red).
+local function contestText(option: Option, value: number): string
+	local n = math.max(0, math.floor(value + 0.5))
+	return "🎯 " .. (if option.op == "sub" then "-" else "+") .. n
 end
 
 -------------------------------------------------------------------------------
@@ -26460,7 +27090,21 @@ end
 -------------------------------------------------------------------------------
 -- Types
 -------------------------------------------------------------------------------
-export type Fight = { enemies: number, kills: number, share: number, destroyed: boolean }
+export type Fight = {
+	enemies: number, -- squad: soldiers in that lane (0 otherwise)
+	kills: number, -- squad: soldiers that fall by the end of the engagement
+	share: number, -- barricade: fraction of its HP taken off (1 = destroyed); contest: steps / growMax
+	destroyed: boolean,
+	steps: number?, -- contest: growth steps that lane reaches by the end of the engagement
+	amount: number?, -- contest: that gate's number after those steps
+}
+
+export type Engagement = {
+	lane: number, -- lane the avatar is in now (the lane it will pass)
+	stance: number, -- 0..RunnerDefs.MAX_STANCE (0 when across == 0)
+	across: number, -- units that shoot the OTHER lane (RunnerSim.UnitsAcross)
+	fights: { [number]: Fight }, -- per lane: what EACH lane looks like at the end of the engagement
+}
 
 export type BossCallbacks = {
 	onProgress: (alive: number, hp: number) -> (),
@@ -26483,9 +27127,43 @@ type OptionVisual = {
 	valueLabel: BillboardGui?, -- cash / "N SOLDIERS" / HP bar: hidden until the previous row is crossed
 }
 
-type RowVisual = { row: Row, options: { OptionVisual }, revealed: boolean, crossed: boolean }
+-- One side of a shoot-to-grow row (sides[1] = left, sides[2] = right).
+type ContestSide = {
+	lane: number,
+	option: Option,
+	ov: OptionVisual, -- its panel / label / centre / targets
+	frame: { BasePart }, -- glowing frame bars: top, bottom, left, right
+	shown: number, -- number on the panel now
+	gone: boolean, -- passed: panel + frame removed
+}
 
-type Engagement = { lane: number, fight: Fight? }
+type ContestVisual = {
+	sides: { ContestSide },
+	minX: number, -- lateral extent of both lanes together
+	maxX: number,
+	share: number, -- left side's share of the width now (animated)
+	goal: number, -- share it is moving to
+	divider: BasePart, -- middle post (moves with the share)
+	distance: number,
+}
+
+type RowVisual = {
+	row: Row,
+	options: { OptionVisual },
+	revealed: boolean,
+	crossed: boolean,
+	contest: ContestVisual?,
+}
+
+-- What the units shoot at this frame.
+type Aim = {
+	own: { Vector3 }, -- the lane the avatar is in (or the boss)
+	other: { Vector3 }, -- the other lane (wide shooting)
+	side: number, -- +1: the other lane is to the right
+	first: number, -- troops whose side x slot column >= first shoot `other`
+	wide: boolean,
+	boss: boolean,
+}
 
 type BossShot = { time: number, killIndex: number }
 
@@ -26505,14 +27183,14 @@ export type Visuals = {
 	stopDistance: number,
 	SetSquad: (self: Visuals, troops: number, weaponTier: number) -> (),
 	Update: (self: Visuals, dt: number, root: BasePart?, moving: boolean) -> (),
-	Engage: (self: Visuals, rowIndex: number, lane: number, fight: Fight?) -> (),
+	Engage: (self: Visuals, rowIndex: number, engagement: Engagement) -> (),
 	RowCrossed: (
 		self: Visuals,
 		rowIndex: number,
 		lane: number,
 		outcome: RowOutcome?,
 		capacity: number,
-		fight: Fight?
+		engagement: Engagement?
 	) -> (),
 	OpenCastle: (self: Visuals, maxHp: number) -> number,
 	StartBossFight: (self: Visuals, outcome: BossOutcome, callbacks: BossCallbacks) -> number,
@@ -26527,7 +27205,6 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 	folder.Name = "ArmyRunnerVisuals"
 
 	local floorY = Layout.FLOOR_Y
-	local halfTrack = Layout.RUNNER_TRACK_WIDTH / 2
 	local centreX = Layout.RunnerPoint(slot, 0, 0).X
 	local startZ = Layout.RunnerPoint(slot, 0, 0).Z
 	local destroyed = false
@@ -26714,21 +27391,191 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		return list
 	end
 
+	-- Lays a shoot-to-grow row out for its current share: both panels, their
+	-- frames, shooting targets and the middle post (CFrame / Size only).
+	local function layoutContest(cv: ContestVisual)
+		local split = cv.minX + (cv.maxX - cv.minX) * cv.share
+		for i, side in cv.sides do
+			local x0 = if i == 1 then cv.minX else split
+			local x1 = if i == 1 then split else cv.maxX
+			-- Room for the frame bars and half a post on each side.
+			local width = math.max(1, x1 - x0 - 2 * CONTEST_FRAME - 0.9)
+			local centre = worldAt(cv.distance, (x0 + x1) / 2, GATE_HEIGHT / 2 + 0.2)
+			local ov = side.ov
+			ov.centre = centre
+			local panel = ov.panel
+			if side.gone or not panel then
+				continue
+			end
+			panel.Size = Vector3.new(width, GATE_HEIGHT, 0.5)
+			panel.CFrame = CFrame.new(centre)
+			-- Points on the face the runner sees (+Z).
+			ov.targets = {
+				centre + Vector3.new(-width * 0.3, -0.9, 0.35),
+				centre + Vector3.new(0, 0.7, 0.35),
+				centre + Vector3.new(width * 0.3, -0.2, 0.35),
+			}
+			local f = CONTEST_FRAME
+			local top, bottom, left, right = side.frame[1], side.frame[2], side.frame[3], side.frame[4]
+			if top and bottom and left and right then
+				top.Size = Vector3.new(width + 2 * f, f, 0.65)
+				top.CFrame = CFrame.new(centre + Vector3.new(0, GATE_HEIGHT / 2, 0))
+				bottom.Size = top.Size
+				bottom.CFrame = CFrame.new(centre - Vector3.new(0, GATE_HEIGHT / 2, 0))
+				left.Size = Vector3.new(f, GATE_HEIGHT, 0.65)
+				left.CFrame = CFrame.new(centre - Vector3.new(width / 2 + f / 2, 0, 0))
+				right.Size = left.Size
+				right.CFrame = CFrame.new(centre + Vector3.new(width / 2 + f / 2, 0, 0))
+			end
+		end
+		cv.divider.CFrame = CFrame.new(worldAt(cv.distance, split, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2))
+	end
+
+	-- Shoot-to-grow gates (row kind "contest"): look unlike every other gate.
+	local function buildContestRow(row: Row, rowFolder: Folder): ({ OptionVisual }, ContestVisual?)
+		if #row.options ~= 2 then
+			return buildGateRow(row, rowFolder), nil
+		end
+		local a, b = row.options[1], row.options[2]
+		local leftOpt, rightOpt = a, b
+		if b.x < a.x then
+			leftOpt, rightOpt = b, a
+		end
+		local minX = leftOpt.x - leftOpt.width / 2
+		local maxX = rightOpt.x + rightOpt.width / 2
+		local list: { OptionVisual } = {}
+		local sides: { ContestSide } = {}
+		for _, option in { leftOpt, rightOpt } do
+			local red = option.tone == "growNegative" or option.op == "sub"
+			local color = if red then P.GateNegative else P.GatePositive
+			local centre = worldAt(row.distance, option.x, GATE_HEIGHT / 2 + 0.2)
+			local panel = RunnerModels.Part({
+				Name = "ContestPanel" .. option.lane,
+				Size = Vector3.new(math.max(2, option.width - 1.2), GATE_HEIGHT, 0.5),
+				CFrame = CFrame.new(centre),
+				Color = color,
+				Transparency = CONTEST_TRANSPARENCY,
+				Parent = rowFolder,
+			})
+			panel.CastShadow = false
+			local value = option.amount or 0
+			local label = RunnerModels.SurfaceLabel(panel, Enum.NormalId.Back, contestText(option, value), 160)
+			label.ZIndex = 3
+			-- Dark vertical stripes behind the number (same SurfaceGui, lower ZIndex).
+			local gui = label.Parent
+			if gui then
+				for k = 0, CONTEST_STRIPES - 1 do
+					local stripe = Instance.new("Frame")
+					stripe.Name = "Stripe"
+					stripe.BorderSizePixel = 0
+					stripe.BackgroundColor3 = Theme.Darken(color, 0.45)
+					stripe.BackgroundTransparency = 0.3
+					stripe.Size = UDim2.fromScale(0.5 / CONTEST_STRIPES, 1)
+					stripe.Position = UDim2.fromScale((k + 0.25) / CONTEST_STRIPES, 0)
+					stripe.ZIndex = 1
+					stripe.Parent = gui
+				end
+			end
+			local frame: { BasePart } = {}
+			for _, name in { "FrameTop", "FrameBottom", "FrameLeft", "FrameRight" } do
+				local bar = RunnerModels.Part({
+					Name = name,
+					Size = Vector3.one,
+					CFrame = CFrame.new(centre),
+					Color = P.Coin,
+					Material = Enum.Material.Neon,
+					Parent = rowFolder,
+				})
+				bar.CastShadow = false
+				table.insert(frame, bar)
+			end
+			local ov: OptionVisual = {
+				option = option,
+				centre = centre,
+				panel = panel,
+				label = label,
+				model = nil,
+				enemies = {},
+				targets = {},
+				hp = nil,
+				anchor = nil,
+				valueLabel = nil, -- the number is on the panel (like a gate)
+			}
+			list[option.lane] = ov
+			table.insert(sides, { lane = option.lane, option = option, ov = ov, frame = frame, shown = value, gone = false })
+		end
+		-- Tall outer posts carrying the sign beam, and the middle post that moves.
+		for _, x in { minX - 0.35, maxX + 0.35 } do
+			RunnerModels.Part({
+				Name = "ContestPost",
+				Size = Vector3.new(0.8, CONTEST_POST_HEIGHT, 0.8),
+				CFrame = CFrame.new(worldAt(row.distance, x, CONTEST_POST_HEIGHT / 2)),
+				Color = P.GatePost,
+				Parent = rowFolder,
+			})
+		end
+		local divider = RunnerModels.Part({
+			Name = "ContestDivider",
+			Size = Vector3.new(0.8, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT, 0.8),
+			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, (CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT) / 2)),
+			Color = P.GatePost,
+			Parent = rowFolder,
+		})
+		local beam = RunnerModels.Part({
+			Name = "ContestSign",
+			Size = Vector3.new(maxX - minX + 1.5, CONTEST_BEAM_HEIGHT, 0.6),
+			CFrame = CFrame.new(
+				worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT / 2)
+			),
+			Color = P.PillBlack,
+			Parent = rowFolder,
+		})
+		local sign = RunnerModels.SurfaceLabel(beam, Enum.NormalId.Back, "🎯 SHOOT TO GROW", 80)
+		sign.TextColor3 = P.Coin
+		local trim = RunnerModels.Part({
+			Name = "ContestSignTrim",
+			Size = Vector3.new(maxX - minX + 1.7, 0.25, 0.7),
+			CFrame = CFrame.new(worldAt(row.distance, (minX + maxX) / 2, CONTEST_POST_HEIGHT - CONTEST_BEAM_HEIGHT)),
+			Color = P.Coin,
+			Material = Enum.Material.Neon,
+			Parent = rowFolder,
+		})
+		trim.CastShadow = false
+		local cv: ContestVisual = {
+			sides = sides,
+			minX = minX,
+			maxX = maxX,
+			share = 0.5,
+			goal = 0.5,
+			divider = divider,
+			distance = row.distance,
+		}
+		layoutContest(cv)
+		return list, cv
+	end
+
+	local contests: { ContestVisual } = {}
 	for index, row in course.rows do
 		local rowFolder = Instance.new("Folder")
 		rowFolder.Name = ("Row%02d_%s"):format(index, row.kind)
 		rowFolder.Parent = folder
 		local options: { OptionVisual }
+		local contest: ContestVisual? = nil
 		if row.kind == "cash" then
 			options = buildCashRow(row, rowFolder)
 		elseif row.kind == "squad" then
 			options = buildSquadRow(row, rowFolder)
 		elseif row.kind == "barricade" then
 			options = buildBarricadeRow(row, rowFolder)
+		elseif row.kind == "contest" then
+			options, contest = buildContestRow(row, rowFolder)
 		else
 			options = buildGateRow(row, rowFolder)
 		end
-		rowVisuals[index] = { row = row, options = options, revealed = false, crossed = false }
+		if contest then
+			table.insert(contests, contest)
+		end
+		rowVisuals[index] = { row = row, options = options, revealed = false, crossed = false, contest = contest }
 	end
 
 	-- Cash a weapon gate pays at the top tier ("Weapon already maxed: bonus
@@ -26935,27 +27782,12 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 	end
 
-	-- Points to shoot at right now (nearest engaged row, or the boss).
-	local function currentTargets(): ({ Vector3 }, boolean)
-		local b = boss
-		local f = fight
-		if b and f and f.clock >= f.fightStart and not f.resolved then
-			return b:AimPoints(), true
-		end
-		local best: number? = nil
-		for index in engaged do
-			if best == nil or index < best then
-				best = index
-			end
-		end
-		if best == nil then
-			return {}, false
-		end
-		local e = engaged[best]
-		local rowVisual = rowVisuals[best]
-		local ov = rowVisual and rowVisual.options[e.lane]
+	-- Points to shoot at in one lane of a row: standing soldiers (all of them
+	-- once none stands), a barricade's / contest panel's target points.
+	local function laneTargets(rowVisual: RowVisual, lane: number): { Vector3 }
+		local ov = rowVisual.options[lane]
 		if not ov then
-			return {}, false
+			return {}
 		end
 		if #ov.enemies > 0 then
 			local list: { Vector3 } = {}
@@ -26969,14 +27801,54 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 					table.insert(list, enemy.rig.pivot.Position + Vector3.new(0, 0.6, 0))
 				end
 			end
-			return list, false
+			return list
 		end
-		return ov.targets, false
+		return ov.targets
+	end
+
+	-- What to shoot right now: the boss, or the nearest engaged row (its two
+	-- lanes when the squad shoots wide, see Engagement).
+	local function currentAim(): Aim?
+		local b = boss
+		local f = fight
+		if b and f and f.clock >= f.fightStart and not f.resolved then
+			return { own = b:AimPoints(), other = {}, side = 1, first = math.huge, wide = false, boss = true }
+		end
+		local best: number? = nil
+		for index in engaged do
+			if best == nil or index < best then
+				best = index
+			end
+		end
+		if best == nil then
+			return nil
+		end
+		local e = engaged[best]
+		local rowVisual = rowVisuals[best]
+		if not rowVisual or not rowVisual.options[e.lane] then
+			return nil
+		end
+		local own = laneTargets(rowVisual, e.lane)
+		local aim: Aim = { own = own, other = {}, side = 1, first = math.huge, wide = false, boss = false }
+		if e.across > 0 and e.stance > 0 and #rowVisual.options == 2 then
+			-- RunnerSim's UnitsAcross rule: the outer `stance` columns on the other side.
+			local otherLane = if e.lane == 1 then 2 else 1
+			local ownOption = rowVisual.options[e.lane].option
+			local otherOption = rowVisual.options[otherLane].option
+			aim.side = if otherOption.x >= ownOption.x then 1 else -1
+			aim.first = FORMATION_HALF - e.stance + 1
+			aim.other = laneTargets(rowVisual, otherLane)
+			aim.wide = #aim.other > 0
+		end
+		if #own == 0 and not aim.wide then
+			return nil
+		end
+		return aim
 	end
 
 	local function shoot(dt: number, root: BasePart, shown: number)
-		local targets, atBoss = currentTargets()
-		if #targets == 0 then
+		local aim = currentAim()
+		if not aim then
 			return
 		end
 		local weapon = RunnerGuns.Weapon(tier)
@@ -27005,23 +27877,37 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			if unit == 0 and avatarDown then
 				continue
 			end
+			-- Wide shooting: troops in the outer columns over the other lane shoot it.
+			local targets = aim.own
+			if aim.wide and unit >= 1 then
+				local column = RunnerDefs.FormationSlot(unit)
+				if aim.side * column >= aim.first then
+					targets = aim.other
+				end
+			end
+			if #targets == 0 then
+				continue
+			end
 			local from: Vector3
 			if unit == 0 then
 				from = avatarMuzzle(root)
-				pool:Flash(from, 0.9, P.CoinShine, 0.06) -- muzzle flash: shows the gun's rate
 			else
 				from = RunnerModels.RigMuzzle(rigs[unit], CFrame.new(positions[unit]))
 			end
 			shotCounter += 1
 			local to = targets[(shotCounter % #targets) + 1]
-				+ Vector3.new(math.random(-8, 8) / 10, math.random(-6, 6) / 10, 0)
-			local offset = to - from
-			local impact = true
-			if offset.Magnitude > GUN_RANGE then
-				to = from + offset.Unit * GUN_RANGE -- out of range: the bullet fades out
-				impact = false
+				+ Vector3.new(
+					math.random(-AIM_SPREAD, AIM_SPREAD) / 10,
+					math.random(-AIM_SPREAD, AIM_SPREAD) / 10,
+					0
+				)
+			if (to - from).Magnitude > GUN_RANGE then
+				continue -- out of range: hold fire (no bullet that fades out short of its target)
 			end
-			if pool:Fire(from, to, tier, impact) and impact and atBoss then
+			if unit == 0 then
+				pool:Flash(from, 0.9, P.CoinShine, 0.06) -- muzzle flash: shows the gun's rate
+			end
+			if pool:Fire(from, to, tier, true) and aim.boss then
 				local b = boss
 				if b then
 					b:Hit()
@@ -27030,8 +27916,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 	end
 
-	-- Enemies of engaged squads fall over while the squad closes in; the
-	-- barricade HP bar drains. Progress = share of the last GUN_RANGE studs run.
+	-- Enemies of engaged squads fall over while the squad closes in (in both
+	-- lanes when it shoots wide), barricade HP bars drain and contest gates
+	-- grow. Progress = share of the last GUN_RANGE studs run.
 	local function updateEngagements(dt: number, distance: number, parts: { BasePart }, cframes: { CFrame })
 		for index, e in engaged do
 			local rowVisual = rowVisuals[index]
@@ -27040,10 +27927,11 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			end
 			local row = rowVisual.row
 			local progress = math.clamp((distance - (row.distance - GUN_RANGE)) / GUN_RANGE, 0, 1)
+			local fights = e.fights
 			for lane, ov in rowVisual.options do
-				local targeted = lane == e.lane
+				local laneFight = fights[lane]
 				if #ov.enemies > 0 then
-					local down = if targeted then math.floor(shownKills(e.fight, #ov.enemies) * progress + 1e-6) else 0
+					local down = math.floor(shownKills(laneFight, #ov.enemies) * progress + 1e-6)
 					for i, enemy in ov.enemies do
 						enemy.target = if i <= down then 1 else 0
 						if math.abs(enemy.fall - enemy.target) > 0.001 then
@@ -27061,9 +27949,33 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				end
 				local hp = ov.hp
 				if hp then
-					local share = if targeted and e.fight then e.fight.share else 0
-					hp.set(1 - math.clamp(share, 0, 1) * (if targeted then progress else 0))
+					local share = if laneFight then laneFight.share else 0
+					hp.set(1 - math.clamp(share, 0, 1) * progress)
 				end
+			end
+			-- Shoot-to-grow: each side's number grows with its share of the
+			-- engagement; the more-shot side takes more of the width.
+			local cv = rowVisual.contest
+			if cv then
+				local now: { number } = {}
+				for i, side in cv.sides do
+					local f = fights[side.lane]
+					local steps = if f and f.steps then math.floor(f.steps * progress + 1e-6) else 0
+					now[i] = steps
+					local value = (side.option.amount or 0) + steps * (side.option.growStep or 0)
+					local label = side.ov.label
+					if value ~= side.shown and label and not side.gone then
+						side.shown = value
+						label.Text = contestText(side.option, value)
+						Theme.Pop(label)
+					end
+				end
+				local maxSteps = math.max(1, cv.sides[1].option.growMax or RunnerDefs.CONTEST_MAX_STEPS)
+				cv.goal = math.clamp(
+					0.5 + CONTEST_SWING * ((now[1] or 0) - (now[2] or 0)) / maxSteps,
+					CONTEST_SHARE_MIN,
+					CONTEST_SHARE_MAX
+				)
 			end
 		end
 	end
@@ -27207,13 +28119,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			-- Near a track edge the whole formation moves over by whole columns
 			-- (the same shift for every troop), so no two troops share a spot and
 			-- the avatar's own spot in the front row stays free.
-			local half = math.floor(FORMATION_WIDTH / 2)
-			local minX = centreX - halfTrack + 0.8
-			local maxX = centreX + halfTrack - 0.8
-			local lo = math.ceil((minX - (base.X - half * SPACING_X)) / SPACING_X - 1e-6)
-			local hi = math.floor((maxX - (base.X + half * SPACING_X)) / SPACING_X + 1e-6)
-			local shift = if lo <= hi then math.clamp(0, lo, hi) else 0
-			shift = math.clamp(shift, -half, half)
+			local shift = RunnerDefs.FormationShift(rootPosition.X - centreX)
 			for i = 1, MAX_TROOP_MODELS do
 				local rig = rigs[i]
 				if i <= shown then
@@ -27224,7 +28130,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 						active[i] = true
 						dying[i] = nil
 					end
-					local col, line = slotOf(i)
+					local col, line = RunnerDefs.FormationSlot(i)
 					col += shift
 					if line == 0 and col == 0 then
 						col = shift -- the avatar stands here: take the slot it left free
@@ -27257,6 +28163,17 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		if #parts > 0 then
 			Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 		end
+		-- Shoot-to-grow rows slide towards their goal width (only while it changes).
+		local slide = 1 - math.exp(-dt * 6)
+		for _, cv in contests do
+			if math.abs(cv.share - cv.goal) > 0.001 then
+				cv.share += (cv.goal - cv.share) * slide
+				if math.abs(cv.share - cv.goal) <= 0.001 then
+					cv.share = cv.goal
+				end
+				layoutContest(cv)
+			end
+		end
 		pool:Update(dt)
 		updateBoss(dt, root)
 
@@ -27271,12 +28188,22 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		end
 	end
 
-	function self.Engage(_self: Visuals, rowIndex: number, lane: number, newFight: Fight?)
+	function self.Engage(_self: Visuals, rowIndex: number, engagement: Engagement)
 		local rowVisual = rowVisuals[rowIndex]
-		if not rowVisual or rowVisual.crossed or not rowVisual.options[lane] then
+		if
+			not rowVisual
+			or rowVisual.crossed
+			or type(engagement) ~= "table"
+			or not rowVisual.options[engagement.lane]
+		then
 			return
 		end
-		engaged[rowIndex] = { lane = lane, fight = newFight }
+		engaged[rowIndex] = {
+			lane = engagement.lane,
+			stance = math.max(0, math.floor(tonumber(engagement.stance) or 0)),
+			across = math.max(0, math.floor(tonumber(engagement.across) or 0)),
+			fights = if type(engagement.fights) == "table" then engagement.fights else {},
+		}
 		-- Shooting starts up to half a row before the previous row is crossed:
 		-- show the "N SOLDIERS" / HP label now, before anything falls or drains.
 		reveal(rowIndex, tier)
@@ -27288,7 +28215,7 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 		lane: number,
 		outcome: RowOutcome?,
 		capacityNow: number,
-		rowFight: Fight?
+		rowEngagement: Engagement?
 	)
 		local rowVisual = rowVisuals[rowIndex]
 		if not rowVisual or destroyed then
@@ -27304,6 +28231,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 			return
 		end
 		local kind = rowVisual.row.kind
+		local fights: { [number]: Fight } = if rowEngagement and type(rowEngagement.fights) == "table"
+			then rowEngagement.fights
+			else {}
 		local popAt = optionVisual.centre + Vector3.new(0, 7, -2)
 		local troopDelta = if outcome then outcome.troopsAfter - outcome.troopsBefore else 0
 		local cashDelta = if outcome then outcome.cashAfter - outcome.cashBefore else 0
@@ -27349,70 +28279,139 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				Theme.FloatText(popAt + Vector3.new(0, 2.5, 0), "CAPACITY FULL!", P.Coin)
 			end
 		elseif kind == "squad" then
+			-- Kills per lane: the outcome (exact) if we have it, else the prediction.
+			local totalKills = 0
+			local root = lastRoot
 			for laneIndex, ov in rowVisual.options do
-				if laneIndex ~= lane then
-					-- Not fought: stand back up.
-					for _, enemy in ov.enemies do
-						enemy.fall, enemy.target = 0, 0
-						local parts: { BasePart } = {}
-						local cframes: { CFrame } = {}
-						RunnerModels.RigCFrames(enemy.rig, enemy.rig.pivot, parts, cframes)
-						Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+				local isOwn = laneIndex == lane
+				local laneFight = fights[laneIndex]
+				local kills = if outcome
+					then (if isOwn then outcome.kills or 0 else outcome.otherKills or 0)
+					else (if laneFight then laneFight.kills else 0)
+				totalKills += kills
+				local killed = shownKills({
+					enemies = math.max(0, math.floor(ov.option.enemies or 0)),
+					kills = kills,
+					share = 0,
+					destroyed = false,
+				}, #ov.enemies)
+				if isOwn then
+					for i, enemy in ov.enemies do
+						local rig = enemy.rig
+						if i <= killed then
+							task.delay(i * 0.02, function()
+								if rig.model.Parent then
+									killRig(rig, 0.35)
+								end
+							end)
+						else
+							-- Survivors charge into your squad (each costs one troop).
+							local towards = if root then root.Position - rig.pivot.Position else Vector3.new(0, 0, 6)
+							flyAway(rig.model, Vector3.new(towards.X, 0, towards.Z) * 0.8, 0.35)
+						end
+					end
+					ov.enemies = {}
+					if ov.anchor then
+						ov.anchor:Destroy()
+						ov.anchor = nil
+					end
+				else
+					-- The other squad: soldiers shot down by the wide fire stay down,
+					-- the rest stand back up.
+					local standing: { EnemyRig } = {}
+					for i, enemy in ov.enemies do
+						local rig = enemy.rig
+						if i <= killed then
+							task.delay(i * 0.02, function()
+								if rig.model.Parent then
+									killRig(rig, 0.35)
+								end
+							end)
+						else
+							enemy.fall, enemy.target = 0, 0
+							local parts: { BasePart } = {}
+							local cframes: { CFrame } = {}
+							RunnerModels.RigCFrames(rig, rig.pivot, parts, cframes)
+							Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+							table.insert(standing, enemy)
+						end
+					end
+					ov.enemies = standing
+				end
+			end
+			if totalKills > 0 then
+				Theme.FloatText(popAt + Vector3.new(0, 2, 0), "💥 " .. totalKills .. " down!", P.Coin)
+			end
+		elseif kind == "barricade" then
+			for laneIndex, ov in rowVisual.options do
+				local isOwn = laneIndex == lane
+				local laneFight = fights[laneIndex]
+				local broken = if outcome
+					then (if isOwn then outcome.destroyed == true else outcome.otherDestroyed == true)
+					else (laneFight ~= nil and laneFight.destroyed)
+				local hp = ov.hp
+				local at = ov.centre + Vector3.new(0, 7, -2)
+				if broken then
+					if hp then
+						hp.set(0, 0.15)
+					end
+					local model = ov.model
+					if model then
+						task.delay(0.1, function()
+							if model.Parent then
+								crumble(model, 0.6)
+							end
+						end)
+						ov.model = nil
+					end
+					pool:Flash(ov.centre + Vector3.new(0, 2, 0), 6, P.CardOrange, 0.35)
+					Theme.FloatText(at, "SMASHED!", P.Coin)
+				else
+					-- Keeps the damage it took (the other one only from the wide fire).
+					local maxHp = math.max(1e-6, ov.option.hp or 0)
+					local dealt = if outcome then (if isOwn then outcome.damage else outcome.otherDamage) else nil
+					local share = if dealt then dealt / maxHp elseif laneFight then laneFight.share else 0
+					if hp then
+						hp.set(1 - math.clamp(share, 0, 1), 0.15)
+					end
+					if isOwn then
+						Theme.FloatText(at, "TOO STRONG!", P.ButtonRed)
 					end
 				end
 			end
-			local killed = shownKills(rowFight, #optionVisual.enemies)
-			local root = lastRoot
-			for i, enemy in optionVisual.enemies do
-				local rig = enemy.rig
-				if i <= killed then
-					task.delay(i * 0.02, function()
-						if rig.model.Parent then
-							killRig(rig, 0.35)
+		elseif kind == "contest" then
+			-- The side you ran through vanishes at once (like a gate); the other
+			-- side keeps the number it grew to.
+			local cv = rowVisual.contest
+			if cv then
+				for _, side in cv.sides do
+					if side.lane == lane then
+						side.gone = true
+						local panel = side.ov.panel
+						if panel then
+							panel:Destroy()
 						end
-					end)
-				else
-					-- Survivors charge into your squad (each costs one troop).
-					local towards = if root then root.Position - rig.pivot.Position else Vector3.new(0, 0, 6)
-					flyAway(rig.model, Vector3.new(towards.X, 0, towards.Z) * 0.8, 0.35)
-				end
-			end
-			optionVisual.enemies = {}
-			if optionVisual.anchor then
-				optionVisual.anchor:Destroy()
-				optionVisual.anchor = nil
-			end
-			if rowFight and rowFight.kills > 0 then
-				Theme.FloatText(popAt + Vector3.new(0, 2, 0), "💥 " .. rowFight.kills .. " down!", P.Coin)
-			end
-		elseif kind == "barricade" then
-			local broken = if outcome then outcome.destroyed == true else (rowFight ~= nil and rowFight.destroyed)
-			local hp = optionVisual.hp
-			if broken then
-				if hp then
-					hp.set(0, 0.15)
-				end
-				local model = optionVisual.model
-				if model then
-					task.delay(0.1, function()
-						if model.Parent then
-							crumble(model, 0.6)
+						side.ov.panel = nil
+						side.ov.label = nil
+						for _, bar in side.frame do
+							bar:Destroy()
 						end
-					end)
-					optionVisual.model = nil
+						table.clear(side.frame)
+					else
+						local final = if outcome and outcome.otherAmount then outcome.otherAmount else side.shown
+						local label = side.ov.label
+						if final ~= side.shown and label then
+							side.shown = final
+							label.Text = contestText(side.option, final)
+						end
+					end
 				end
-				pool:Flash(optionVisual.centre + Vector3.new(0, 2, 0), 6, P.CardOrange, 0.35)
-				Theme.FloatText(popAt, "SMASHED!", P.Coin)
-			else
-				if hp then
-					local share = if rowFight then rowFight.share else 0
-					hp.set(1 - math.clamp(share, 0, 1), 0.15)
-				end
-				Theme.FloatText(popAt, "TOO STRONG!", P.ButtonRed)
 			end
+			local text = (if troopDelta >= 0 then "+" else "") .. troopDelta .. " 🪖"
+			Theme.FloatText(popAt, "🎯 " .. text, if troopDelta >= 0 then P.MoneyGreen else P.ButtonRed)
 		end
 
-		if troopDelta ~= 0 and kind ~= "gate" then
+		if troopDelta ~= 0 and kind ~= "gate" and kind ~= "contest" then
 			local text = if troopDelta > 0 then "+" .. troopDelta .. " 🪖" else tostring(troopDelta) .. " 🪖"
 			Theme.FloatText(popAt + Vector3.new(0, -2, 0), text, if troopDelta > 0 then P.MoneyGreen else P.ButtonRed)
 		end

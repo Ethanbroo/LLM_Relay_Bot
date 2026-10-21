@@ -63,7 +63,7 @@ return function(H)
 
 	H.test("Benchmark payouts are the exact BestCase of the reference player", function()
 		for _, area in { 1, 4, AREAS } do
-			local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+			local stats = Economy.BenchmarkStats(area)
 			local d = Economy.BenchmarkDetails(area)
 			for _, run in d.runs do
 				local best = RunnerSim.BestCase(RunnerCourse.Generate(area, run.level), stats)
@@ -433,22 +433,29 @@ return function(H)
 		local one = Economy.RunnerStats({ troops = 1, damage = 1, capacity = 1 }, 1)
 		H.expect(base.startTroops == 3 and one.startTroops == 4, "+1 troop")
 		H.near(one.damage / base.damage, 1.04, 1e-6, "+4% damage")
-		H.near(one.capacity / base.capacity, 1.06, 0.01, "+6% capacity (whole dollars)")
+		-- Owner request: the coin (carry capacity) upgrade is +20% per level.
+		H.near(one.capacity / base.capacity, 1.2, 0.01, "+20% capacity (whole dollars)")
+		H.expect(Economy.RunnerUpgradeEffect("capacity", 0) == "+20% carry", "capacity effect text")
 		isWhole(one.capacity, "capacity")
 		-- Garbage upgrade levels are clamped.
 		local junk = Economy.RunnerStats({ troops = -5, damage = 0 / 0, capacity = 1e9 } :: any, 1)
 		H.expect(junk.startTroops == 3 and junk.damage == base.damage, "clamped")
 		H.expect(Economy.RunnerStats(nil :: any, 1).startTroops == 3, "nil upgrades")
-		-- Base capacity keeps up with the area so the bag stays relevant.
+		-- The benchmark bag keeps up with the area so the bag stays relevant;
+		-- a real player at the reference level carries at least that (the +20%
+		-- steps are bigger than the +6% the base is re-based with), and an
+		-- un-upgraded player carries what the old +6% steps gave.
 		for area = 1, AREAS do
+			local bench = Economy.BenchmarkStats(area)
 			local ref = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
-			H.near(
-				ref.capacity,
-				EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1),
-				0.5,
-				"reference capacity"
-			)
+			local benchBag = EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (area - 1)
+			H.near(bench.capacity, benchBag, 0.5, "benchmark capacity")
+			H.expect(ref.capacity >= bench.capacity, "reference-level players carry at least the benchmark bag")
+			local refLevel = Economy.ReferenceUpgrades(area).capacity
+			local oldBase = benchBag / (1 + 0.06 * refLevel)
+			H.near(Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, area).capacity, oldBase, 0.5, "base")
 			isWhole(ref.capacity, "reference capacity")
+			H.expect(bench.startTroops == ref.startTroops and bench.damage == ref.damage, "same troops / damage")
 		end
 	end)
 

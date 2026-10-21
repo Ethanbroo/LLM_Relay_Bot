@@ -13,18 +13,24 @@
 	     the client only reports which lane it picked in each row, the server
 	     re-simulates the whole run with RunnerSim.Resolve and pays the result.
 	  3. While a run is going it watches the avatar every Heartbeat and notes
-	     which lane it was really in as it crossed each row. RunnerFinish only
-	     believes the client's lane when it matches what the server saw (or is
-	     the next lane over and the avatar was within LANE_EDGE_TOLERANCE studs
-	     of it - the server sees the avatar 0.1-0.3 s late), so a cheater can
-	     not simply send the best lanes.
+	     which lane it was really in (and where across the track) as it crossed
+	     each row. RunnerFinish only believes the client's lane when it matches
+	     what the server saw (or is the next lane over and the avatar was within
+	     LANE_EDGE_TOLERANCE studs of it - the server sees the avatar 0.1-0.3 s
+	     late), so a cheater can not simply send the best lanes. The wide-shooting
+	     stance of a split row (RunnerSim.Stance) comes from the same position:
+	     the client's lateral when it is within LANE_EDGE_TOLERANCE of the
+	     server's, else the server's.
 
 	Net actions (client -> server, see ARCHITECTURE §3):
 		RunnerPrepare()               -> { runId, course, level, area, slot, stats, runSpeed }
 		BuyRunnerUpgrade(kind)        -> { kind, level, stats }   kind = "troops" | "damage" | "capacity"
 		RunnerGo(runId)               -> { stats, runSpeed, bossHp }
-		RunnerFinish(runId, choices)  -> { result, paid, boosted, level }
-		RunnerLeave()                 -> {}
+		RunnerFinish(runId, choices, laterals) -> { result, paid, boosted, level, victory }
+			laterals[i] = studs right of the centre line where the client crossed row i
+		RunnerRetry(runId)            -> same as RunnerPrepare: a new run on the same track,
+		                                 after a finished one (the defeat screen's TRY AGAIN)
+		RunnerLeave()                 -> {}   back to the base, at Layout.RunnerReturnCFrame
 
 	Push channel "Runner" (server -> client):
 		"Ended", { runId }   -- the server ended the session (death, mode change)
@@ -52,10 +58,16 @@
 		                 on screen is the one that is paid.
 		                 anti-cheat time + position checks (fails if the avatar
 		                 is missing), picks the lanes (client's if plausible, else
-		                 the ones the server saw), re-simulates, pays boostable
-		                 cash, raises runner.level. A repeated request gets the
-		                 same reply again (never pays twice).
-		RunnerLeave    - restores the avatar and returns to the base.
+		                 the ones the server saw) and stances, re-simulates, pays
+		                 boostable cash, and raises runner.level ONLY when the boss
+		                 was beaten (owner request: a lost level is played again
+		                 until it is won; the same level = the same course). A
+		                 repeated request gets the same reply again (never pays twice).
+		RunnerRetry    - after RunnerFinish: ends that session and starts a new one
+		                 at the player's current level without leaving the track.
+		RunnerLeave    - restores the avatar and returns to the base at the spawn,
+		                 on the far side from the ARMY RUN pad (owner request: not
+		                 back on the pad; the base's unlocks are right there).
 
 	Every way a session ends (RunnerLeave, death / respawn / any mode change,
 	leaving the game, a failed teleport) goes through endSession, which stops
@@ -407,6 +419,27 @@ local function chooseLanes(session: Session, choices: any): { number }
 	return clean
 end
 
+-- Wide-shooting stance per row (RunnerSim.Stance) for the lanes that are
+-- paid: from the client's lateral when it is within LANE_EDGE_TOLERANCE of
+-- where the server saw the avatar cross, else from the server's own sample.
+local function chooseStances(session: Session, lanes: { number }, laterals: any): { number }
+	local clean: { number } = {}
+	local source = if type(laterals) == "table" then laterals else {}
+	for i, row in session.course.rows do
+		if not RunnerSim.IsSplitRow(row) then
+			clean[i] = 0
+			continue
+		end
+		local at = session.serverLaterals[i] or session.lastLateral or 0
+		local claimed = rawget(source, i)
+		if isFiniteNumber(claimed) and math.abs((claimed :: number) - at) <= LANE_EDGE_TOLERANCE then
+			at = claimed :: number
+		end
+		clean[i] = RunnerSim.Stance(row, lanes[i], at)
+	end
+	return clean
+end
+
 -------------------------------------------------------------------------------
 -- Static track building
 -------------------------------------------------------------------------------
@@ -609,29 +642,11 @@ local function dataService(): any
 	return registry.DataService
 end
 
-local function onPrepare(player: Player)
+-- Creates a session at the player's current level and puts the avatar at
+-- the start of its track, frozen. `fromBase` = coming from the base (switch
+-- the mode to Runner first); false = a retry on the track (already Runner).
+local function startRun(player: Player, data: any, character: Model, humanoid: Humanoid, fromBase: boolean)
 	local Mode = modeService()
-	local Data = dataService()
-	if not Mode or not Data then
-		return Net.Fail("The game is still starting, try again")
-	end
-	if sessions[player] then
-		return Net.Fail("You are already on a run")
-	end
-	if Mode:GetMode(player) ~= "Base" then
-		return Net.Fail("Finish what you are doing first")
-	end
-	local data = Data:Get(player)
-	if not data then
-		return Net.Fail("Your data is still loading")
-	end
-	local character = player.Character
-	local humanoid = getHumanoid(character)
-	local root = getRoot(character)
-	if not character or not humanoid or not root or humanoid.Health <= 0 then
-		return Net.Fail("Your character is not ready")
-	end
-
 	local area = math.clamp(math.floor(data.base.highestArea), 1, #Config.Areas)
 	local level = math.max(1, math.floor(data.runner.level))
 	local course = RunnerCourse.Generate(area, level)
@@ -671,12 +686,18 @@ local function onPrepare(player: Player)
 	}
 
 	-- Mode first (ModeService remembers where you stood in the base), then teleport.
-	Mode:SetMode(player, "Runner")
+	if fromBase then
+		Mode:SetMode(player, "Runner")
+	end
 	sessions[player] = session
 	local startCFrame = Layout.RunnerTrackStart(slot) * CFrame.new(0, 0, 4)
 	if not Mode:Teleport(player, startCFrame) then
 		endSession(player, false)
-		Mode:SetMode(player, "Base")
+		if fromBase then
+			Mode:SetMode(player, "Base") -- never left the base
+		else
+			Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
+		end
 		return Net.Fail("Could not reach the track, try again")
 	end
 	humanoid.WalkSpeed = 0
@@ -692,6 +713,67 @@ local function onPrepare(player: Player)
 		stats = currentStats(data),
 		runSpeed = RUN_SPEED,
 	})
+end
+
+-- The checks every new run needs; returns (data, character, humanoid) or a failure reply.
+local function readyToRun(player: Player): (any, Model?, Humanoid?, any)
+	local Data = dataService()
+	local data = Data:Get(player)
+	if not data then
+		return nil, nil, nil, Net.Fail("Your data is still loading")
+	end
+	local character = player.Character
+	local humanoid = getHumanoid(character)
+	local root = getRoot(character)
+	if not character or not humanoid or not root or humanoid.Health <= 0 then
+		return nil, nil, nil, Net.Fail("Your character is not ready")
+	end
+	return data, character, humanoid, nil
+end
+
+local function onPrepare(player: Player)
+	local Mode = modeService()
+	local Data = dataService()
+	if not Mode or not Data then
+		return Net.Fail("The game is still starting, try again")
+	end
+	if sessions[player] then
+		return Net.Fail("You are already on a run")
+	end
+	if Mode:GetMode(player) ~= "Base" then
+		return Net.Fail("Finish what you are doing first")
+	end
+	local data, character, humanoid, failure = readyToRun(player)
+	if failure or not character or not humanoid then
+		return failure
+	end
+	return startRun(player, data, character, humanoid, true)
+end
+
+-- TRY AGAIN on the defeat screen: a new run at the current level (a lost
+-- level did not go up) without the trip back to the base.
+local function onRetry(player: Player, runId: any)
+	local Mode = modeService()
+	local Data = dataService()
+	if not Mode or not Data then
+		return Net.Fail("The game is still starting, try again")
+	end
+	local old = sessions[player]
+	if not old or type(runId) ~= "string" or runId ~= old.runId then
+		return Net.Fail("This run has ended")
+	end
+	if not old.finished then
+		return Net.Fail("Finish the run first")
+	end
+	if Mode:GetMode(player) ~= "Runner" then
+		return Net.Fail("This run has ended")
+	end
+	local data, character, humanoid, failure = readyToRun(player)
+	if failure or not character or not humanoid then
+		return failure
+	end
+	endSession(player, false) -- restores the avatar and removes the gun first
+	return startRun(player, data, character, humanoid, false)
 end
 
 local function onBuyUpgrade(player: Player, kind: any)
@@ -805,7 +887,7 @@ local function ensureBonus(result: Result, bonus: number?)
 	result.total = Format.RoundWhole(result.total + extra)
 end
 
-local function onFinish(player: Player, runId: any, choices: any)
+local function onFinish(player: Player, runId: any, choices: any, laterals: any)
 	local Data = dataService()
 	local session = sessions[player]
 	if not session or type(runId) ~= "string" or runId ~= session.runId then
@@ -843,14 +925,17 @@ local function onFinish(player: Player, runId: any, choices: any)
 
 	local stats = session.stats :: Stats
 	local clean = chooseLanes(session, choices)
-	local result = RunnerSim.Resolve(session.course, stats, clean)
+	local stances = chooseStances(session, clean, laterals)
+	local result = RunnerSim.Resolve(session.course, stats, clean, stances)
 	ensureBonus(result, stats.payoutBonus)
+	local victory = type(result.boss) == "table" and result.boss.victory == true
 
 	local total = if isFiniteNumber(result.total) then math.max(0, Format.RoundWhole(result.total)) else 0
 	local paid = if total > 0 then Data:AddCash(player, total, { boostable = true, source = "runner" }) else 0
 
 	local runner = data.runner
-	runner.level = math.max(1, math.floor(runner.level)) + 1
+	-- Owner request: a lost level is played again until the boss is beaten.
+	runner.level = math.max(1, math.floor(runner.level)) + (if victory then 1 else 0)
 	runner.runs += 1
 	runner.bestPayout = math.max(runner.bestPayout, paid)
 	Data:MarkDirty(player)
@@ -859,7 +944,8 @@ local function onFinish(player: Player, runId: any, choices: any)
 		result = result,
 		paid = paid,
 		boosted = paid > total + 0.001,
-		level = runner.level,
+		level = runner.level, -- the level of the NEXT run
+		victory = victory,
 	}
 	session.finished = true
 	session.reply = reply
@@ -871,7 +957,7 @@ local function onLeave(player: Player)
 	local Mode = modeService()
 	endSession(player, false)
 	if Mode and Mode:GetMode(player) == "Runner" then
-		Mode:ReturnToBase(player)
+		Mode:ReturnToBase(player, Layout.RunnerReturnCFrame())
 	end
 	return Net.Ok()
 end
@@ -885,6 +971,7 @@ function RunnerService:Init(reg: { [string]: any })
 	Net.Handle("BuyRunnerUpgrade", onBuyUpgrade)
 	Net.Handle("RunnerGo", onGo)
 	Net.Handle("RunnerFinish", onFinish)
+	Net.Handle("RunnerRetry", onRetry)
 	Net.Handle("RunnerLeave", onLeave)
 end
 

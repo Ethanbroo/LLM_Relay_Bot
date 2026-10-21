@@ -19,8 +19,15 @@
 		            the TROOP COUNT): "+N" and "xN" are blue (tone "positive"),
 		            "-N" and "÷N" are red (tone "negative"). Gold gates
 		            (tone "weapon"): op "weapon" (+1 weapon tier) or op "damage"
-		            (+20% damage). A red "toll" gate (op "sub") may ALSO carry a
-		            cash stack (`cash`): you lose troops but grab the money.
+		            (+20% damage). A gate may ALSO carry a cash stack (`cash`):
+		            a red "toll" gate (lose troops, grab the money) or the
+		            smaller of two blue gates (fewer troops + money vs more
+		            troops) - so the money is not always behind the red gate.
+		"contest"   2 lanes: "shoot to grow" gates [owner request]. A blue "+N"
+		            (tone "growPositive") and a red "-N" (tone "growNegative").
+		            `growHp` = damage that adds one step, `growStep` = troops
+		            per step, `growMax` = the most steps. Shooting a side for the
+		            engagement makes its number bigger (RunnerSim); additive only.
 		"cash"      3 lanes of cash stacks (tone "cash", `cash` = value).
 		"squad"     1 lane (unavoidable) or 2 lanes (pick the squad to fight).
 		            `enemies` = soldiers, `hp` = hit points of EACH soldier,
@@ -50,10 +57,14 @@ export type Option = {
 	amount: number?, -- +N troops, xN, -N, /N, +tiers, +damage fraction (0.2 = +20%)
 	label: string, -- what the gate panel shows: "+5", "x2", "-3", "÷2", "WEAPON +1", "+20% DMG", "$12"
 	tone: string, -- "positive" (blue) | "negative" (red) | "weapon" (gold) | "cash" | "enemy"
+	-- | "growPositive" / "growNegative" (contest: shoot-to-grow blue / red)
 	cash: number?, -- cash row (or toll gate): value of the cash stack in this lane
 	enemies: number?, -- squad row: number of enemy soldiers
 	hp: number?, -- barricade row: hit points; squad row: hit points of each soldier
 	reward: number?, -- cash for destroying the barricade / per enemy defeated
+	growHp: number?, -- contest: damage that grows the gate by one step
+	growStep: number?, -- contest: troops added to the gate's number per step
+	growMax: number?, -- contest: the most steps the gate can grow
 }
 
 export type Row = { index: number, kind: string, distance: number, options: { Option } }
@@ -77,6 +88,9 @@ type Draft = {
 	enemies: number?,
 	hp: number?,
 	reward: number?,
+	growHp: number?,
+	growStep: number?,
+	growMax: number?,
 }
 
 local RunnerCourse = {}
@@ -119,6 +133,9 @@ local function addLanes(laneKey: string, drafts: { Draft }, rng: Rng.Rng, shuffl
 			enemies = d.enemies,
 			hp = d.hp,
 			reward = d.reward,
+			growHp = d.growHp,
+			growStep = d.growStep,
+			growMax = d.growMax,
 		})
 	end
 	return options
@@ -165,14 +182,21 @@ function RunnerCourse.Generate(area: number, level: number): Course
 		local d = if rowIndex >= 10 and rng:Chance(0.15) then 3 else 2
 		return { op = "div", amount = d, label = "÷" .. d, tone = "negative" }
 	end
-	local function toll(rowIndex: number): Draft
-		local d = subN(rowIndex)
+	-- Puts a cash stack behind a gate ("-4  +$20" / "+3  +$15").
+	local function withCash(d: Draft, rowIndex: number, share: number): Draft
 		local cash = niceMoney(
-			RunnerDefs.TOLL_CASH_BASE * (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex) * scale * rng:Range(0.85, 1.2)
+			RunnerDefs.TOLL_CASH_BASE
+				* share
+				* (1 + RunnerDefs.CASH_ROW_GROWTH * rowIndex)
+				* scale
+				* rng:Range(0.85, 1.2)
 		)
 		d.cash = cash
 		d.label = d.label .. "  +" .. Format.Money(cash)
 		return d
+	end
+	local function toll(rowIndex: number): Draft
+		return withCash(subN(rowIndex), rowIndex, 1)
 	end
 	local function weapon(): Draft
 		return { op = "weapon", amount = 1, label = "WEAPON +1", tone = "weapon" }
@@ -193,8 +217,9 @@ function RunnerCourse.Generate(area: number, level: number): Course
 	}
 	local PLAIN_VARIANTS = {
 		{ id = "addSub", weight = 2 }, -- blue vs red (classic)
-		{ id = "toll", weight = 2 }, -- "+3" vs "-4 +$20": troops or cash?
-		{ id = "addAdd", weight = 1.5 }, -- two blue gates of different size
+		{ id = "toll", weight = 1.2 }, -- "+3" vs "-4 +$20": troops or cash?
+		{ id = "bonusAdd", weight = 1.2 }, -- "+3 +$15" vs "+6": the cash rides a BLUE gate
+		{ id = "addAdd", weight = 1 }, -- two blue gates of different size
 	}
 	local UPGRADE_VARIANTS = {
 		{ id = "weaponTroops", weight = 3 }, -- gold weapon gate vs more troops
@@ -216,6 +241,14 @@ function RunnerCourse.Generate(area: number, level: number): Course
 			drafts = { addN(rowIndex), subN(rowIndex) }
 		elseif variant.id == "toll" then
 			drafts = { addN(rowIndex), toll(rowIndex) }
+		elseif variant.id == "bonusAdd" then
+			-- [PROPOSAL] the cash gate gives fewer troops: the other gives ~60-100% more.
+			local small, big = addN(rowIndex), addN(rowIndex)
+			local smallN = small.amount :: number
+			local bigN = math.max(big.amount :: number, smallN + math.max(2, math.floor(0.6 * smallN + 0.5)))
+			big.amount = bigN
+			big.label = "+" .. bigN
+			drafts = { withCash(small, rowIndex, 0.75), big }
 		else
 			local a, b = addN(rowIndex), addN(rowIndex)
 			if a.amount == b.amount then
@@ -232,12 +265,67 @@ function RunnerCourse.Generate(area: number, level: number): Course
 		local variant = rng:Weighted(UPGRADE_VARIANTS, weightOf)
 		local drafts: { Draft }
 		if variant.id == "weaponTroops" then
-			drafts = { weapon(), addN(rowIndex) }
+			-- [PROPOSAL] 30%: the troop gate also carries cash (weapon vs troops + cash).
+			local troops = addN(rowIndex)
+			if rng:Chance(0.3) then
+				troops = withCash(troops, rowIndex, 0.75)
+			end
+			drafts = { weapon(), troops }
 		elseif variant.id == "damageTroops" then
 			drafts = { damage(), addN(rowIndex) }
 		else
 			drafts = { weapon(), damage() }
 		end
+		return addLanes("gate", drafts, rng, true)
+	end
+
+	-- Shoot-to-grow gates (see RunnerDefs "contest"): blue starts below a "+N"
+	-- gate of the row, red like a "-N"; a reference squad shooting one side for
+	-- the whole engagement adds CONTEST_STEPS_AT_EXPECTED steps.
+	local function contestRow(rowIndex: number): { Option }
+		local blueN = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.ADD_BASE + RunnerDefs.ADD_PER_ROW * rowIndex)
+						* troopScale
+						* RunnerDefs.CONTEST_BLUE_START
+						* rng:Range(0.9, 1.1)
+					+ 0.5
+			)
+		)
+		local redN = math.max(
+			1,
+			math.floor(
+				(RunnerDefs.SUB_BASE + RunnerDefs.SUB_PER_ROW * rowIndex)
+						* troopScale
+						* RunnerDefs.CONTEST_RED_START
+						* rng:Range(0.9, 1.1)
+					+ 0.5
+			)
+		)
+		local power = RunnerDefs.ExpectedFirepower(rowIndex) * hpScale * armyScale
+		local growHp = math.max(1, math.floor(power / RunnerDefs.CONTEST_STEPS_AT_EXPECTED + 0.5))
+		local growStep = math.max(1, math.floor(troopScale + 0.5))
+		local drafts: { Draft } = {
+			{
+				op = "add",
+				amount = blueN,
+				label = "+" .. blueN,
+				tone = "growPositive",
+				growHp = growHp,
+				growStep = growStep,
+				growMax = RunnerDefs.CONTEST_MAX_STEPS,
+			},
+			{
+				op = "sub",
+				amount = redN,
+				label = "-" .. redN,
+				tone = "growNegative",
+				growHp = growHp,
+				growStep = growStep,
+				growMax = RunnerDefs.CONTEST_MAX_STEPS,
+			},
+		}
 		return addLanes("gate", drafts, rng, true)
 	end
 
@@ -296,15 +384,16 @@ function RunnerCourse.Generate(area: number, level: number): Course
 
 	-- Course blueprint ------------------------------------------------------------
 	-- [PROPOSAL] 18 rows. Row 1 is always a troop gate; rows 2-16 come in blocks
-	-- of three that are shuffled for variety; rows 17-18 are a final squad and a
-	-- last upgrade/troop gate before the castle boss.
+	-- of three that are shuffled for variety (two blocks hold the
+	-- RunnerDefs.CONTEST_ROWS shoot-to-grow gates); rows 17-18 are a final squad
+	-- and a last upgrade/troop gate before the castle boss.
 	local kinds: { string } = { "troop" }
 	local blocks = {
 		{ "cash", "troop", "squad" },
-		{ "upgrade", "cash", "troop" },
+		{ "upgrade", "contest", "troop" },
 		{ "barricade", "upgrade", "squad" },
 		{ "cash", "troop", "upgrade" },
-		{ "barricade", "troop", "cash" },
+		{ "barricade", "contest", "cash" },
 	}
 	for _, block in blocks do
 		local copy = table.clone(block)
@@ -337,6 +426,8 @@ function RunnerCourse.Generate(area: number, level: number): Course
 			rowKind, options = "gate", troopGate(index, mulRows[index] == true)
 		elseif k == "upgrade" then
 			rowKind, options = "gate", upgradeGate(index)
+		elseif k == "contest" then
+			rowKind, options = "contest", contestRow(index)
 		elseif k == "cash" then
 			rowKind, options = "cash", cashRow(index)
 		elseif k == "barricade" then

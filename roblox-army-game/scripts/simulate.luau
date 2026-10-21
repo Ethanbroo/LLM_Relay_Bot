@@ -111,7 +111,7 @@ header({ "Area", "Name", "Upg lvl", "Start troops / dmg / carry", "R(area)", "x 
 local maxFrontier, capHit = 0, false
 for area = 1, AREAS do
 	local d = Economy.BenchmarkDetails(area)
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local runs = {}
 	for _, r in d.runs do
 		table.insert(runs, string.format("%.0f", r.payout))
@@ -144,16 +144,18 @@ header({
 	"Ref payout",
 	"No-upgrade payout",
 	"Ref boss wins",
-	"Ref soldiers killed",
+	"Ref soldiers killed (your lane)",
 	"Ref barricades",
+	"Other lane (wide shooting): soldiers / barricades",
 	"Weapon/damage gates taken",
 	"Search size",
 })
 for area = 1, AREAS do
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local weak = Economy.RunnerStats({ troops = 0, damage = 0, capacity = 0 }, area)
 	local first = RunnerDefs.FirstLevelOfArea(area)
 	local refSum, weakSum, bossSum, killed, total, destroyed, barricades, gold = 0, 0, 0, 0, 0, 0, 0, 0
+	local wideKills, wideBarricades = 0, 0
 	local frontier = 0
 	for i = 0, 9 do
 		local course = RunnerCourse.Generate(area, first + i)
@@ -169,17 +171,20 @@ for area = 1, AREAS do
 			local opt = course.rows[oc.row].options[oc.lane]
 			if oc.kind == "squad" and opt.enemies then
 				total += opt.enemies
+				killed += oc.kills or 0
+				wideKills += oc.otherKills or 0
 			elseif oc.kind == "barricade" then
 				barricades += 1
 				if oc.destroyed then
 					destroyed += 1
 				end
+				if oc.otherDestroyed then
+					wideBarricades += 1
+				end
 			end
 		end
 		for _, line in best.lines do
-			if line.kind == "enemies" then
-				killed += tonumber(line.label:match("x (%d+)")) or 0
-			elseif line.kind == "weapon" or line.kind == "damage" then
+			if line.kind == "weapon" or line.kind == "damage" then
 				gold += 1
 			end
 		end
@@ -192,6 +197,7 @@ for area = 1, AREAS do
 		string.format("%d / 10", bossSum),
 		string.format("%.0f%%", 100 * killed / math.max(1, total)),
 		string.format("%d / %d", destroyed, barricades),
+		string.format("%d / %d", wideKills, wideBarricades),
 		string.format("%.1f per run", gold / 10),
 		frontier,
 	})
@@ -236,7 +242,7 @@ header({
 	"Fight length",
 })
 for area = 1, AREAS do
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local first = RunnerDefs.FirstLevelOfArea(area)
 	local lo, hi, firstHp = math.huge, 0, 0
 	local reward, share, units, survivors, duration = 0, 0, 0, 0, 0
@@ -282,7 +288,7 @@ header({
 })
 local rng = H.load("shared/Rng").new(1234)
 for area = 1, AREAS do
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local first = RunnerDefs.FirstLevelOfArea(area)
 	local one, oneWins, random, randomWins = {}, 0, {}, 0
 	for i = 0, 9 do

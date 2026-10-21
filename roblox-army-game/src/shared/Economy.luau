@@ -21,6 +21,8 @@
 		Economy.RunnerUpgradeMaxLevel: number
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
+		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
+			(RunnerStats(ReferenceUpgrades(area)) with the benchmark bag BaseCapacity x AreaScale^(area-1))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -205,13 +207,14 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus, so a reference-upgraded player can
--- carry about BaseCapacity x AreaScale^(a-1) in every area: the bag stays a
--- real limit everywhere and capacity upgrades keep mattering.
+-- the reference player's capacity bonus at the OLD +6% step
+-- (CapacityBasePerLevel), so the bag stays a real limit everywhere. Each
+-- level adds CapacityPerLevel (+20%) of this base, so a player at the
+-- reference level now carries MORE than the benchmark bag (BenchmarkStats).
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
+	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityBasePerLevel * referenceLevel(a))
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -242,11 +245,18 @@ function Economy.RunnerUpgradeEffect(kind: string, level: number): string
 	return ""
 end
 
+function Economy.BenchmarkStats(area: number): RunnerStats
+	local a = anyArea(area)
+	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
+	stats.capacity = round(EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1))
+	return stats
+end
+
 -------------------------------------------------------------------------------
 -- The 10-run benchmark
 -------------------------------------------------------------------------------
 local function simulateArea(area: number): BenchmarkDetails
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local first = RunnerDefs.FirstLevelOfArea(area)
 	local runs: { BenchmarkRun } = {}
 	local total = 0
