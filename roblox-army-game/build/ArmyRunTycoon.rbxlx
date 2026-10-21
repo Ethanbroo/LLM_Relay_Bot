@@ -2405,6 +2405,8 @@ return Config
 		Economy.RunnerUpgradeMaxLevel: number
 		Economy.RunnerUpgradePrice(kind, currentLevel): number?      kind = "troops" | "damage" | "capacity"
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
+		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
+			(RunnerStats(ReferenceUpgrades(area)) with the benchmark bag BaseCapacity x AreaScale^(area-1))
 		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
@@ -2589,13 +2591,14 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus, so a reference-upgraded player can
--- carry about BaseCapacity x AreaScale^(a-1) in every area: the bag stays a
--- real limit everywhere and capacity upgrades keep mattering.
+-- the reference player's capacity bonus at the OLD +6% step
+-- (CapacityBasePerLevel), so the bag stays a real limit everywhere. Each
+-- level adds CapacityPerLevel (+20%) of this base, so a player at the
+-- reference level now carries MORE than the benchmark bag (BenchmarkStats).
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local a = anyArea(area)
-	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityPerLevel * referenceLevel(a))
+	return d.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1) / (1 + d.CapacityBasePerLevel * referenceLevel(a))
 end
 
 function Economy.RunnerStats(upgrades: Upgrades, area: number): RunnerStats
@@ -2626,11 +2629,18 @@ function Economy.RunnerUpgradeEffect(kind: string, level: number): string
 	return ""
 end
 
+function Economy.BenchmarkStats(area: number): RunnerStats
+	local a = anyArea(area)
+	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(a), a)
+	stats.capacity = round(EconomyDefs.Runner.BaseCapacity * EconomyDefs.AreaScale ^ (a - 1))
+	return stats
+end
+
 -------------------------------------------------------------------------------
 -- The 10-run benchmark
 -------------------------------------------------------------------------------
 local function simulateArea(area: number): BenchmarkDetails
-	local stats = Economy.RunnerStats(Economy.ReferenceUpgrades(area), area)
+	local stats = Economy.BenchmarkStats(area)
 	local first = RunnerDefs.FirstLevelOfArea(area)
 	local runs: { BenchmarkRun } = {}
 	local total = 0
@@ -3096,10 +3106,14 @@ EconomyDefs.Runner = {
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	-- [owner request] +20% of base capacity per level (was +6%: "increase the
-	-- upgrade amount of coins so it's easier to progress"). Prices do not move:
-	-- Economy divides the base by the reference player's bonus, so the
-	-- benchmark bag is unchanged and every bought level beats it by more.
+	-- upgrade amount of coins so it's easier to progress").
 	CapacityPerLevel = 0.2,
+	-- [PROPOSAL] The area's base bag is still re-based with the OLD +6% step,
+	-- and the 10-run benchmark (prices) still assumes the bag a reference
+	-- player had with it (BaseCapacity x AreaScale^(area-1)). So nobody carries
+	-- less than before, prices do not move, and every capacity level bought
+	-- now pays ~3x more than before: progress is easier, as asked.
+	CapacityBasePerLevel = 0.06,
 	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
 	-- then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
@@ -4499,8 +4513,10 @@ RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" g
 RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row
 -- [PROPOSAL] Growth steps (+1 troop each in area 1, x TroopScale) a reference
 -- squad reaches by shooting ONE side for the whole engagement, and the cap.
-RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 3
-RunnerDefs.CONTEST_MAX_STEPS = 6
+-- Measured: a casual path focusing the blue side grows it ~3 steps, perfect
+-- play reaches the cap (+8 troops at most: less than a x2 gate on that army).
+RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 8
+RunnerDefs.CONTEST_MAX_STEPS = 8
 
 -------------------------------------------------------------------------------
 -- Enemies (squads, barricades, the enemy base)
@@ -27960,7 +27976,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				local now: { number } = {}
 				for i, side in cv.sides do
 					local f = fights[side.lane]
-					local steps = if f and f.steps then math.floor(f.steps * progress + 1e-6) else 0
+					-- Step k shows once (k - 0.5) / steps of the engagement is done.
+					local total = if f and f.steps then math.max(0, f.steps) else 0
+					local steps = math.min(total, math.floor(total * progress + 0.5))
 					now[i] = steps
 					local value = (side.option.amount or 0) + steps * (side.option.growStep or 0)
 					local label = side.ov.label

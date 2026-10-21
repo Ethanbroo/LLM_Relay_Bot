@@ -66,7 +66,7 @@ were measured from the pixels, not guessed (section 10).
 | Row type | Lanes | What happens |
 |---|---|---|
 | **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red). Some carry a **cash bonus** — behind a red gate *or* the smaller blue one (owner request) |
-| **🎯 Shoot-to-grow gate** | 2 | Blue **+N** and red **−N** side by side, with glowing frames and a "SHOOT TO GROW" sign. **Shooting a side makes its number bigger and the side wider** (blue: more troops, red: more lost). Only + and −, capped at 6 growth steps; 2 per course (owner request) |
+| **🎯 Shoot-to-grow gate** | 2 | Blue **+N** and red **−N** side by side, with glowing frames and a "SHOOT TO GROW" sign. **Shooting a side makes its number bigger and the side wider** (blue: more troops, red: more lost). Only + and −, capped at 8 growth steps (+8 troops at most); 2 per course (owner request) |
 | **Weapon / damage gate** | 2 | Gold weapon gate (shows the gun you will get: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
 | **Cash row** | 3 | Stacks of cash, small/medium/large. **Their values only appear once you pass the row before** (owner request: no clutter far ahead) |
 | **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1. **The "N SOLDIERS" label also appears only once you pass the row before** (owner request). With a big squad you can hit both squads at once (§2.2) |

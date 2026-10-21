@@ -1222,7 +1222,9 @@ function RunnerVisuals.new(course: Course, slot: number, character: Model): Visu
 				local now: { number } = {}
 				for i, side in cv.sides do
 					local f = fights[side.lane]
-					local steps = if f and f.steps then math.floor(f.steps * progress + 1e-6) else 0
+					-- Step k shows once (k - 0.5) / steps of the engagement is done.
+					local total = if f and f.steps then math.max(0, f.steps) else 0
+					local steps = math.min(total, math.floor(total * progress + 0.5))
 					now[i] = steps
 					local value = (side.option.amount or 0) + steps * (side.option.growStep or 0)
 					local label = side.ov.label

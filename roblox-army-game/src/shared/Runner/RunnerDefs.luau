@@ -269,8 +269,10 @@ RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" g
 RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row
 -- [PROPOSAL] Growth steps (+1 troop each in area 1, x TroopScale) a reference
 -- squad reaches by shooting ONE side for the whole engagement, and the cap.
-RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 3
-RunnerDefs.CONTEST_MAX_STEPS = 6
+-- Measured: a casual path focusing the blue side grows it ~3 steps, perfect
+-- play reaches the cap (+8 troops at most: less than a x2 gate on that army).
+RunnerDefs.CONTEST_STEPS_AT_EXPECTED = 8
+RunnerDefs.CONTEST_MAX_STEPS = 8
 
 -------------------------------------------------------------------------------
 -- Enemies (squads, barricades, the enemy base)
