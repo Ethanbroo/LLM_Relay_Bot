@@ -83,6 +83,14 @@ emit(string.format("* Reference upgrade levels per area: %d", Config.Benchmark.R
 emit(string.format("* Area cash scale: x%.2f per area", EconomyDefs.AreaScale))
 emit(
 	string.format(
+		"* Price ease: x%.2f (EconomyDefs.ProgressEase): slot, gate and upgrade prices are shares of"
+			.. " Economy.PriceBenchmark = B10 x %.2f",
+		EconomyDefs.ProgressEase,
+		EconomyDefs.ProgressEase
+	)
+)
+emit(
+	string.format(
 		"* Typical run duration (RunDurationSeconds): %.2f s (%.2f s running + %.2f s overhead: "
 			.. "%.0f s menus / summary + boss %.2f s intro, up to %d s fight, %.2f s outro)",
 		T,

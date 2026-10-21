@@ -113,8 +113,11 @@ plain folders — just create the files inside them.
 ```lua
 Economy.RunBenchmark(area: number): number            -- R(area): average best-case single-run payout of the 10 benchmark runs
 Economy.TenRunBenchmark(area: number): number         -- B10(area) = sum of the 10 best-case runs
+Economy.PriceBenchmark(area: number): number          -- B10(area) x EconomyDefs.ProgressEase (0.8): slot, gate, section /
+                                                      --   runner / gear upgrade prices are shares of this (employees, boosts are not)
 Economy.BenchmarkDetails(area: number): { upgradeLevel: number, runs: { { level: number, payout: number } }, total: number }
 Economy.ReferenceUpgrades(area: number): { troops: number, damage: number, capacity: number }
+Economy.BenchmarkStats(area: number): { startTroops: number, damage: number, capacity: number } -- the reference player of the benchmark (= RunnerStats(ReferenceUpgrades(area), area))
 
 Economy.SlotUnlockPrice(slotId: string): number        -- revenue section or the Combat Arena slot
 Economy.GatePrice(area: number): number                -- cash to open the gate from `area` into `area + 1` (strictly increasing)
@@ -127,7 +130,7 @@ Economy.ReferencePassiveRate(area: number): number     -- $/s of every revenue s
 Economy.RunnerUpgradeMaxLevel: number
 Economy.RunnerUpgradePrice(kind: string, currentLevel: number): number?      -- kind = "troops" | "damage" | "capacity"; nil at max
 Economy.RunnerStats(upgrades: { troops: number, damage: number, capacity: number }, area: number): { startTroops: number, damage: number, capacity: number }
-Economy.RunnerUpgradeEffect(kind: string, level: number): string             -- e.g. "+1 troop", "Damage 12", "Carry $85"
+Economy.RunnerUpgradeEffect(kind: string, level: number): string             -- "+1 troop", "+4% damage", "+20% carry" or "MAX"
 
 Economy.BoostValue(boostId: string, playerArea: number): number              -- V, value when used properly
 Economy.BoostCoinPrice(boostId: string, playerArea: number): number          -- (1 - Config.CoinRoute.NetGainShare) * V
@@ -152,15 +155,17 @@ export type Option = {
 	width: number,           -- studs
 	op: string?,             -- gate: "add" | "mul" | "sub" | "div" | "weapon" | "damage"
 	amount: number?,         -- +N troops, xN, -N, /N, +tiers, +damage fraction (0.2 = +20%)
-	label: string,           -- what the gate panel shows: "+5", "x2", "-3", "÷2", "RIFLE", "+20% DMG", "$12"
+	label: string,           -- what the gate panel shows: "+5", "x2", "-3", "÷2", "WEAPON +1", "+20% DMG", "-3  +$20", "$12"
 	tone: string,            -- "positive" (blue) | "negative" (red) | "weapon" (gold) | "cash" | "enemy"
-	cash: number?,           -- cash row: value of the cash stack in this lane
+	                         -- | "growPositive" / "growNegative" (shoot-to-grow blue / red)
+	cash: number?,           -- cash row: value of the cash stack in this lane; gate: its cash bag (banked, not carried)
 	enemies: number?,        -- squad row: number of enemy soldiers
-	hp: number?,             -- barricade row: hit points
+	hp: number?,             -- barricade row: hit points; squad row: hit points of each soldier
 	reward: number?,         -- cash for destroying the barricade / per enemy defeated
+	growHp: number?, growStep: number?, growMax: number?, -- contest: damage per step, troops per step, max steps
 }
 export type Row = { index: number, kind: string, distance: number, options: { Option } }
--- kind = "gate" | "cash" | "squad" | "barricade"
+-- kind = "gate" | "contest" | "cash" | "squad" | "barricade"
 export type Course = { area: number, level: number, seed: number, length: number, rows: { Row },
 	boss: { distance: number, hp: number, reward: number } }  -- hp is always 0: boss HP = RunnerSim.BossHp(course, stats)
 RunnerCourse.Generate(area: number, level: number): Course
@@ -171,12 +176,13 @@ export type RowOutcome = { row: number, lane: number, kind: string, label: strin
 	troopsBefore: number, troopsAfter: number, cashBefore: number, cashAfter: number,
 	weaponTier: number, damageMult: number, destroyed: boolean?, note: string? }
 export type Line = { kind: string, label: string, detail: string, value: number }
--- kind = "troops" | "weapon" | "damage" | "cash" | "enemies" | "boss" | "bonus"
+-- kind = "troops" | "weapon" | "damage" | "cash" | "gatecash" | "enemies" | "boss" | "bonus"
 export type Result = { troops: number, weaponTier: number, damageMult: number,
 	collected: number, carried: number, outcomes: { RowOutcome }, lines: { Line }, total: number }
-RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }): Result
+RunnerSim.Resolve(course: Course, stats: Stats, choices: { number }, stances: { number }?): Result
 	-- choices[i] = lane picked in row i; missing / invalid lane -> lane 1
-RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number })  -- exact optimum + its choices
+	-- stances[i] = 0..MAX_STANCE formation columns over the other lane (wide shooting); missing -> 0
+RunnerSim.BestCase(course: Course, stats: Stats): (Result, { number }, { number })  -- exact optimum + its choices + stances
 RunnerSim.MinDuration(course: Course): number  -- fastest legal completion time (anti-cheat, running part only)
 RunnerSim.UnitDps(stats: Stats, weaponTier: number, damageMult: number): number  -- one unit's damage per second
 RunnerSim.BossHp(course: Course, stats: Stats): number      -- BOSS_HP_SHARE x the most boss damage any lane path can deal
@@ -186,7 +192,7 @@ RunnerSim.BossHpAt(outcome: BossOutcome, t: number): number, RunnerSim.AliveAt(o
 --   duration, damageDealt, hpLeft }, unitDps: number. result.troops = units alive AFTER the boss (0 on defeat).
 ```
 The completion summary lists `result.lines` (each upgrade collected with its cash value,
-troops, carried cash vs capacity, enemies, boss) and `result.total`.
+troops, carried cash vs capacity, gate cash (banked), enemies, boss) and `result.total`.
 
 ### 4.3 BASE → SHOP / COMBAT (server)
 
@@ -303,15 +309,18 @@ are written by the lead after the build — do not create them.
   engaged, so it is never shot unlabelled), and is outlined text without a background.
   The option you run through (gate panel, toll cash, cash stack) is removed instantly.
   Gate cash rides a red "-N", the smaller of two blue "+N" or the troop gate next to a
-  weapon gate. **Shoot-to-grow gates** (row kind `contest`, 2 per course, owner request):
+  weapon gate, and goes straight to the bank (summary line "Gate cash x N"); only cash-row
+  stacks are capped by capacity. **Shoot-to-grow gates** (row kind `contest`, 2 per course, owner request):
   a blue "+N" and a red "-N" that each grow by `growStep` troops per `growHp` damage they
   take (capped at `growMax` steps, additive only); a tug-of-war meter above them shows
-  which side is winning (the panels stay on the scored lanes); you pass one.
+  which side is winning: it leans toward the side shot more (the panels stay on the scored
+  lanes); you pass one. `growStep` = +1 troop (+2 from area 6), `growMax` = 8.
   **Wide shooting** (owner request): in a 2-lane squad / barricade / contest row, with
   more than 4 troops beside the avatar, the outer 0–2 formation columns over the other
   lane (`RunnerSim.Stance` from the avatar's lateral position) shoot that lane
   (`RunnerSim.UnitsAcross` units): kills / barricade / growth there count too.
-  Guns: half the old fire rate with 3x the damage per bullet (1.5x DPS).
+  Guns: half the old fire rate with 3x the damage per bullet (Rocket 0.75x rate, 2x damage;
+  1.5x DPS for every gun); bullets are only fired at targets in range.
   Final **castle boss** (owner request): walks out of the castle with a head HP bar and
   kills one unit per interval (troops first, the avatar last); HP = BOSS_HP_SHARE × the
   best path's potential damage, so only the best lanes win. Reward only on victory.
@@ -326,11 +335,11 @@ are written by the lead after the build — do not create them.
   `EconomyDefs.ProgressEase` (0.8, owner request "easier to progress").
   In-run pickups only last for that run.
 * Completion summary: every upgrade collected with its cash value, troops ×
-  value, cash carried vs capacity, enemies defeated, boss line, vehicle
-  bonus, 2x boost, **total**. Then back to base where the player stood before the run
+  value, cash carried vs capacity, gate cash (banked), enemies defeated, boss line,
+  vehicle bonus, 2x boost, **total**. Then back to base where the player stood before the run
   (or `Layout.RunnerReturnCFrame`, the spawn, if that was the ARMY RUN pad). After a
   LOST run the summary also offers TRY AGAIN (`RunnerRetry`: same level, straight back
-  to the track start). While fire is split the HUD shows "🎯 SPLIT FIRE".
+  to the track start). While fire is split the HUD shows "🎯 SPLIT FIRE: N shoot the other side".
 * Server authority: `RunnerPrepare` generates the course (server) and teleports
   to the track start; `RunnerGo` locks stats + start time; `RunnerFinish(runId, choices,
   laterals)` re-simulates with `RunnerSim.Resolve(course, stats, lanes, stances)` (lanes

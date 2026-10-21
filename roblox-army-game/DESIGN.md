@@ -45,12 +45,12 @@ were measured from the pixels, not guessed (section 10).
 
 | Source of power | What it improves | Why it matters for later areas |
 |---|---|---|
-| Permanent runner upgrades | Troops, damage, carry capacity | Bigger runs: an upgraded player earns 2–6× more per run than an un-upgraded one from area 2 on |
+| Permanent runner upgrades | Troops, damage, carry capacity | Bigger runs: a player at the reference upgrade level earns about 1.4× (area 2) up to 2.7× (area 8) what an un-upgraded player earns per run (best play) |
 | Revenue sections + section upgrades | Passive income (about 39% of the active run rate per area) | Money while you run and fight; upgrades add +20% income per level |
 | Employees | Remove restocking | Sections never stop; required for full time-skip value |
 | Repeated arena combat | Cash (about 3 runs per level) + a chest after every real fight (§12.7) | Gear for harder barriers |
 | Armour and weapons (chests, coin upgrades) | HP, damage, fire rate, perks | Beats the barrier squads, which get harder every area |
-| Harder combat levels | Higher cash rewards (+14–28% per level) | Combat stays worth playing as prices rise |
+| Harder combat levels | Higher cash rewards (+16–27% per level) | Combat stays worth playing as prices rise |
 
 ---
 
@@ -65,8 +65,8 @@ were measured from the pixels, not guessed (section 10).
 
 | Row type | Lanes | What happens |
 |---|---|---|
-| **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red). Some carry a **cash bonus** — behind a red gate *or* the smaller blue one (owner request) |
-| **🎯 Shoot-to-grow gate** | 2 | Blue **+N** and red **−N** side by side: striped panels in gold frames under a blue/red tug-of-war meter that says "🎯 SHOOT TO GROW". **Shooting a side makes its number bigger and pushes the meter into the other side** (blue: more troops, red: more lost). The gates themselves stay on their lanes, so the side you see is the side you get. Only + and −, capped at 8 growth steps (+1 troop per step, +2 from area 6); 2 per course (owner request) |
+| **Troop gate** | 2 | Maths gates on your troop count: **+N, ×N** (blue) and **−N, ÷N** (red). Some carry a **cash bonus** — behind a red gate, the smaller blue one, or the troop gate next to a weapon gate (owner request). Gate cash goes **straight to the bank**, not into your bag |
+| **🎯 Shoot-to-grow gate** | 2 | Blue **+N** and red **−N** side by side: striped panels in gold frames under a blue/red tug-of-war meter that says "🎯 SHOOT TO GROW". **Shooting a side makes its number bigger, and the meter leans toward the side that was shot more** (blue: more troops, red: more lost). The gates themselves stay on their lanes, so the side you see is the side you get. Only + and −, capped at 8 growth steps (+1 troop per step, +2 from area 6); 2 per course (owner request) |
 | **Weapon / damage gate** | 2 | Gold weapon gate (shows the gun you will get: Pistol → Rifle → SMG → Assault Rifle → Minigun → Rocket) or **+20% DMG** |
 | **Cash row** | 3 | Stacks of cash, small/medium/large. **Their values only appear once you pass the row before** (owner request: no clutter far ahead) |
 | **Enemy squad** | 1–2 | Your squad shoots it while it is in range; survivors cost troops 1-for-1. **The "N SOLDIERS" label also appears only once you pass the row before** (owner request). With a big squad you can hit both squads at once (§2.2) |
@@ -75,8 +75,9 @@ were measured from the pixels, not guessed (section 10).
 
 ❓ **Q2 — Original maths modifiers.** 💡 *Kept.* **+, ×, −, ÷ change the troop count** (the troops replace the
 coins of the original game). Exactly two **×2** gates appear per course, so troop counts stay readable.
-Gates can also carry cash: a red "toll" gate (−3 troops but +$15), the smaller of two blue gates (+3 and +$12 vs +6),
-or the troop gate next to a gold weapon gate — so the money is not always behind the red gate (owner request).
+Gates can also carry cash: a red "toll" gate (e.g. −3 troops but +$20), the smaller of two blue gates (e.g. +3 and +$13
+vs +5), or the troop gate next to a gold weapon gate (e.g. +4 and +$15) — so the money is not always behind the red gate
+(owner request). A gate's cash bag goes **straight to the bank** (summary line "Gate cash × N"), so your bag never limits it.
 ✅ The gate (or cash stack) you run through **disappears instantly** (owner request). 💡 Every label on the track
 (cash values, toll cash, "N SOLDIERS", barricade HP) appears one row ahead only (a squad or barricade a moment
 earlier if your guns already reach it), as outlined text with no dark background, so nothing hides the track
@@ -100,12 +101,13 @@ Weapons and damage use their own gold gates, not maths.
 | Rocket | 300 | 0.375 | 112.5 | big dark-red rocket, smoke, explosion |
 
 * ✅ **Fewer bullets that all hit** (owner request): every gun fires half as often as before with 3× the damage per
-  bullet (1.5× the old damage per second), and bullets are only fired at targets in range, so none fly past. 5 men now
+  bullet (the Rocket: 0.75× as often, 2× the damage; 1.5× the old damage per second for every gun), and bullets are only fired at targets in range, so none fly past. 5 men now
   beat a squad of 2 soldiers without losing anyone (a soldier has 170 HP; one pistol unit deals 84 in a fight).
 * ✅ **Wide shooting** (owner request): with **more than 4 troops beside you**, each column of your formation shoots
   what is in front of it. Stand in the **middle** of two squads, barricades or shoot-to-grow gates and you hit **both**
   (the outer 1–2 columns reach the other side: kills there pay $1 each, a barricade destroyed there pays its reward);
   move to a **side** and all the damage goes there. With 4 or fewer troops beside you, everyone shoots your lane.
+  While some troops shoot the other lane the run screen shows **"🎯 SPLIT FIRE: N shoot the other side"**.
   The server uses the same rule from where it saw you cross the row.
 
 * ✅ Bullets are solid, strong colours (owner request: the old yellow/pale glowing bullets were invisible on the
@@ -117,10 +119,11 @@ Weapons and damage use their own gold gates, not maths.
 
 ### 2.3 The castle boss (owner request)
 * ✅ At the end a **boss walks out of the castle** with a **health bar on its head**.
-* ✅ It **damages your units**: every ~0.55 s it kills one unit — **troops first, you last**.
+* ✅ It **damages your units**: every 0.55 s it kills one unit — **troops first, you last** (faster against a big
+  squad, so the fight never lasts more than 12 s).
 * ✅ It is **only defeated if you chose all the best lanes**. 💡 Its HP is 99.9% of the most damage *any* lane choice
-  could deal, so only the best army (most troops × best gun and damage) beats it. In testing, about 1–4 of every
-  2,000 random lane choices win, and those tie the best army.
+  could deal, so only the best army (most troops × best gun and damage) beats it. In testing, at most 2 of every
+  2,000 random lane choices win (none at all in half of the areas), and those match the best army.
 * 💡 Win: the boss reward (about a fifth of a perfect run). Lose: the boss wipes your squad, so the troop payout and
   the boss reward are lost, but you keep your cash, weapon and enemy rewards.
 * ✅ **Lose = play the level again** (owner request): the run level only goes up when you beat the boss, so you replay
@@ -131,7 +134,8 @@ Weapons and damage use their own gold gates, not maths.
   left still starts a run at once.
 * ⚠️ The boss needs the best lanes (your rule) and a lost level is replayed (your rule). Together this means a cash
   gate, or splitting fire by standing between two squads, usually costs the boss and the level stays (§12.9). The run
-  screen shows **"🎯 SPLIT FIRE"** while some troops shoot the other side, and the course stays the same, so it can be learnt.
+  screen shows **"🎯 SPLIT FIRE: N shoot the other side"** while some troops shoot the other lane, and the course stays
+  the same, so it can be learnt.
 * 💡 Even a perfect run ends with only a few troops left: the boss's HP equals the best possible damage, so it falls
   just before it would finish your squad.
 
@@ -143,15 +147,16 @@ Weapons and damage use their own gold gates, not maths.
 | Weapon: Rifle / SMG / Assault Rifle / Minigun / Rocket | $8 / $12 / $18 / $25 / $35 for each tier reached |
 | +20% Damage (each damage gate) | $9 |
 | Troops at finish × N | about $1.50 per troop still alive after the boss (line rounded to whole dollars). It also shows how many you started with from permanent upgrades, gained this run and lost to the boss |
-| Cash carried | Cash you picked up, **capped by your coin-carrying capacity** (overflow shown as lost) |
+| Cash carried | Cash you picked up from **cash rows**, **capped by your coin-carrying capacity** (overflow shown as lost) |
+| Gate cash × N | Cash bags behind gates (red toll, the smaller blue "+N", the troop gate next to a weapon gate): they go **straight to the bank**, not into the bag, so capacity never limits them |
 | Enemies defeated × N | $1 per soldier (in either lane), plus barricade rewards |
 | Boss defeated! / Defeated by the boss | the boss reward on a win, $0 on a loss |
 | Vehicle bonus | +2% to +20%, from your equipped vehicle |
 | 2× CASH | Doubles the total while a 2× boost is active |
 
 ❓ **Q7 — Runner payouts.** 💡 Upgrades are valued by the table above. **Troops pay out** ($ per surviving troop).
-**Coin-carrying capacity caps the cash you pick up on the track** (not the troop or upgrade values), so
-the capacity upgrade always matters.
+**Coin-carrying capacity caps the cash stacks you pick up from cash rows** (not gate cash, which goes straight to the
+bank, and not the troop or upgrade values). The cash rows offer about 2.5× the bag, so the capacity upgrade always matters.
 
 ### 2.5 Visuals
 ✅ Matches the colours and saturation of reference image 2 (section 10): cyan sky and sea, white track with faint
@@ -171,11 +176,14 @@ blue stripes, translucent red/blue gates with dark posts and huge outlined numbe
 | **Damage** | 10 | +4% | level 50 | same as troops |
 | **Coin-carrying capacity** | $60 in area 1 | **+20%** (+$12 in area 1; was +6%) | level 50 | 90% of the troops price |
 
-💡 Carry capacity is re-based per area: a player at the reference upgrade level carries $60 × 1.6^(area − 1)
-($60 / $96 / $154 in areas 1 / 2 / 3), and every level adds 20% of the area's base bag. The track now offers about
-**2.5× that bag in cash**, so the bag really is the limit and **every capacity level is money you pick up every run**
-(about +$12 per level per run in area 1, up to ~7 levels above the area's reference level). Area 1: the first level
-costs $60 and pays back in about 5 runs (before: about 17). Prices are eased too (§8, §12.9).
+💡 Carry capacity is re-based per area, and the bag **never shrinks** when you open a gate: a player at the reference
+upgrade level carries **$60 / $108 / $156 / $246 / $393 / $629 / $1,007 / $1,611** in areas 1–8 (from area 4 on that is
+$60 × 1.6^(area − 1); areas 2 and 3 keep area 1's $60 base). Every level adds 20% of the area's base bag. The cash rows
+offer about **2.5× the reference bag**, so the bag really is the limit and **every capacity level is money you pick up
+every run**: about +$12 per level per run in areas 1–3 (about +$15 in area 4, up to about +$49 in area 8). In area 1
+about 7–8 levels above the reference level still pay; later areas have room for more. Cash bags behind gates go
+straight to the bank and are not limited by the bag. Area 1: the first level costs $60 and pays back in about 5 runs
+(before: about 17). Prices are eased too (§8, §12.9).
 
 ✅ **Permanent upgrades vs in-run pickups** are kept separate: the pre-run cards are titled **PERMANENT UPGRADES**.
 The summary lists **Collected this run** (troops, weapons, damage gates, cash), which reset every run.
@@ -207,9 +215,9 @@ white/green pad never cuts it off (owner request).
 
 ### 4.2 How a revenue section works
 * ✅ Unlocked with earned cash: a green-bordered **unlock pad** with a gold price (image 1). Hold **E** to buy.
-* 💡 Each sale pays a whole-dollar amount every 3.5–6 s and uses **1 stock** (18–48 stock, more with upgrades).
+* 💡 Each sale pays a whole-dollar amount every 3.5–6 s and uses **1 stock** (22–44 stock at level 1, more with upgrades).
 * ✅ **At 0 stock the shop stops** ("OUT OF STOCK!") **until you restock it by hand** (hold E at the shop).
-  That is every 1.7–3.6 minutes.
+  That is about every 1.6–3.6 minutes.
 * ✅ **Improve revenue:** 💡 10 upgrade levels, +20% income and +10% stock each.
 * 💡 Payback of a new level-1 shop: about **33 minutes** of stocked selling (prices eased, §12.9).
 
@@ -217,7 +225,8 @@ white/green pad never cuts it off (owner request).
 * ✅ An employee does a specific job: **restocking**. Your shop restocks itself 3 s after it runs out, so the manual work is gone.
 * ✅ Two ways to pay, both kept: **200 Robux** or **cash = earnings of 20 army runs**.
 * ❓ **Q4 — Employee cash price.** 💡 "20 runs" = **20 × R(area)**, where **R** is the *best-case single-run*
-  benchmark of the area the shop is in (section 8). Prices: **$3,360 (area 1) → $179,160 (area 8)**.
+  benchmark of the area the shop is in (section 8). Prices: **$4,160 (area 1) → $217,200 (area 8)** (not eased:
+  the brief's "20 runs" rule, §12.9).
   Using the shop's own area keeps automating old shops cheap. Switch: `Config.Employee.PriceScalesWith`
   (`"SectionArea"` or `"PlayerArea"`).
 * 💡 The "Hire me" tile from image 1 stands next to every shop without an employee.
@@ -238,7 +247,7 @@ Gates are black iron with a gold padlock (image 1).
   for farming cash and chests. The first barrier (combat level 2) is tuned for starter gear plus in-fight abilities.
 * 💡 Barrier of area *a* = combat level **3a − 1**: levels 2, 5, 8 … 20 (7 barriers; area 8 is the last area, so it has no exit gate).
 * ✅ **Later levels are harder and pay more**: enemy HP ≈ ×1.18 and damage ≈ ×1.10 per level, more and
-  tougher enemy types. Reward for a perfect clear: **$395 (level 1) → $40,606 (level 25)**.
+  tougher enemy types. Reward for a perfect clear: **$490 (level 1) → $50,338 (level 25)**.
 
 ### 5.2 Earning cash
 ✅ Defeated enemies drop cash, and **cash piles lie on the ground**. 💡 About 70% of a level's cash comes from
@@ -353,8 +362,8 @@ Damage reduction is capped at 60%.
 
 ### 6.4 Coin upgrades
 * ✅ Spend coins to level up items in the **Gear** menu (or in the battle lobby). 💡 Each level adds +6% weapon damage or armour HP, and +2% of the armour's own damage reduction (e.g. Field Vest 4% → about 4.7% at level 10; cap 60%). Fire rate, bullets and range are fixed per item.
-* 💡 Price: Common level 1→2 = $84, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
-  (e.g. Legendary 49→50 = $309,733).
+* 💡 Price: Common level 1→2 = $83, ×1.15 per level, ×1 / 1.5 / 2.2 / 3.2 / 4.5 by rarity
+  (e.g. Legendary 49→50 = $306,784). Eased like the other upgrade prices (×0.8, §12.9).
 * 💡 **Scrap** unwanted items for cash. The inventory holds 60 items; a drop into a full inventory is paid out as cash.
 
 ---
@@ -365,20 +374,22 @@ Damage reduction is capped at 60%.
 
 | Area | Best-case run R | 4 slots | Gate to next | Area total | Employee (cash) |
 |---|---|---|---|---|---|
-| 1 Boot Camp | $168 | $2,483 | $2,179 | $4,662 | $3,360 |
-| 2 Supply Depot | $349 | $5,578 | $4,532 | $10,110 | $6,980 |
-| 3 Motor Pool | $589 | $8,721 | $7,653 | $16,374 | $11,780 |
-| 4 Airfield | $879 | $13,018 | $11,423 | $24,441 | $17,580 |
-| 5 Harbor | $1,718 | $25,453 | $22,335 | $47,788 | $34,360 |
-| 6 Desert Outpost | $3,072 | $45,511 | $39,936 | $85,447 | $61,440 |
-| 7 Mountain Fortress | $4,824 | $71,459 | $62,706 | $134,165 | $96,480 |
-| 8 Command HQ | $8,958 | $132,716 | – (last area) | $132,716 | $179,160 |
+| 1 Boot Camp | $208 | $2,462 | $2,161 | $4,623 | $4,160 |
+| 2 Supply Depot | $429 | $5,488 | $4,459 | $9,947 | $8,580 |
+| 3 Motor Pool | $705 | $8,350 | $7,327 | $15,677 | $14,100 |
+| 4 Airfield | $1,113 | $13,191 | $11,575 | $24,766 | $22,260 |
+| 5 Harbor | $2,073 | $24,573 | $21,563 | $46,136 | $41,460 |
+| 6 Desert Outpost | $3,664 | $43,422 | $38,103 | $81,525 | $73,280 |
+| 7 Mountain Fortress | $5,655 | $67,021 | $58,811 | $125,832 | $113,100 |
+| 8 Command HQ | $10,860 | $128,713 | – (last area) | $128,713 | $217,200 |
 
-* 💡 Money values grow **×1.6 per area**. Enemies grow too, so upgrades stay necessary.
-* 💡 Pacing estimate (75% of best play, sections kept stocked, combat ignored): **about 30–41 minutes per area,
-  about 4.1 hours for all 8 areas**. Missing the boss lowers a run's pay (a random-lane run earns about 40–50% of a
-  perfect one), so players who rarely beat the boss take longer. Combat cash and section upgrades make real play faster. To make the game
-  longer, raise `EconomyDefs` gate/slot shares (see `docs/ECONOMY_TABLES.md` §11).
+* 💡 Money values grow **×1.6 per area**. Enemies grow too, so upgrades stay necessary. Slot and gate prices are
+  shares of 80% of the 10-run benchmark (`EconomyDefs.ProgressEase`, §12.9); employees are not eased.
+* 💡 Pacing estimate (75% of best play, sections kept stocked, combat ignored): **about 25–33 minutes per area
+  (area 8, which has no gate, about 11 minutes), about 3.3 hours for all 8 areas**. Missing the boss lowers a run's
+  pay (a random-lane run earns about 42–53% of a perfect one), so players who rarely beat the boss take longer.
+  Combat cash and section upgrades make real play faster. To make the game longer, raise `EconomyDefs.ProgressEase`
+  or the gate/slot shares (see `docs/ECONOMY_TABLES.md` §11).
 
 ---
 
@@ -397,23 +408,24 @@ for each area a:
     B10(a) = sum(best)      R(a) = B10(a) / 10
     prices use B10(a) × ProgressEase (0.8, owner request "easier to progress"; §12.9)
 ```
-* The runner level is global and rises with every run, so players in area 2 and later usually play *later* levels of an
-  area than the 10 benchmark levels. Those levels pay up to +20% more and have stronger enemies. **R is the best-case
+* The runner level is global and rises with every **boss victory** (a lost level is replayed), so players in area 2
+  and later usually play *later* levels of an area than the 10 benchmark levels. Those levels pay up to +20% more and have stronger enemies. **R is the best-case
   estimate at an area's first levels, not a cap** on what a player can earn.
 * **BestCase is exact.** It explores every lane choice with dynamic programming. A choice is dropped only if another
   choice is at least as good on troops, weapon tier, damage, cash carried and banked value at the same time.
-  Payout can only rise with each of these, so no better path is ever discarded. (Largest search: 29 states.)
+  Payout can only rise with each of these, so no better path is ever discarded. (Largest search: 51 states.)
 * ❓ **Q3 — Which upgrade level?** 💡 The **reference player**: each permanent upgrade at (area − 1) × 4
   (`Config.Benchmark.ReferenceUpgradeLevelsPerArea`).
 * ❓ **Q3 — What are the "three area upgrades"?** Not silently chosen; it is a **switch** (`Config.Benchmark.Mode`):
 
 | Mode | Meaning | Area 1 prices |
 |---|---|---|
-| `"CombinedSections"` 💡 **default** | The first three revenue-section unlocks of an area **together** cost B10 | $434 + $559 + $683 = $1,676 = B10 |
-| `"EachSection"` | **Each** of the first three section unlocks costs B10 | 3 × $1,676 (about 2× slower game) |
-| *upgrade tiers* (not built) | Three upgrade tiers of one section cost B10 | — |
+| `"CombinedSections"` 💡 **default** | The first three revenue-section unlocks of an area **together** cost ProgressEase × B10 (80%) | $431 + $554 + $677 = $1,662 = 0.8 × B10 ($2,078) |
+| `"EachSection"` | **Each** of the first three section unlocks costs ProgressEase × B10 | 3 × $1,662 (about 2× slower game) |
+| *upgrade tiers* (not built) | Three upgrade tiers of one section cost ProgressEase × B10 | — |
 
-R values: **$168, $349, $589, $879, $1,718, $3,072, $4,824, $8,958** (areas 1–8). They include beating the boss.
+R values: **$208, $429, $705, $1,113, $2,073, $3,664, $5,655, $10,860** (areas 1–8). They include beating the boss.
+`Economy.PriceBenchmark(a)` = B10(a) × ProgressEase is what slot, gate and upgrade prices are shares of.
 
 ---
 
@@ -422,10 +434,10 @@ R values: **$168, $349, $589, $879, $1,718, $3,072, $4,824, $8,958** (areas 1–
 ### 9.1 Two payment routes for everything (✅)
 | Item | Robux (fixed ✅) | Cash price (scales with your area ✅) |
 |---|---|---|
-| Employee | 200 ✅ | 20 × R(area) ✅ ($3,360 → $179,160) |
-| 2× Cash 15 / 30 / 60 min | 29 / 49 / 89 💡 | 80% of its value (area 1: $1,870 / $3,740 / $7,481) |
-| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of what it pays **you right now**, never more than 80% of its full value (area 1 with all 4 shops staffed: 1 h = $2,916) |
-| Vehicles (8, one per area ✅) | 49 → 799 💡 | price factor × the gate price of your area (area 1 bike: $1,307) |
+| Employee | 200 ✅ | 20 × R(area) ✅ ($4,160 → $217,200) |
+| 2× Cash 15 / 30 / 60 min | 29 / 49 / 89 💡 | 80% of its value (area 1: $2,316 / $4,631 / $9,263) |
+| Time skip 1/2/4/8/12/24 h ✅ | 25 / 45 / 79 / 149 / 199 / 349 💡 | 80% of what it pays **you right now**, never more than 80% of its full value (area 1 with all 4 shops staffed: 1 h = $3,609) |
+| Vehicles (8, one per area ✅) | 49 → 799 💡 | price factor × the gate price of your area (area 1 bike: $1,297) |
 
 * ✅ **Vehicles**: a better one unlocks with each area (Army Bike → Jeep → Supply Truck → Humvee → APC → Light Tank →
   Heavy Tank → Hover Tank). 💡 Ride them around the base (faster: speed 26 → 46) and get a **runner payout bonus**
@@ -442,8 +454,8 @@ R values: **$168, $349, $589, $879, $1,718, $3,072, $4,824, $8,958** (areas 1–
   hiring employees. 2× does not double time skips.
 * 💡 A time skip's price is based on **what your shops would really pay right now**. The dialog shows "Pays $X now" and
   "up to $V when every shop has an employee". So a cash time skip **always returns +25%** of what you paid.
-  (Example, area 1, 1 h: one shop without an employee pays $18, so it is not offered. All four shops staffed pay
-  $3,645 for a price of $2,916.)
+  (Example, area 1, 1 h: one shop without an employee pays $22, so it is not offered. All four shops staffed pay
+  $4,512 for a price of $3,609.)
 
 ### 9.3 Random appearances on the home map
 ✅ 2× boosts and time skips appear randomly; cheaper ones appear more often.
@@ -490,7 +502,7 @@ Colours were measured from the reference pixels (`Config.Palette`).
 | Base floor / walkway / plot band | (106,178,252) / (146,188,252) / (202,226,252) | image 1 |
 | Lego hedge / yellow wall / red wall | (88,192,64) / (234,182,26) / (226,36,42) | image 1 |
 | Unlock pad fill / border / price | (244,250,250) / (84,212,84) / gold | image 1 |
-| Gold padlock / iron gate | (254,210,62)-ish / (40,40,46) | image 1 |
+| Gold padlock / iron gate | (250,198,30) / (40,40,46) | image 1 |
 | Sea / sky | (16,168,250) / (52,194,250): the sky is Roblox's built-in sky tinted cyan by an Atmosphere (custom sky images would need uploads) | images 1+2 |
 | Track / stripes | (236,246,255) / (212,234,252) | image 2 |
 | Gate red / blue (at 45% transparency) | (238,40,60) / (78,145,242) | image 2 |
@@ -514,7 +526,7 @@ Colours were measured from the reference pixels (`Config.Palette`).
 | 4 | Employee price | 20 × best-case run of the **shop's** area | `Config.Employee` |
 | 5 | Four unlocks in area 2 | 3 shops + Combat Arena; the arena counts as the 4th cash source | `Config.Areas[2]` |
 | 6 | First barrier | Barrier fights exist at every gate from the start; area 2 unlocks the *repeatable* arena | `Economy.BarrierCombatLevel` |
-| 7 | Runner payouts | Value table in §2.2; troops pay; capacity caps track cash | `RunnerDefs` |
+| 7 | Runner payouts | Value table in §2.4; troops pay; capacity caps cash-row cash (gate cash goes straight to the bank) | `RunnerDefs` |
 | 8 | Combat progression | In-fight abilities = this attempt only; gear from chests + coin upgrades = lasting | `CombatDefs`, `EquipmentDefs` |
 | 9 | Boosts | Purchase offers; 2× = all cash, stacks, play-time; skips pay full with employees, until empty without | `Config.Boosts`, `BoostService` |
 | 10 | 80% rule | Net-gain definition: cash price = 0.8 × value (+25% if used fully), for boosts | `Config.CoinRoute` |
@@ -541,9 +553,10 @@ Colours were measured from the reference pixels (`Config.Palette`).
    +1 troop, +4%). *Alternative:* `EconomyDefs.Runner.CapacityPerLevel = 0.06` restores the small step.
 9. ⚠️ **"10 best-case runs = three area upgrades" (brief) vs "easier to progress" (your later request).** Round 4's
    stronger guns and shoot-to-grow gates raised best-case runs by about 24%, which would have raised every price by the
-   same share. *Used:* base unlocks, gates, section upgrades and runner upgrades cost **80% of the 10-run benchmark**
-   (`EconomyDefs.ProgressEase = 0.8`), so prices stay where they were while runs pay more (area 1 now takes about 23
-   perfect runs instead of 29). Employees keep "200 Robux = 20 runs" and boosts the 80% rule. *Alternative:*
+   same share. *Used:* base unlocks, gates, section upgrades, runner upgrades and gear upgrades are priced from **80% of the 10-run benchmark**
+   (`EconomyDefs.ProgressEase = 0.8`, `Economy.PriceBenchmark`), so prices stay where they were while runs pay more
+   (area 1 now takes about 23 perfect runs instead of 29). Vehicles follow the (eased) gate price. Employees keep
+   "200 Robux = 20 runs" and boosts the 80% rule, so they are not eased. *Alternative:*
    `ProgressEase = 1` restores the plain 10-run rule.
 10. ⚠️ **"The boss is only beaten with the best lanes" vs "a lost round is replayed until won" vs cash on the gates.**
     Taking cash instead of troops, or splitting fire between two squads, usually leaves the boss alive, so the same
@@ -561,7 +574,7 @@ Every requirement in the brief, and where it lives in the game (checked by an in
 | 2 | Runner: control your own avatar, move left/right | `Client/Controllers/RunnerController` (`step`, `connectInput`: A/D, arrows, drag, stick) | ✅ |
 | 3 | Collect troops and weapon upgrades for that round | `Shared/Runner/RunnerCourse.Generate` (troop gates, gold WEAPON +1 / +20% DMG gates); `RunnerSim.Resolve` | ✅ |
 | 4 | Keep / clarify + × − ÷ | `RunnerCourse` troopGate (`add`/`mul`/`sub`/`div` act on troop count); §2.1 Q2 | ✅ |
-| 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, enemies, boss, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
+| 5 | Completion summary: each upgrade, its currency value, total | `RunnerSim.Resolve` lines → `Client/UI/RunnerUI.ShowSummary` (one line per weapon/damage gate with $, troops, cash, gate cash, enemies, boss, bonus, 2×, TOTAL); server pays in `RunnerService.onFinish` | ✅ |
 | 6 | Permanent upgrades before a run: starting troops, damage, carry capacity, small steps, kept | `RunnerUI.ShowPrepare` (PERMANENT UPGRADES cards); `RunnerService.onBuyUpgrade`; `Economy.RunnerUpgradePrice/RunnerStats` (+1 troop, +4%, +20% carry; max 50) | ✅ (carry step enlarged on request, §12.8) |
 | 7 | Keep permanent upgrades distinct from in-run pickups | Separate pre-run cards; summary headings "COLLECTED THIS RUN" vs "PERMANENT UPGRADES" | ✅ (the troops line shows starting troops vs troops gained this run) |
 | 8 | Runner matches reference colours/saturation | `Config.Palette`, `Client/World/RunnerVisuals`, `RunnerService.buildTrack`, `MapBuilder.fillWater/applyLighting` | ✅ track, gates, sea, UI, plus a cyan `Atmosphere` sky (`MapBuilder.applyLighting`) |
@@ -607,6 +620,6 @@ Every requirement in the brief, and where it lives in the game (checked by an in
 | R2 | More bullets hit, lower fire rate; 5 men beat 2 soldiers | `RunnerDefs.WEAPONS` (½ rate, 3× damage); `RunnerVisuals` fires only at targets in range | ✅ |
 | R3 | Bigger coin (carry capacity) upgrade, easier progress | `EconomyDefs.Runner.CapacityPerLevel = 0.2`; `RunnerDefs.CASH_ROW_BASE` (track cash ≈ 2.5× the bag); `EconomyDefs.ProgressEase = 0.8` | ✅ (§12.8, §12.9) |
 | R4 | Wide shooting with > 4 troops: middle hits both, a side focuses | `RunnerSim.Stance/UnitsAcross`, `RunnerService.chooseStances`, `RunnerVisuals` per-column targets | ✅ |
-| R5 | Shoot-to-grow gates (red/blue grow and widen when shot), different look, no × | `RunnerCourse.contestRow`, `RunnerSim` contest rule, `RunnerVisuals` contest rows | ✅ |
-| R6 | After a run, spawn on the other side of the base | `RunnerService.returnSpot` (where you were, or `Layout.RunnerReturnCFrame` if that was the pad) | ✅ |
+| R5 | Shoot-to-grow gates (red/blue numbers grow when shot), different look, no × | `RunnerCourse.contestRow`, `RunnerSim` contest rule, `RunnerVisuals` contest rows (panels stay on their lanes; a tug-of-war meter "🎯 SHOOT TO GROW" leans toward the side shot more) | ✅ |
+| R6 | Not back on the ARMY RUN pad after a run | `RunnerService.returnSpot` (where you stood before the run, or the spawn, `Layout.RunnerReturnCFrame`, if that was the pad) | ✅ |
 | R7 | A lost level is replayed until won | `RunnerService.onFinish` (level up only on victory), `RunnerRetry`, `RunnerUI` TRY AGAIN | ✅ (§12.10) |

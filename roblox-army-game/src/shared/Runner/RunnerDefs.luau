@@ -236,7 +236,8 @@ RunnerDefs.DAMAGE_GATE_AMOUNT = 0.2 -- [PROPOSAL] +20% damage per damage gate (a
 RunnerDefs.DAMAGE_GATE_VALUE = 9 -- [PROPOSAL] $ credited per damage gate collected
 -- [PROPOSAL] middle cash lane of the first cash row. The cash rows offer
 -- about 2.5x the reference bag (Economy), so coin-carrying capacity is the
--- limit and its upgrade (+20% per level, owner request) always pays.
+-- limit and its upgrade (+20% per level, owner request) always pays. (Cash
+-- bags behind gates go straight to the bank and are not limited by the bag.)
 RunnerDefs.CASH_ROW_BASE = 19
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
@@ -244,7 +245,7 @@ RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trad
 RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars), either lane
 RunnerDefs.BARRICADE_REWARD = 7 -- [PROPOSAL] $ for destroying a weak barricade (strong pays ~2.2x)
 -- [PROPOSAL] $ for beating the boss, x the area cash scale x ArmyScale(area)^BOSS_REWARD_ARMY_EXP
--- (bigger armies guard more loot), so beating it is worth ~20-30% of a best-case run in every area.
+-- (bigger armies guard more loot), so beating it is worth ~20% (18-22%) of a best-case run in every area.
 RunnerDefs.BOSS_REWARD = 38
 RunnerDefs.BOSS_REWARD_ARMY_EXP = 0.5
 
@@ -264,9 +265,10 @@ RunnerDefs.SUB_PER_ROW = 0.2 -- [PROPOSAL]
 -- "Shoot to grow" gates (row kind "contest") [owner request]
 -------------------------------------------------------------------------------
 -- A blue "+N" and a red "-N" side by side. Shooting a side makes its number
--- bigger (blue: more troops gained, red: more troops lost) and makes it wider,
--- pushing the other side aside. Additive only (no x), and capped, so they can
--- not make a player overpowered right away.
+-- bigger (blue: more troops gained, red: more troops lost). The panels stay on
+-- their scored lanes; a blue/red tug-of-war meter above them ("🎯 SHOOT TO
+-- GROW") leans toward the side that has been shot more. Additive only (no x),
+-- and capped, so they can not make a player overpowered right away.
 RunnerDefs.CONTEST_ROWS = 2 -- [PROPOSAL] per course (RunnerCourse puts them in two of its row blocks)
 RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" gate of that row
 RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row

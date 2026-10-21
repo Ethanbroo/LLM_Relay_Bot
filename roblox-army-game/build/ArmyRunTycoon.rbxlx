@@ -2409,7 +2409,7 @@ return Config
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
 			(= RunnerStats(ReferenceUpgrades(area)))
-		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
+		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+20% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
 		Economy.VehicleCoinPrice(vehicleId, playerArea): number
@@ -2443,13 +2443,22 @@ return Config
 	  ReferenceUpgrades(a) = every permanent upgrade at level
 	  (a-1) * Config.Benchmark.ReferenceUpgradeLevelsPerArea.
 	  B10(a) = sum of the 10 best-case payouts, R(a) = B10(a) / 10.
+	* Price benchmark (owner request "easier to progress"): unlock, gate,
+	  section-upgrade, runner-upgrade and gear-upgrade prices are shares of
+	  PriceBenchmark(a) = B10(a) x EconomyDefs.ProgressEase (0.8), not of B10
+	  itself. Employees (20 x R) and boosts (the 80% rule) are NOT eased.
 	* "Three area upgrades" = the first three revenue sections of an area,
 	  following Config.Benchmark.Mode:
-	    "CombinedSections" -> the three together cost B10 (split by income weight).
-	    "EachSection"      -> each of the three costs B10.
+	    "CombinedSections" -> the three together cost PriceBenchmark (split by
+	                          income weight), i.e. ProgressEase x B10.
+	    "EachSection"      -> each of the three costs PriceBenchmark.
 	  The 4th revenue section costs the same $ per income weight as the first
-	  three; the Combat Arena slot (a2s4) costs EconomyDefs.Slots.ArenaShare x B10.
-	* Gate a -> a+1 costs GateShare x B10(a), and always more than the gate before.
+	  three; the Combat Arena slot (a2s4) costs EconomyDefs.Slots.ArenaShare x
+	  PriceBenchmark.
+	* Gate a -> a+1 costs GateShare x PriceBenchmark(a), and always more than
+	  the gate before.
+	* Permanent runner upgrades and gear (equipment) upgrades: a share of R(1)
+	  x ProgressEase, then x their growth per level (EconomyDefs).
 	* Employee cash price (question 4): Config.Employee.RunsEquivalent (20) x R,
 	  i.e. 20 best-case benchmark runs of the section's area ("SectionArea") or
 	  of the player's highest area ("PlayerArea").
@@ -2465,7 +2474,8 @@ return Config
 	  would earn (sections without an employee stop when their stock runs
 	  out), so the price uses V = min(reference, TimeSkipPayout preview) and a
 	  cash time skip ALWAYS returns +25% of what was paid.
-	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)).
+	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)) (so they
+	  are eased through the gate price).
 	* Combat: the barrier of area a is combat level 3a-1. A perfect clear of a
 	  combat level pays ~3 best-case runs of the area the level belongs to
 	  (geometric interpolation between areas, strictly increasing).
@@ -2474,7 +2484,8 @@ return Config
 	  * plain prices (slots, gates, upgrades, vehicles, employees) are rounded
 	    to the nearest dollar (Format.RoundWhole), at least $1; the first three
 	    sections of an area are split with largest-remainder rounding so they
-	    still sum EXACTLY to B10, and each gate is at least ceil(5%) dearer;
+	    still sum EXACTLY to PriceBenchmark, and each gate is at least ceil(5%)
+	    dearer;
 	  * the 80%-rule coin prices (boosts, time skips) are rounded DOWN, so
 	    value / price stays >= 1.25;
 	  * a section's incomePerSale is max(1, RoundWhole(x)) and its saleInterval
@@ -2593,12 +2604,13 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus, so a reference-upgraded player
--- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
--- limit everywhere (the track offers ~2.5x that) and every capacity level
--- adds money you can actually pick up.
+-- the reference player's capacity bonus (+20% per level), so a
+-- reference-upgraded player carries BaseCapacity x AreaScale^(a-1) from area 4
+-- on: the bag stays a real limit everywhere (the cash rows offer ~2.5x the
+-- reference bag) and every capacity level adds money you can actually pick up.
 -- It never shrinks from one area to the next (review: the area-2 gate made
--- every bag ~11% smaller), so areas 2-3 keep area 1's base.
+-- every bag ~11% smaller), so areas 2-3 keep area 1's $60 base and the
+-- reference player carries $60 / $108 / $156 / $246 ... (docs/ECONOMY_TABLES.md §1).
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local best = 0
@@ -2772,7 +2784,7 @@ function Economy.SlotUnlockPrice(slotId: string): number
 	if not info then
 		return math.huge -- unknown slot: can never be bought
 	end
-	local b10 = Economy.PriceBenchmark(info.area)
+	local b10 = Economy.PriceBenchmark(info.area) -- eased: ProgressEase x B10
 	if info.def.kind ~= "revenue" then
 		return price(EconomyDefs.Slots.ArenaShare * b10)
 	end
@@ -2782,11 +2794,11 @@ function Economy.SlotUnlockPrice(slotId: string): number
 		if set[slotId] then
 			return price(b10)
 		end
-		-- 4th revenue section: B10 per average weight of the first three.
+		-- 4th revenue section: PriceBenchmark per average weight of the first three.
 		return price(b10 * w / math.max(0.01, weightOfThree / 3))
 	end
-	-- "CombinedSections" (default): the first three cost B10 together
-	-- (whole dollars that still add up to exactly B10).
+	-- "CombinedSections" (default): the first three cost PriceBenchmark together
+	-- (whole dollars that still add up to exactly PriceBenchmark).
 	if set[slotId] then
 		local weights: { number } = {}
 		local mine = 1
@@ -2828,7 +2840,7 @@ end
 
 local NO_INCOME: SectionStats = { incomePerSale = 0, saleInterval = 5, stockCapacity = 0, incomePerSecond = 0 }
 -- [PROPOSAL] A section always holds at least this many sales (safety floor;
--- the real defs never come close: the smallest stock is about 18).
+-- the real defs never come close: the smallest level-1 stock is 22).
 local MIN_STOCK = 5
 
 function Economy.SectionStats(slotId: string, level: number): SectionStats
@@ -3093,8 +3105,9 @@ return Economy
 
 	Public API (read-only constants):
 		EconomyDefs.AreaScale                    cash values grow x1.6 per area
+		EconomyDefs.ProgressEase                 price ease (0.8): unlock / gate / upgrade prices use B10 x this
 		EconomyDefs.Runner                       permanent runner upgrade numbers
-		EconomyDefs.Slots                        slot / gate price shares of B10
+		EconomyDefs.Slots                        slot / gate price shares of Economy.PriceBenchmark
 		EconomyDefs.Sections                     revenue section income, stock, upgrades
 		EconomyDefs.Combat                       combat level rewards and barrier levels
 		EconomyDefs.Equipment                    equipment upgrade prices
@@ -3128,31 +3141,36 @@ EconomyDefs.Runner = {
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	-- [owner request] +20% of base capacity per level (was +6%: "increase the
-	-- upgrade amount of coins so it's easier to progress"). The track offers
-	-- about 2.5x the bag in cash (RunnerDefs.CASH_ROW_BASE), so the bag is the
-	-- limit and every level up to ~7 above the area's reference level adds
-	-- real money per run.
+	-- upgrade amount of coins so it's easier to progress"). The cash rows offer
+	-- about 2.5x the reference bag (RunnerDefs.CASH_ROW_BASE), so the bag is the
+	-- limit and each level adds real money per run: in area 1 about 7-8 levels
+	-- above the reference level pay (+$12 each per best-case run), later areas
+	-- have room for more levels (and pay more per level: about +$15 in area 4,
+	-- +$49 in area 8). Gate cash bags go straight to the bank, not the bag.
 	CapacityPerLevel = 0.2,
-	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
-	-- then x PriceGrowth for every further level.
+	-- Price of level 0 -> 1 as a share of R(1) x ProgressEase (one best-case
+	-- area-1 run, eased), then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
 	PriceGrowth = 1.17, -- [PROPOSAL]
 	KindPriceFactor = { troops = 1.0, damage = 1.0, capacity = 0.9 }, -- [PROPOSAL]
 }
 
 -------------------------------------------------------------------------------
--- Slot (section) unlock prices and gate prices, as shares of B10
+-- Slot (section) unlock prices and gate prices, as shares of PriceBenchmark
 -------------------------------------------------------------------------------
--- B10(area) = best-case cash of the 10 benchmark runs of that area.
+-- B10(area) = best-case cash of the 10 benchmark runs of that area;
+-- PriceBenchmark(area) = B10(area) x ProgressEase (Economy.PriceBenchmark).
 -- "CombinedSections" (Config.Benchmark.Mode default): the first three revenue
---     sections of an area cost B10 TOGETHER, split in proportion to their
---     income weights (so every section repays itself in the same time).
--- "EachSection": each of the first three revenue sections costs B10.
+--     sections of an area cost PriceBenchmark TOGETHER (= ProgressEase x B10),
+--     split in proportion to their income weights (so every section repays
+--     itself in the same time).
+-- "EachSection": each of the first three revenue sections costs PriceBenchmark.
 -- The 4th revenue section is priced at the same $ per income weight as the
--- first three. The Combat Arena (a2s4, no income weight) costs ArenaShare x B10.
+-- first three. The Combat Arena (a2s4, no income weight) costs ArenaShare x
+-- PriceBenchmark.
 EconomyDefs.Slots = {
 	ArenaShare = 0.6, -- [PROPOSAL]
-	GateShare = 1.3, -- [PROPOSAL] gate from area a into a+1 costs 1.3 x B10(a)
+	GateShare = 1.3, -- [PROPOSAL] gate from area a into a+1 costs 1.3 x PriceBenchmark(a)
 	GateMinStep = 1.05, -- each gate costs at least 5% more than the previous one
 }
 
@@ -3201,7 +3219,7 @@ EconomyDefs.Combat = {
 -- Equipment upgrades (coins spent on armour / weapons from chests)
 -------------------------------------------------------------------------------
 EconomyDefs.Equipment = {
-	BaseShare = 0.5, -- [PROPOSAL] level 1 -> 2 of a Common item costs 0.5 x R(1)
+	BaseShare = 0.5, -- [PROPOSAL] level 1 -> 2 of a Common item costs 0.5 x R(1) x ProgressEase
 	Growth = 1.15, -- [PROPOSAL] x1.15 per level
 	RarityFactor = { 1.0, 1.5, 2.2, 3.2, 4.5 }, -- [PROPOSAL] Common .. Legendary
 }
@@ -4511,7 +4529,8 @@ RunnerDefs.DAMAGE_GATE_AMOUNT = 0.2 -- [PROPOSAL] +20% damage per damage gate (a
 RunnerDefs.DAMAGE_GATE_VALUE = 9 -- [PROPOSAL] $ credited per damage gate collected
 -- [PROPOSAL] middle cash lane of the first cash row. The cash rows offer
 -- about 2.5x the reference bag (Economy), so coin-carrying capacity is the
--- limit and its upgrade (+20% per level, owner request) always pays.
+-- limit and its upgrade (+20% per level, owner request) always pays. (Cash
+-- bags behind gates go straight to the bank and are not limited by the bag.)
 RunnerDefs.CASH_ROW_BASE = 19
 RunnerDefs.CASH_ROW_GROWTH = 0.06 -- [PROPOSAL] +6% cash per row further down the track
 RunnerDefs.CASH_LANE_SPREAD = { 0.55, 1.0, 1.6 } -- [PROPOSAL] low / mid / high cash lanes
@@ -4519,7 +4538,7 @@ RunnerDefs.TOLL_CASH_BASE = 16 -- [PROPOSAL] cash behind a red "toll" gate (trad
 RunnerDefs.ENEMY_REWARD = 1 -- [PROPOSAL] $ per enemy soldier defeated (whole dollars), either lane
 RunnerDefs.BARRICADE_REWARD = 7 -- [PROPOSAL] $ for destroying a weak barricade (strong pays ~2.2x)
 -- [PROPOSAL] $ for beating the boss, x the area cash scale x ArmyScale(area)^BOSS_REWARD_ARMY_EXP
--- (bigger armies guard more loot), so beating it is worth ~20-30% of a best-case run in every area.
+-- (bigger armies guard more loot), so beating it is worth ~20% (18-22%) of a best-case run in every area.
 RunnerDefs.BOSS_REWARD = 38
 RunnerDefs.BOSS_REWARD_ARMY_EXP = 0.5
 
@@ -4539,9 +4558,10 @@ RunnerDefs.SUB_PER_ROW = 0.2 -- [PROPOSAL]
 -- "Shoot to grow" gates (row kind "contest") [owner request]
 -------------------------------------------------------------------------------
 -- A blue "+N" and a red "-N" side by side. Shooting a side makes its number
--- bigger (blue: more troops gained, red: more troops lost) and makes it wider,
--- pushing the other side aside. Additive only (no x), and capped, so they can
--- not make a player overpowered right away.
+-- bigger (blue: more troops gained, red: more troops lost). The panels stay on
+-- their scored lanes; a blue/red tug-of-war meter above them ("🎯 SHOOT TO
+-- GROW") leans toward the side that has been shot more. Additive only (no x),
+-- and capped, so they can not make a player overpowered right away.
 RunnerDefs.CONTEST_ROWS = 2 -- [PROPOSAL] per course (RunnerCourse puts them in two of its row blocks)
 RunnerDefs.CONTEST_BLUE_START = 0.6 -- [PROPOSAL] blue starts at 60% of a "+N" gate of that row
 RunnerDefs.CONTEST_RED_START = 1.0 -- [PROPOSAL] red starts like a "-N" gate of that row

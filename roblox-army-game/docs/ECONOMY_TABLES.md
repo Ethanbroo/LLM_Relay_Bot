@@ -7,6 +7,7 @@ is a design assumption that can be tuned.
 * Benchmark mode: **CombinedSections** (Config.Benchmark.Mode)
 * Reference upgrade levels per area: 4
 * Area cash scale: x1.60 per area
+* Price ease: x0.80 (EconomyDefs.ProgressEase): slot, gate and upgrade prices are shares of Economy.PriceBenchmark = B10 x 0.80
 * Typical run duration (RunDurationSeconds): 64.67 s (36.25 s running + 28.42 s overhead: 11 s menus / summary + boss 2.62 s intro, up to 12 s fight, 2.80 s outro)
 * Money is whole dollars everywhere (no cents).
 

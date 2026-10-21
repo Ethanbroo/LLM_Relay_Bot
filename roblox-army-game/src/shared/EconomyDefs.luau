@@ -11,8 +11,9 @@
 
 	Public API (read-only constants):
 		EconomyDefs.AreaScale                    cash values grow x1.6 per area
+		EconomyDefs.ProgressEase                 price ease (0.8): unlock / gate / upgrade prices use B10 x this
 		EconomyDefs.Runner                       permanent runner upgrade numbers
-		EconomyDefs.Slots                        slot / gate price shares of B10
+		EconomyDefs.Slots                        slot / gate price shares of Economy.PriceBenchmark
 		EconomyDefs.Sections                     revenue section income, stock, upgrades
 		EconomyDefs.Combat                       combat level rewards and barrier levels
 		EconomyDefs.Equipment                    equipment upgrade prices
@@ -46,31 +47,36 @@ EconomyDefs.Runner = {
 	DamagePerLevel = 0.04, -- [PROPOSAL] +4% of base damage per level
 	BaseCapacity = 60, -- [PROPOSAL] $ you can carry on the track in area 1 (x AreaScale per area, whole $)
 	-- [owner request] +20% of base capacity per level (was +6%: "increase the
-	-- upgrade amount of coins so it's easier to progress"). The track offers
-	-- about 2.5x the bag in cash (RunnerDefs.CASH_ROW_BASE), so the bag is the
-	-- limit and every level up to ~7 above the area's reference level adds
-	-- real money per run.
+	-- upgrade amount of coins so it's easier to progress"). The cash rows offer
+	-- about 2.5x the reference bag (RunnerDefs.CASH_ROW_BASE), so the bag is the
+	-- limit and each level adds real money per run: in area 1 about 7-8 levels
+	-- above the reference level pay (+$12 each per best-case run), later areas
+	-- have room for more levels (and pay more per level: about +$15 in area 4,
+	-- +$49 in area 8). Gate cash bags go straight to the bank, not the bag.
 	CapacityPerLevel = 0.2,
-	-- Price of level 0 -> 1 as a share of R(1) (one best-case area-1 run),
-	-- then x PriceGrowth for every further level.
+	-- Price of level 0 -> 1 as a share of R(1) x ProgressEase (one best-case
+	-- area-1 run, eased), then x PriceGrowth for every further level.
 	BasePriceShare = 0.4, -- [PROPOSAL]
 	PriceGrowth = 1.17, -- [PROPOSAL]
 	KindPriceFactor = { troops = 1.0, damage = 1.0, capacity = 0.9 }, -- [PROPOSAL]
 }
 
 -------------------------------------------------------------------------------
--- Slot (section) unlock prices and gate prices, as shares of B10
+-- Slot (section) unlock prices and gate prices, as shares of PriceBenchmark
 -------------------------------------------------------------------------------
--- B10(area) = best-case cash of the 10 benchmark runs of that area.
+-- B10(area) = best-case cash of the 10 benchmark runs of that area;
+-- PriceBenchmark(area) = B10(area) x ProgressEase (Economy.PriceBenchmark).
 -- "CombinedSections" (Config.Benchmark.Mode default): the first three revenue
---     sections of an area cost B10 TOGETHER, split in proportion to their
---     income weights (so every section repays itself in the same time).
--- "EachSection": each of the first three revenue sections costs B10.
+--     sections of an area cost PriceBenchmark TOGETHER (= ProgressEase x B10),
+--     split in proportion to their income weights (so every section repays
+--     itself in the same time).
+-- "EachSection": each of the first three revenue sections costs PriceBenchmark.
 -- The 4th revenue section is priced at the same $ per income weight as the
--- first three. The Combat Arena (a2s4, no income weight) costs ArenaShare x B10.
+-- first three. The Combat Arena (a2s4, no income weight) costs ArenaShare x
+-- PriceBenchmark.
 EconomyDefs.Slots = {
 	ArenaShare = 0.6, -- [PROPOSAL]
-	GateShare = 1.3, -- [PROPOSAL] gate from area a into a+1 costs 1.3 x B10(a)
+	GateShare = 1.3, -- [PROPOSAL] gate from area a into a+1 costs 1.3 x PriceBenchmark(a)
 	GateMinStep = 1.05, -- each gate costs at least 5% more than the previous one
 }
 
@@ -119,7 +125,7 @@ EconomyDefs.Combat = {
 -- Equipment upgrades (coins spent on armour / weapons from chests)
 -------------------------------------------------------------------------------
 EconomyDefs.Equipment = {
-	BaseShare = 0.5, -- [PROPOSAL] level 1 -> 2 of a Common item costs 0.5 x R(1)
+	BaseShare = 0.5, -- [PROPOSAL] level 1 -> 2 of a Common item costs 0.5 x R(1) x ProgressEase
 	Growth = 1.15, -- [PROPOSAL] x1.15 per level
 	RarityFactor = { 1.0, 1.5, 2.2, 3.2, 4.5 }, -- [PROPOSAL] Common .. Legendary
 }

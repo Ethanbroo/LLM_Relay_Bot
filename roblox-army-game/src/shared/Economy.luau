@@ -25,7 +25,7 @@
 		Economy.RunnerStats(upgrades, area): { startTroops, damage, capacity }
 		Economy.BenchmarkStats(area): RunnerStats   the reference player the 10-run benchmark uses
 			(= RunnerStats(ReferenceUpgrades(area)))
-		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+6% carry", "MAX"
+		Economy.RunnerUpgradeEffect(kind, level): string             "+1 troop", "+4% damage", "+20% carry", "MAX"
 		Economy.BoostValue(boostId, playerArea): number
 		Economy.BoostCoinPrice(boostId, playerArea): number
 		Economy.VehicleCoinPrice(vehicleId, playerArea): number
@@ -59,13 +59,22 @@
 	  ReferenceUpgrades(a) = every permanent upgrade at level
 	  (a-1) * Config.Benchmark.ReferenceUpgradeLevelsPerArea.
 	  B10(a) = sum of the 10 best-case payouts, R(a) = B10(a) / 10.
+	* Price benchmark (owner request "easier to progress"): unlock, gate,
+	  section-upgrade, runner-upgrade and gear-upgrade prices are shares of
+	  PriceBenchmark(a) = B10(a) x EconomyDefs.ProgressEase (0.8), not of B10
+	  itself. Employees (20 x R) and boosts (the 80% rule) are NOT eased.
 	* "Three area upgrades" = the first three revenue sections of an area,
 	  following Config.Benchmark.Mode:
-	    "CombinedSections" -> the three together cost B10 (split by income weight).
-	    "EachSection"      -> each of the three costs B10.
+	    "CombinedSections" -> the three together cost PriceBenchmark (split by
+	                          income weight), i.e. ProgressEase x B10.
+	    "EachSection"      -> each of the three costs PriceBenchmark.
 	  The 4th revenue section costs the same $ per income weight as the first
-	  three; the Combat Arena slot (a2s4) costs EconomyDefs.Slots.ArenaShare x B10.
-	* Gate a -> a+1 costs GateShare x B10(a), and always more than the gate before.
+	  three; the Combat Arena slot (a2s4) costs EconomyDefs.Slots.ArenaShare x
+	  PriceBenchmark.
+	* Gate a -> a+1 costs GateShare x PriceBenchmark(a), and always more than
+	  the gate before.
+	* Permanent runner upgrades and gear (equipment) upgrades: a share of R(1)
+	  x ProgressEase, then x their growth per level (EconomyDefs).
 	* Employee cash price (question 4): Config.Employee.RunsEquivalent (20) x R,
 	  i.e. 20 best-case benchmark runs of the section's area ("SectionArea") or
 	  of the player's highest area ("PlayerArea").
@@ -81,7 +90,8 @@
 	  would earn (sections without an employee stop when their stock runs
 	  out), so the price uses V = min(reference, TimeSkipPayout preview) and a
 	  cash time skip ALWAYS returns +25% of what was paid.
-	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)).
+	* Vehicles: priceFactor x GatePrice(max(playerArea, vehicle.area)) (so they
+	  are eased through the gate price).
 	* Combat: the barrier of area a is combat level 3a-1. A perfect clear of a
 	  combat level pays ~3 best-case runs of the area the level belongs to
 	  (geometric interpolation between areas, strictly increasing).
@@ -90,7 +100,8 @@
 	  * plain prices (slots, gates, upgrades, vehicles, employees) are rounded
 	    to the nearest dollar (Format.RoundWhole), at least $1; the first three
 	    sections of an area are split with largest-remainder rounding so they
-	    still sum EXACTLY to B10, and each gate is at least ceil(5%) dearer;
+	    still sum EXACTLY to PriceBenchmark, and each gate is at least ceil(5%)
+	    dearer;
 	  * the 80%-rule coin prices (boosts, time skips) are rounded DOWN, so
 	    value / price stays >= 1.25;
 	  * a section's incomePerSale is max(1, RoundWhole(x)) and its saleInterval
@@ -209,12 +220,13 @@ local function upgradeLevel(value: any): number
 end
 
 -- [PROPOSAL] Base capacity grows with the area (AreaScale) but is divided by
--- the reference player's capacity bonus, so a reference-upgraded player
--- carries BaseCapacity x AreaScale^(a-1) in every area: the bag stays a real
--- limit everywhere (the track offers ~2.5x that) and every capacity level
--- adds money you can actually pick up.
+-- the reference player's capacity bonus (+20% per level), so a
+-- reference-upgraded player carries BaseCapacity x AreaScale^(a-1) from area 4
+-- on: the bag stays a real limit everywhere (the cash rows offer ~2.5x the
+-- reference bag) and every capacity level adds money you can actually pick up.
 -- It never shrinks from one area to the next (review: the area-2 gate made
--- every bag ~11% smaller), so areas 2-3 keep area 1's base.
+-- every bag ~11% smaller), so areas 2-3 keep area 1's $60 base and the
+-- reference player carries $60 / $108 / $156 / $246 ... (docs/ECONOMY_TABLES.md §1).
 local function baseCapacity(area: number): number
 	local d = EconomyDefs.Runner
 	local best = 0
@@ -388,7 +400,7 @@ function Economy.SlotUnlockPrice(slotId: string): number
 	if not info then
 		return math.huge -- unknown slot: can never be bought
 	end
-	local b10 = Economy.PriceBenchmark(info.area)
+	local b10 = Economy.PriceBenchmark(info.area) -- eased: ProgressEase x B10
 	if info.def.kind ~= "revenue" then
 		return price(EconomyDefs.Slots.ArenaShare * b10)
 	end
@@ -398,11 +410,11 @@ function Economy.SlotUnlockPrice(slotId: string): number
 		if set[slotId] then
 			return price(b10)
 		end
-		-- 4th revenue section: B10 per average weight of the first three.
+		-- 4th revenue section: PriceBenchmark per average weight of the first three.
 		return price(b10 * w / math.max(0.01, weightOfThree / 3))
 	end
-	-- "CombinedSections" (default): the first three cost B10 together
-	-- (whole dollars that still add up to exactly B10).
+	-- "CombinedSections" (default): the first three cost PriceBenchmark together
+	-- (whole dollars that still add up to exactly PriceBenchmark).
 	if set[slotId] then
 		local weights: { number } = {}
 		local mine = 1
@@ -444,7 +456,7 @@ end
 
 local NO_INCOME: SectionStats = { incomePerSale = 0, saleInterval = 5, stockCapacity = 0, incomePerSecond = 0 }
 -- [PROPOSAL] A section always holds at least this many sales (safety floor;
--- the real defs never come close: the smallest stock is about 18).
+-- the real defs never come close: the smallest level-1 stock is 22).
 local MIN_STOCK = 5
 
 function Economy.SectionStats(slotId: string, level: number): SectionStats
